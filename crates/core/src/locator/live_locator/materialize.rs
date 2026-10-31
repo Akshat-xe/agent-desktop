@@ -83,6 +83,7 @@ pub(crate) fn ref_entry(
             process_instance: None,
         },
         identity: crate::RefEntryIdentity {
+            basis: None,
             retained_object: node
                 .evidence
                 .identifiers

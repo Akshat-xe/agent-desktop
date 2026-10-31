@@ -263,6 +263,7 @@ unsafe fn decode_core_ref_entry(
             process_instance: Some(process_instance),
         },
         identity: RefEntryIdentity {
+            basis: None,
             retained_object: None,
             role,
             name,

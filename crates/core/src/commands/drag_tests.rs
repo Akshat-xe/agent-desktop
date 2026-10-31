@@ -267,6 +267,7 @@ fn ref_entry(pid: u32) -> RefEntry {
             process_instance: Some("test-instance".into()),
         },
         identity: crate::RefEntryIdentity {
+            basis: None,
             retained_object: None,
             role: "button".into(),
             name: Some("Item".into()),

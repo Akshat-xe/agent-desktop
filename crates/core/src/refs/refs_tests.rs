@@ -7,6 +7,7 @@ pub(super) fn entry(role: &str, name: Option<&str>) -> RefEntry {
             process_instance: Some("test-instance".into()),
         },
         identity: crate::RefEntryIdentity {
+            basis: None,
             retained_object: None,
             role: role.into(),
             name: name.map(String::from),
@@ -186,6 +187,7 @@ fn test_save_load_roundtrip_with_home_override() {
             process_instance: Some("test-instance".into()),
         },
         identity: crate::RefEntryIdentity {
+            basis: None,
             retained_object: None,
             role: "button".into(),
             name: Some("Send".into()),

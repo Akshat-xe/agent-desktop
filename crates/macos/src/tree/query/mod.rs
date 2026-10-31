@@ -258,6 +258,7 @@ mod tests {
                 process_instance: Some(process_instance),
             },
             identity: RefEntryIdentity {
+                basis: None,
                 retained_object: None,
                 role: "button".into(),
                 name: Some("Save".into()),

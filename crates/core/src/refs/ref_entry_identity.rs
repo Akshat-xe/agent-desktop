@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct RefEntryIdentity {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub retained_object: Option<String>,
@@ -12,4 +12,6 @@ pub struct RefEntryIdentity {
     pub description: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub native_id: Option<crate::ElementIdentifier>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub basis: Option<crate::IdentityBasis>,
 }

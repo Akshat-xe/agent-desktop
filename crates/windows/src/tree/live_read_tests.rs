@@ -242,6 +242,7 @@ fn blank_secure_entry(fixture: &HostedFixture) -> RefEntry {
             process_instance: Some(token),
         },
         identity: agent_desktop_core::RefEntryIdentity {
+            basis: None,
             retained_object: None,
             role: evidence.role.known().cloned().unwrap_or_default(),
             name: None,

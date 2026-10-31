@@ -131,6 +131,7 @@ fn snapshot_id() -> String {
             process_instance: Some("test-instance".into()),
         },
         identity: crate::RefEntryIdentity {
+            basis: None,
             retained_object: None,
             role: "textfield".into(),
             name: Some("Target".into()),

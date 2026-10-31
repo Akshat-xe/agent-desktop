@@ -26,6 +26,7 @@ fn entry() -> RefEntry {
             process_instance: Some("test-instance".into()),
         },
         identity: crate::RefEntryIdentity {
+            basis: None,
             retained_object: None,
             role: "button".into(),
             name: None,

@@ -12,6 +12,7 @@ fn entry(token: Option<String>) -> RefEntry {
             process_instance: None,
         },
         identity: agent_desktop_core::RefEntryIdentity {
+            basis: None,
             retained_object: token,
             role: "button".into(),
             name: Some("Target".into()),

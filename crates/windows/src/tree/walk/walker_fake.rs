@@ -189,6 +189,7 @@ pub(crate) fn ref_entry(role: &str) -> RefEntry {
             process_instance: None,
         },
         identity: agent_desktop_core::RefEntryIdentity {
+            basis: None,
             retained_object: None,
             role: role.to_string(),
             name: None,

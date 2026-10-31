@@ -91,6 +91,7 @@ fn entry(states: Vec<String>, value: Option<&str>, actions: Vec<&str>) -> RefEnt
             process_instance: Some("test-instance".into()),
         },
         identity: crate::RefEntryIdentity {
+            basis: None,
             retained_object: None,
             role: "checkbox".into(),
             name: Some("Target".into()),

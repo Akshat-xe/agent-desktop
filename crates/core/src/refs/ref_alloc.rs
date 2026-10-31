@@ -23,6 +23,7 @@ pub(crate) fn ref_entry_from_node(
             process_instance: source.process_instance.map(str::to_string),
         },
         identity: crate::RefEntryIdentity {
+            basis: None,
             retained_object: node.identity.retained_object.clone(),
             role: node.role.clone(),
             name: meaningful_string(node.identity.name.clone()),

@@ -8,6 +8,7 @@ fn entry(name: &str, root_ref: Option<&str>) -> crate::RefEntry {
             process_instance: Some("instance-1".into()),
         },
         identity: RefEntryIdentity {
+            basis: None,
             retained_object: None,
             role: "button".into(),
             name: Some(name.into()),

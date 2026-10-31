@@ -179,12 +179,9 @@ fn entry_for(live: &LiveElement) -> RefEntry {
             process_instance: Some("test-instance".into()),
         },
         identity: RefEntryIdentity {
-            retained_object: None,
             role: live.state.role.clone(),
             name: Some("Run".into()),
-            value: None,
-            description: None,
-            native_id: None,
+            ..RefEntryIdentity::default()
         },
         geometry: RefGeometry {
             bounds_space: None,

@@ -26,6 +26,7 @@ pub(super) fn entry(
             process_instance: Some("test-instance".into()),
         },
         identity: RefEntryIdentity {
+            basis: None,
             retained_object: None,
             role: "cell".into(),
             name: Some("Investors".into()),
