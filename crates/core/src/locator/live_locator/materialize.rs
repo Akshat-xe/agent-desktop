@@ -7,28 +7,34 @@ use crate::{
     refs::{RefEntry, RefMap, RefPath},
 };
 
-pub(crate) fn materialize_refmap(
-    tree: &mut ObservedTree,
-    query: &LocatorQuery,
-    selected: Option<&[usize]>,
-) -> Result<(RefMap, bool), crate::AdapterError> {
-    let structurally_complete = tree.structurally_complete;
-    let source = &tree.source;
-    let nodes = &mut tree.nodes;
-    let mut refmap = RefMap::new();
+/// Counts the look-alikes among every addressable element the locator
+/// observed, so each match can learn which of its fields is unique.
+pub(crate) fn survey_counts(tree: &ObservedTree, query: &LocatorQuery) -> IdentityBasisCounts {
     let mut counts = IdentityBasisCounts::new();
-    if !structurally_complete {
+    if !tree.structurally_complete {
         counts.mark_incomplete();
     }
-    let mut complete = true;
-    for node in nodes.iter() {
+    for node in &tree.nodes {
         let (addressable, _) = addressability(&node.evidence);
         if !addressable {
             continue;
         }
         mark_unread_fields(&mut counts, &node.evidence);
-        counts.record(&ref_entry(node, source, query).identity);
+        counts.record(&ref_entry(node, &tree.source, query).identity);
     }
+    counts
+}
+
+pub(crate) fn materialize_refmap(
+    tree: &mut ObservedTree,
+    query: &LocatorQuery,
+    selected: Option<&[usize]>,
+) -> Result<(RefMap, bool), crate::AdapterError> {
+    let counts = survey_counts(tree, query);
+    let source = &tree.source;
+    let nodes = &mut tree.nodes;
+    let mut refmap = RefMap::new();
+    let mut complete = true;
     let indices = selected
         .map(|indices| indices.to_vec())
         .unwrap_or_else(|| (0..nodes.len()).collect());
@@ -53,11 +59,13 @@ pub(crate) fn materialize_refmap(
 /// unread, since it could be a look-alike the survey could not compare. A value
 /// matters only where a mutable-value role's stable name depends on it.
 fn mark_unread_fields(counts: &mut IdentityBasisCounts, evidence: &LocatorEvidence) {
-    let value_decides_name = evidence
-        .role
-        .known()
-        .is_some_and(|role| crate::tree::roles::is_mutable_value_role(role));
+    let Some(role) = evidence.role.known() else {
+        counts.mark_incomplete();
+        return;
+    };
+    let value_decides_name = crate::tree::roles::is_mutable_value_role(role);
     counts.mark_unread(
+        role,
         !evidence.identifiers.is_complete(),
         evidence.name.is_unknown() || (value_decides_name && evidence.value.is_unknown()),
         evidence.description.is_unknown(),

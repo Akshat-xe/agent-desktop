@@ -36,6 +36,7 @@ impl EvidenceRequirements {
         let mut requirements = Self::query(query);
         if request.materialization == LocatorMaterialization::SelectedMatches {
             requirements.identifiers = true;
+            requirements.value |= requirements.name;
             requirements.ref_evidence.bounds = true;
         }
         requirements

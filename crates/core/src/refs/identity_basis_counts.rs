@@ -1,37 +1,29 @@
 //! The snapshot's count of look-alikes, which decides what evidence, if any,
 //! singles one ref out from every element that resembles it.
 
+use crate::refs::identity_basis_unread::UnreadFields;
 use crate::{ElementIdentifier, IdentifierKind, IdentityBasis, RefEntryIdentity};
 use std::collections::HashMap;
 
 type IdentifierKey = (String, IdentifierKind, String);
 type TextKey = (String, Option<(IdentifierKind, String)>, String);
+type RoleTextKey = (String, String);
 
 /// Counts every identifier, stable name and description among the entries a
 /// snapshot allocated, so each entry can learn which of them is unique. A count
-/// proves uniqueness only for a field the survey read on every element:
-/// `mark_incomplete` withdraws every proof and `mark_unread` withdraws the
-/// proofs that rest on the fields it names.
+/// proves uniqueness only where the survey read that field on every element of
+/// the entry's role: `mark_incomplete` withdraws every proof and `mark_unread`
+/// the proofs that rest on the fields it names for one role. With identifiers
+/// unread, a name or description unique across the whole role still proves
+/// itself, because the live predicate is never broader than the role.
+#[derive(Default)]
 pub(crate) struct IdentityBasisCounts {
     identifiers: HashMap<IdentifierKey, usize>,
     names: HashMap<TextKey, usize>,
     descriptions: HashMap<TextKey, usize>,
-    identifiers_read: bool,
-    names_read: bool,
-    descriptions_read: bool,
-}
-
-impl Default for IdentityBasisCounts {
-    fn default() -> Self {
-        Self {
-            identifiers: HashMap::new(),
-            names: HashMap::new(),
-            descriptions: HashMap::new(),
-            identifiers_read: true,
-            names_read: true,
-            descriptions_read: true,
-        }
-    }
+    names_by_role: HashMap<RoleTextKey, usize>,
+    descriptions_by_role: HashMap<RoleTextKey, usize>,
+    unread: UnreadFields,
 }
 
 impl IdentityBasisCounts {
@@ -40,13 +32,17 @@ impl IdentityBasisCounts {
     }
 
     pub(crate) fn mark_incomplete(&mut self) {
-        self.mark_unread(true, true, true);
+        self.unread.mark_all();
     }
 
-    pub(crate) fn mark_unread(&mut self, identifiers: bool, names: bool, descriptions: bool) {
-        self.identifiers_read &= !identifiers;
-        self.names_read &= !names;
-        self.descriptions_read &= !descriptions;
+    pub(crate) fn mark_unread(
+        &mut self,
+        role: &str,
+        identifiers: bool,
+        names: bool,
+        descriptions: bool,
+    ) {
+        self.unread.mark(role, identifiers, names, descriptions);
     }
 
     pub(crate) fn record(&mut self, identity: &RefEntryIdentity) {
@@ -65,6 +61,10 @@ impl IdentityBasisCounts {
             identifier.map(|identifier| (identifier.kind, identifier.value.clone()));
         if let Some(name) = stable_name(identity) {
             *self
+                .names_by_role
+                .entry((identity.role.clone(), name.to_string()))
+                .or_default() += 1;
+            *self
                 .names
                 .entry((
                     identity.role.clone(),
@@ -75,6 +75,10 @@ impl IdentityBasisCounts {
         }
         if let Some(description) = crate::tree::accname::non_blank(identity.description.as_deref())
         {
+            *self
+                .descriptions_by_role
+                .entry((identity.role.clone(), description.to_string()))
+                .or_default() += 1;
             *self
                 .descriptions
                 .entry((
@@ -87,41 +91,37 @@ impl IdentityBasisCounts {
     }
 
     pub(crate) fn basis(&self, identity: &RefEntryIdentity) -> IdentityBasis {
-        let identifier = native_identifier(identity);
-        let name = stable_name(identity);
-        let description = crate::tree::accname::non_blank(identity.description.as_deref());
-        if !self.identifiers_read {
+        if self.unread.all() {
             return unproven_basis(identity);
         }
-        if let Some(identifier) = identifier {
-            let key = (
-                identity.role.clone(),
-                identifier.kind,
-                identifier.value.clone(),
-            );
+        let role = identity.role.as_str();
+        let identifier = native_identifier(identity);
+        let identifiers_read = self.unread.identifiers_read(role);
+        if let Some(identifier) = identifier.filter(|_| identifiers_read) {
+            let key = (role.to_owned(), identifier.kind, identifier.value.clone());
             if self.identifiers.get(&key).copied().unwrap_or_default() == 1 {
                 return IdentityBasis::NativeId;
             }
         }
-        let identifier_group =
-            identifier.map(|identifier| (identifier.kind, identifier.value.clone()));
-        if let Some(name) = name.filter(|_| self.names_read) {
-            let key = (
-                identity.role.clone(),
-                identifier_group.clone(),
-                name.to_string(),
-            );
-            if self.names.get(&key).copied().unwrap_or_default() == 1 {
+        let group = identifier.map(|identifier| (identifier.kind, identifier.value.clone()));
+        let unique_text = |text: &str,
+                           grouped: &HashMap<TextKey, usize>,
+                           by_role: &HashMap<RoleTextKey, usize>| {
+            let count = if identifiers_read {
+                grouped.get(&(role.to_owned(), group.clone(), text.to_owned()))
+            } else {
+                by_role.get(&(role.to_owned(), text.to_owned()))
+            };
+            count.copied().unwrap_or_default() == 1
+        };
+        if let Some(name) = stable_name(identity).filter(|_| self.unread.names_read(role)) {
+            if unique_text(name, &self.names, &self.names_by_role) {
                 return IdentityBasis::Name;
             }
         }
-        if let Some(description) = description.filter(|_| self.descriptions_read) {
-            let key = (
-                identity.role.clone(),
-                identifier_group,
-                description.to_string(),
-            );
-            if self.descriptions.get(&key).copied().unwrap_or_default() == 1 {
+        let description = crate::tree::accname::non_blank(identity.description.as_deref());
+        if let Some(description) = description.filter(|_| self.unread.descriptions_read(role)) {
+            if unique_text(description, &self.descriptions, &self.descriptions_by_role) {
                 return IdentityBasis::Description;
             }
         }

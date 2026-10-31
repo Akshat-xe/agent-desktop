@@ -4,7 +4,7 @@ use super::{
     compiled_clause::{CompiledClause, compile_clauses},
     evaluation_buffers::EvaluationBuffers,
     match_verdict::MatchVerdict,
-    materialize::{materialize_refmap, ref_entry},
+    materialize::{materialize_refmap, ref_entry, survey_counts},
     predicate::{normalize_query, self_text_verdict, self_verdict},
     select::{match_data, selected_indices},
     selection_completeness::first_is_authoritative,
@@ -83,6 +83,7 @@ pub fn evaluate_locator_tree(
             Some(refmap)
         }
     };
+    let counts = survey_counts(&tree, &normalized);
     let mut selected_matches = Vec::with_capacity(selected.len());
     for index in selected {
         let data = match_data(&tree, index, &parents)
@@ -91,7 +92,8 @@ pub fn evaluate_locator_tree(
             .nodes
             .get(index)
             .ok_or_else(|| AdapterError::internal("selected locator node is out of bounds"))?;
-        let entry = ref_entry(node, &tree.source, &normalized);
+        let mut entry = ref_entry(node, &tree.source, &normalized);
+        entry.identity.basis = Some(counts.basis(&entry.identity));
         selected_matches.push(LocatorMatch {
             data,
             document_order: node.document_order,

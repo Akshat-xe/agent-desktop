@@ -137,6 +137,43 @@ fn an_unread_field_withdraws_only_the_proofs_that_rest_on_it() {
     );
     assert_eq!(
         bases,
+        [Some(IdentityBasis::Name), Some(IdentityBasis::Name)],
+        "unread identifiers withdraw the identifier proof; each name is still unique across the role"
+    );
+}
+
+#[test]
+fn an_unread_field_on_another_role_leaves_proofs_intact() {
+    use crate::LocatorField;
+    let mut other_role = evidence("checkbox", None);
+    other_role.name = LocatorField::Unknown;
+    other_role.identifiers = IdentifierEvidence::typed([], None, false);
+    let bases = materialized_bases(
+        vec![
+            node(0, evidence("window", Some("Fixture")), vec![1, 2], &[]),
+            node(1, other_role, vec![], &[0]),
+            node(2, evidence("button", Some("primary-button")), vec![], &[1]),
+        ],
+        true,
+    );
+    assert_eq!(bases.last().copied().flatten(), Some(IdentityBasis::Name));
+}
+
+#[test]
+fn with_identifiers_unread_a_name_repeated_in_the_role_stays_ambiguous() {
+    let mut first = evidence("button", Some("Delete"));
+    first.identifiers = IdentifierEvidence::typed([], None, false);
+    let second = with_identifier(evidence("button", Some("Delete")), "row-2-delete");
+    let bases = materialized_bases(
+        vec![
+            node(0, evidence("window", Some("Fixture")), vec![1, 2], &[]),
+            node(1, first, vec![], &[0]),
+            node(2, second, vec![], &[1]),
+        ],
+        true,
+    );
+    assert_eq!(
+        bases,
         [
             Some(IdentityBasis::Ambiguous),
             Some(IdentityBasis::Ambiguous)
@@ -234,5 +271,44 @@ fn an_unread_name_on_another_element_leaves_a_unique_identifier_proven() {
         bases[0],
         Some(IdentityBasis::NativeId),
         "a look-alike whose identifiers were read cannot share this identifier"
+    );
+}
+
+#[test]
+fn a_selected_match_carries_the_basis_its_survey_proved() {
+    let query = LocatorQuery {
+        identity: crate::IdentityPredicate {
+            role: Some("button".into()),
+            name: Some("primary-button".into()),
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let resolution = evaluate_locator_tree(
+        tree(
+            vec![
+                node(0, evidence("window", Some("Fixture")), vec![1, 2], &[]),
+                node(1, evidence("button", Some("primary-button")), vec![], &[0]),
+                node(
+                    2,
+                    evidence("button", Some("secondary-button")),
+                    vec![],
+                    &[1],
+                ),
+            ],
+            vec![0],
+            true,
+        ),
+        &query,
+        &LocatorResolveRequest {
+            materialization: LocatorMaterialization::None,
+            ..request()
+        },
+    )
+    .unwrap();
+    assert_eq!(resolution.matches.len(), 1);
+    assert_eq!(
+        resolution.matches[0].entry.identity.basis,
+        Some(IdentityBasis::Name)
     );
 }
