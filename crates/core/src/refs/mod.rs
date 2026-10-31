@@ -327,6 +327,7 @@ pub(crate) fn home_override_active() -> bool {
 }
 
 pub(crate) mod identity_basis;
+pub mod identity_basis_gate;
 pub mod ref_alloc;
 pub(crate) mod ref_alloc_config;
 pub(crate) mod ref_alloc_options;
