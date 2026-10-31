@@ -94,26 +94,35 @@ A node is actionable when its role is interactive or it advertises a primary act
 
 Refs are deterministic inside one snapshot but are not stable across UI changes. Snapshot and find output qualify each ref with its snapshot ID, and every command accepts only the qualified form. A bare `@eN` fails with `INVALID_ARGS`.
 
+Each ref also records the evidence that singled it out from the elements that resemble it, or the fact that nothing did. That record is its identity basis, and it decides how the ref resolves later.
+
+### Identity Basis
+The snapshot evidence a ref records so it can be re-identified: `native_id`, `name`, `description`, `ambiguous` or `positional`.
+
+A snapshot counts every identifier, stable name and description among the refs it allocates. A ref whose identifier occurs once gets `native_id`; otherwise a name, or failing that a description, gets the matching basis when it is unique among the elements that share the ref's identifier or, without one, its role. A ref whose identifier and text all repeat is `ambiguous`, and a ref with none of them is `positional`. A value never gives a ref a basis. A count proves uniqueness only when the survey saw the whole tree, so a snapshot that was truncated and a drill-down record every ref they allocate as `ambiguous` or `positional`.
+
 ### RefMap
 The persisted mapping from refs to the identity evidence needed to re-identify elements later.
 
 ### Stable Text Identity
 The role-conditional text evidence used during strict ref resolution.
 
-Names and descriptions can identify a ref when they are stable labels. Mutable control values, including text field content and value text promoted into an accessibility name, are volatile and do not identify the element by themselves. Core owns this policy so macOS, Windows, Linux, CLI, and FFI consumers share the same semantics.
+Names and descriptions can identify a ref when they are stable labels and unique among the refs the snapshot allocated; the ref's identity basis records that outcome. Mutable control values, including text field content and value text promoted into an accessibility name, are volatile and do not identify the element by themselves. Core owns this policy so macOS, Windows, Linux, CLI, and FFI consumers share the same semantics.
 
 ### Stale Ref
-A ref whose stored identity no longer matches a live element strongly enough to act safely.
+A ref whose recorded identity no live element still matches, or one recorded before identity bases existed.
 
 ### Strict Ref Resolution
-The fail-closed process of re-identifying a ref from stored identity evidence before a command acts on it.
+The fail-closed process of re-identifying a ref from its recorded identity basis before a command acts on it.
 
-Strict ref resolution rejects missing, stale, and ambiguous matches instead of guessing. It is the boundary between an old observation and a live desktop mutation.
+A ref whose basis is `native_id`, `name` or `description` resolves only when a complete live search of its source scope finds exactly one element with the recorded role and identity. No match is `STALE_REF`; two or more matches are `AMBIGUOUS_TARGET`, and so is an `ambiguous` basis, which carries `details.kind: "identity_not_unique"`. A search that cannot finish, because a budget, a depth limit or an unreadable subtree cut it short, never resolves. Bounds never pick or confirm a candidate for these refs, and a stored path locates nothing on its own. Only a `positional` ref keeps the path-and-bounds rules.
+
+A mutable control's value, including text field content and a value promoted into the name, never identifies an element, so look-alikes that differ only in that value cannot be told apart by ref. Pick the intended one with `find --value`, `--name` or `--nth`. An entry written before bases were recorded has none and returns `STALE_REF`, so snapshots from an older version must be retaken. The promise is one unique current match, not continuity of the observed native object: when an application removes an element and creates another that carries the same unique identifier or name, the ref resolves to the new one.
 
 ### Graded Resolution
-The order a resolver follows to re-identify a ref, on the evidence the ref carries: it walks the stored positional path first, then falls back to a bounded broad search. A candidate is confirmed by identifier first, then by role-conditional stable text; only a ref with no meaningful identity can resolve by unique geometry, as a last resort. Each tier is a locator, never an identity by itself: a path or a bounds match is always verified against the stored identity evidence before it resolves.
+The order a resolver follows to re-identify a positional ref, which carries no identifier, name or description: it walks the stored positional path first, then falls back to a bounded broad search, and resolves on a unique live geometry match. Each tier is a locator, never an identity by itself. A ref with an identity basis does not use this order, because its path is not evidence and its bounds never decide.
 
-The geometry promotion is deliberately narrow: it fires only when the ref has no meaningful identity and stored bounds, and it resolves only on a unique live match. On Windows and Linux the stored bounds must also be a positive-area rectangle: a zero-extent stored hash never promotes, because offscreen and virtualized elements collapse to shared degenerate rectangles that are structurally non-unique (A17-7). macOS has no such check.
+The geometry match is deliberately narrow: it fires only when the ref has no meaningful identity and stored bounds, and it resolves only on a unique live match. On Windows and Linux the stored bounds must also be a positive-area rectangle: a zero-extent stored hash never resolves, because offscreen and virtualized elements collapse to shared degenerate rectangles that are structurally non-unique (A17-7). macOS has no such check.
 
 ## Read Outcomes
 

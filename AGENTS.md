@@ -221,9 +221,12 @@ Every command prints one envelope. `docs/json-output.md` holds the full contract
 - An element gets a ref when its role is interactive (`INTERACTIVE_ROLES` in `crates/core/src/tree/roles.rs`) or it
   advertises a primary action. `SetFocus`, `RightClick` and `ScrollTo` alone do not qualify, because web runtimes
   advertise them on nearly every node.
-- Actions re-identify the element strictly from `RefEntry` evidence: pid, role, path and source surface, stable text
-  identity and a bounds hash. Control values are volatile and never identity. A mismatch returns `STALE_REF`; several
-  live candidates return `AMBIGUOUS_TARGET`.
+- Actions re-identify the element only through the identity basis `RefEntry` recorded at snapshot time: a
+  `native_id`, `name` or `description` that was unique when the snapshot was taken. Such a ref resolves only when a
+  complete live search of its source scope finds exactly one element with the recorded role and identity; zero is
+  `STALE_REF`, and two or more, or an `ambiguous` basis, is `AMBIGUOUS_TARGET`. Bounds never decide for these refs,
+  and a cut-short search never resolves. Only positional refs keep the path-and-bounds rules. Control values are
+  volatile and never identity.
 - All state lives under one root, `~/.agent-desktop` by default. `AGENT_DESKTOP_HOME` relocates it
   (`crates/core/src/storage/state_root.rs`). Refmaps live at `snapshots/<snapshot_id>/refmap.json`, capped at 1 MB each; the
   store keeps the newest 128 snapshots per namespace and prunes to 96. Command code goes through `RefStore`, which

@@ -148,6 +148,16 @@ to `role` or `value`.
 | `NOTIFICATION_NOT_FOUND` | The notification ID was not found |
 | `INTERNAL` | Unexpected error or caught panic |
 
+## Ref identity errors
+
+Every ref records the evidence that singled it out from look-alikes when the snapshot was taken: a native identifier, a name, a description, or none of them. A ref with such evidence resolves only when a complete live search of its source scope finds exactly one element that still carries the recorded role and evidence. Bounds never pick a candidate for these refs.
+
+- `STALE_REF`: no live element matches, or the ref comes from a snapshot written before identity bases were recorded. That snapshot cannot be repaired, so retake it instead of retrying the ref.
+- `AMBIGUOUS_TARGET` with `details.kind: "identity_not_unique"`: the ref recorded no identifier, name or description that was unique at snapshot time, so it cannot single out one element in any later search. `details.role` names the saved role, and the suggestion directs you to `find`. Select the element by its current content with `find --name`, `--value` or `--nth`, then act on the new ref.
+- `AMBIGUOUS_TARGET` with `details.candidate_count`: a complete search found several live elements carrying the recorded identity. On macOS the details also name the role, name, description, source app and source window, and list up to ten candidates.
+
+A search cut short by a budget or an unreadable subtree never resolves. The resolver reports `APP_UNRESPONSIVE` with `details.kind: "resolution_traversal_incomplete"` and retries within the command's budget; a ref action that never gets a complete search ends `TIMEOUT`.
+
 ## Exit codes
 
 `0` success, `1` structured error (JSON on stdout), `2` command-line parse error (the envelope is still printed, with `INVALID_ARGS`).
