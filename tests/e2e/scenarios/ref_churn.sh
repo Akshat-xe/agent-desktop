@@ -62,6 +62,62 @@ churn_expect_defaults() {
         "Equal second=Same"
 }
 
+churn_live_fields() {
+    local native_id="${1:-}" label="${2:-}" output
+    if [ -n "$label" ]; then
+        output="$("$bin" find --app "$app" --role textfield --limit 50 --native-id "$native_id" --name "$label" 2>/dev/null)"
+    elif [ -n "$native_id" ]; then
+        output="$("$bin" find --app "$app" --role textfield --limit 50 --native-id "$native_id" 2>/dev/null)"
+    else
+        output="$("$bin" find --app "$app" --role textfield --limit 50 2>/dev/null)"
+    fi
+    printf '%s' "$output" | python3 -c '
+import json, sys
+data = json.loads(sys.stdin.read() or "{}")
+matches = data.get("data", {}).get("matches")
+if data.get("ok") is not True or not isinstance(matches, list) or not matches:
+    raise SystemExit(2)
+print(json.dumps(sorted(match.get("value") or "" for match in matches), separators=(",", ":")))
+'
+}
+
+churn_capture_fields() {
+    local variable="$1" values
+    values="$(churn_live_fields)" || abort_suite "live text-field values in '$app' could not be read"
+    printf -v "$variable" '%s' "$values"
+}
+
+churn_field_value() {
+    churn_live_fields "${1:-}" "${2:-}" | python3 -c '
+import json, sys
+values = json.loads(sys.stdin.read() or "[]")
+print(values[0] if len(values) == 1 else "")
+'
+}
+
+churn_expect_live_value() {
+    local label="$1" target="$2" native_id="$3" name="$4" expected="$5" output="$6" waited observed
+    waited="$("$bin" wait --element "$(target_ref "$target")" --predicate value --value "$expected" --timeout 3000 2>/dev/null)"
+    observed="$(churn_field_value "$native_id" "$name")"
+    assert "$label" \
+        "$([ "$(json_field "$waited" data.found)" = "True" ] && [ "$observed" = "$expected" ] && echo 1 || echo 0)" \
+        "expected='$expected' observed='$observed' matched=$(json_field "$waited" data.observed.matched) ok=$(json_field "$output" ok) code=$(json_field "$output" error.code)"
+}
+
+churn_assert_no_field_changed() {
+    local context="$1" before="$2" after="$3" forbidden="$4" holds
+    holds="$(python3 -c '
+import json, sys
+print(1 if sys.argv[1] in json.loads(sys.argv[2] or "[]") else 0)
+' "$forbidden" "$after" 2>/dev/null)"
+    assert "$context: every live text field kept its value" \
+        "$([ "$before" = "$after" ] && echo 1 || echo 0)" \
+        "before=$before after=$after"
+    assert "$context: no live text field holds the refused value" \
+        "$([ "$holds" = "0" ] && echo 1 || echo 0)" \
+        "values=$after refused='$forbidden'"
+}
+
 churn_target_nth() {
     local native_id="$1" index="$2" output value
     for _ in $(seq 1 25); do
@@ -99,13 +155,19 @@ live_count="$("$bin" find --app "$app" --role textfield --native-id shared-title
 assert "the filtered layout leaves one shared-title field" \
     "$([ "$(json_field "$live_count" data.count)" = "1" ] && echo 1 || echo 0)" \
     "count=$(json_field "$live_count" data.count)"
+churn_capture_fields fields_before
 output="$("$bin" set-value "$(target_ref "$alpha")" poisoned 2>/dev/null)"
+churn_capture_fields fields_after
 churn_assert_refused "removed row is AMBIGUOUS_TARGET without delivery" "$output" error AMBIGUOUS_TARGET
+churn_assert_no_field_changed "removal direct" "$fields_before" "$fields_after" "poisoned"
 assert "surviving row kept its value after the removal" "$(churn_has_text "Beta stored: Beta")" ""
 churn_expect_defaults "removal direct"
+churn_capture_fields fields_before
 batch_output="$(churn_batch_set_value "$(target_ref "$alpha")" poisoned)"
+churn_capture_fields fields_after
 churn_assert_refused "batch also refuses the removed row without delivery" \
     "$batch_output" data.results.0.error AMBIGUOUS_TARGET
+churn_assert_no_field_changed "removal batch" "$fields_before" "$fields_after" "poisoned"
 churn_expect_defaults "removal batch"
 churn_stop
 
@@ -115,15 +177,21 @@ require_target_by_id replace_button button replace-rows
 require_target_by_id alpha textfield shared-title
 act_target "$replace_button" click >/dev/null 2>&1
 assert "replacement applied before the refusal" "$(churn_has_text "Layout: replaced")" ""
+churn_capture_fields fields_before
 output="$("$bin" set-value "$(target_ref "$alpha")" poisoned 2>/dev/null)"
+churn_capture_fields fields_after
 churn_assert_refused "replaced row is AMBIGUOUS_TARGET without delivery" "$output" error AMBIGUOUS_TARGET
+churn_assert_no_field_changed "replacement direct" "$fields_before" "$fields_after" "poisoned"
 assert "replacement kept the value it was given" "$(churn_has_text "Beta stored: Alpha")" ""
 churn_expect_fields "replacement direct" \
     "Alpha=Alpha" "Beta=Alpha" "Stable=Stable value" "Duplicate=Duplicate value" \
     "Gamma=Gamma" "Delta=Delta" "Equal first=Same" "Equal second=Same"
+churn_capture_fields fields_before
 batch_output="$(churn_batch_set_value "$(target_ref "$alpha")" poisoned)"
+churn_capture_fields fields_after
 churn_assert_refused "batch also refuses the replaced row without delivery" \
     "$batch_output" data.results.0.error AMBIGUOUS_TARGET
+churn_assert_no_field_changed "replacement batch" "$fields_before" "$fields_after" "poisoned"
 churn_expect_fields "replacement batch" \
     "Alpha=Alpha" "Beta=Alpha" "Stable=Stable value" "Duplicate=Duplicate value" \
     "Gamma=Gamma" "Delta=Delta" "Equal first=Same" "Equal second=Same"
@@ -135,12 +203,18 @@ require_target_by_id swap_button button swap-rows
 require_target_by_id alpha textfield shared-title
 act_target "$swap_button" click >/dev/null 2>&1
 assert "swap applied before the refusal" "$(churn_has_text "Layout: swapped")" ""
+churn_capture_fields fields_before
 output="$("$bin" set-value "$(target_ref "$alpha")" poisoned 2>/dev/null)"
+churn_capture_fields fields_after
 churn_assert_refused "swapped row is AMBIGUOUS_TARGET without delivery" "$output" error AMBIGUOUS_TARGET
+churn_assert_no_field_changed "swap direct" "$fields_before" "$fields_after" "poisoned"
 churn_expect_defaults "swap direct"
+churn_capture_fields fields_before
 batch_output="$(churn_batch_set_value "$(target_ref "$alpha")" poisoned)"
+churn_capture_fields fields_after
 churn_assert_refused "batch also refuses the swapped row without delivery" \
     "$batch_output" data.results.0.error AMBIGUOUS_TARGET
+churn_assert_no_field_changed "swap batch" "$fields_before" "$fields_after" "poisoned"
 churn_expect_defaults "swap batch"
 churn_stop
 
@@ -149,26 +223,27 @@ churn_launch
 require_target_by_id stable textfield stable-editor
 require_target_by_id duplicate_button button add-duplicate
 first_write="$("$bin" set-value "$(target_ref "$stable")" stable-ok 2>/dev/null)"
-assert "unique editor accepts its first write" \
-    "$([ "$(json_field "$first_write" ok)" = "True" ] && [ "$(churn_has_text "Stable stored: stable-ok")" = "1" ] && echo 1 || echo 0)" \
-    "ok=$(json_field "$first_write" ok)"
+churn_expect_live_value "unique editor accepts its first write" \
+    "$stable" stable-editor "" stable-ok "$first_write"
 second_write="$("$bin" set-value "$(target_ref "$stable")" stable-ok-again 2>/dev/null)"
-assert "unique editor accepts a second write through the same ref" \
-    "$([ "$(json_field "$second_write" ok)" = "True" ] && [ "$(churn_has_text "Stable stored: stable-ok-again")" = "1" ] && echo 1 || echo 0)" \
-    "ok=$(json_field "$second_write" ok)"
+churn_expect_live_value "unique editor accepts a second write through the same ref" \
+    "$stable" stable-editor "" stable-ok-again "$second_write"
+churn_expect_defaults "unique editor writes"
 act_target "$duplicate_button" click >/dev/null 2>&1
 assert "duplicate applied before the refusal" "$(churn_has_text "Layout: duplicated")" ""
+churn_capture_fields fields_before
 output="$("$bin" set-value "$(target_ref "$stable")" poisoned 2>/dev/null)"
+churn_capture_fields fields_after
 churn_assert_refused "ref with a live duplicate is AMBIGUOUS_TARGET without delivery" "$output" error AMBIGUOUS_TARGET
-churn_expect_fields "duplicate direct" \
-    "Alpha=Alpha" "Beta=Beta" "Stable=stable-ok-again" "Duplicate=Duplicate value" \
-    "Gamma=Gamma" "Delta=Delta" "Equal first=Same" "Equal second=Same"
+churn_assert_no_field_changed "duplicate direct" "$fields_before" "$fields_after" "poisoned"
+churn_expect_defaults "duplicate direct"
+churn_capture_fields fields_before
 batch_output="$(churn_batch_set_value "$(target_ref "$stable")" poisoned)"
+churn_capture_fields fields_after
 churn_assert_refused "batch also reports AMBIGUOUS_TARGET without delivery" \
     "$batch_output" data.results.0.error AMBIGUOUS_TARGET
-churn_expect_fields "duplicate batch" \
-    "Alpha=Alpha" "Beta=Beta" "Stable=stable-ok-again" "Duplicate=Duplicate value" \
-    "Gamma=Gamma" "Delta=Delta" "Equal first=Same" "Equal second=Same"
+churn_assert_no_field_changed "duplicate batch" "$fields_before" "$fields_after" "poisoned"
+churn_expect_defaults "duplicate batch"
 churn_stop
 
 note "Equal values under one identifier: every capture is refused after one field disappears"
@@ -186,13 +261,19 @@ live_count="$("$bin" find --app "$app" --role textfield --native-id equal-title 
 assert "one equal-valued field survives the removal" \
     "$([ "$(json_field "$live_count" data.count)" = "1" ] && echo 1 || echo 0)" \
     "count=$(json_field "$live_count" data.count)"
+churn_capture_fields fields_before
 output="$("$bin" set-value "$(target_ref "$equal_first")" poisoned 2>/dev/null)"
+churn_capture_fields fields_after
 churn_assert_refused "equal-valued first capture is AMBIGUOUS_TARGET without delivery" \
     "$output" error AMBIGUOUS_TARGET
+churn_assert_no_field_changed "equal direct" "$fields_before" "$fields_after" "poisoned"
 churn_expect_defaults "equal direct"
+churn_capture_fields fields_before
 batch_output="$(churn_batch_set_value "$(target_ref "$equal_second")" poisoned)"
+churn_capture_fields fields_after
 churn_assert_refused "batch also refuses the equal-valued second capture" \
     "$batch_output" data.results.0.error AMBIGUOUS_TARGET
+churn_assert_no_field_changed "equal batch" "$fields_before" "$fields_after" "poisoned"
 churn_expect_defaults "equal batch"
 churn_stop
 
@@ -203,16 +284,12 @@ note "Labeled look-alikes: a name-based ref addresses its own field"
 churn_launch
 require_target_by_id gamma textfield labeled-title "Gamma label"
 first_write="$(act_target "$gamma" set-value gamma-ok 2>/dev/null)"
-assert "labeled field accepts a write through its name-based ref" \
-    "$([ "$(json_field "$first_write" ok)" = "True" ] && [ "$(churn_has_text "Gamma stored: gamma-ok")" = "1" ] && echo 1 || echo 0)" \
-    "ok=$(json_field "$first_write" ok) code=$(json_field "$first_write" error.code)"
+churn_expect_live_value "labeled field accepts a write through its name-based ref" \
+    "$gamma" labeled-title "Gamma label" gamma-ok "$first_write"
 second_write="$("$bin" set-value "$(target_ref "$gamma")" gamma-ok-2 2>/dev/null)"
-assert "labeled field accepts a second write through the same ref" \
-    "$([ "$(json_field "$second_write" ok)" = "True" ] && [ "$(churn_has_text "Gamma stored: gamma-ok-2")" = "1" ] && echo 1 || echo 0)" \
-    "ok=$(json_field "$second_write" ok) code=$(json_field "$second_write" error.code)"
-churn_expect_fields "labeled writes" \
-    "Alpha=Alpha" "Beta=Beta" "Stable=Stable value" "Duplicate=Duplicate value" \
-    "Gamma=gamma-ok-2" "Delta=Delta" "Equal first=Same" "Equal second=Same"
+churn_expect_live_value "labeled field accepts a second write through the same ref" \
+    "$gamma" labeled-title "Gamma label" gamma-ok-2 "$second_write"
+churn_expect_defaults "labeled writes"
 churn_stop
 
 note "Labeled removal: the removed field is STALE_REF while its look-alike takes its place"
@@ -225,25 +302,37 @@ live_count="$("$bin" find --app "$app" --role textfield --native-id labeled-titl
 assert "the surviving look-alike is the single live match for the shared identifier" \
     "$([ "$(json_field "$live_count" data.count)" = "1" ] && echo 1 || echo 0)" \
     "count=$(json_field "$live_count" data.count)"
+churn_capture_fields fields_before
 output="$("$bin" set-value "$(target_ref "$gamma")" poisoned 2>/dev/null)"
+churn_capture_fields fields_after
 churn_assert_refused "removed labeled field is STALE_REF without delivery" "$output" error STALE_REF
+churn_assert_no_field_changed "labeled removal direct" "$fields_before" "$fields_after" "poisoned"
 churn_expect_defaults "labeled removal direct"
+churn_capture_fields fields_before
 batch_output="$(churn_batch_set_value "$(target_ref "$gamma")" poisoned)"
+churn_capture_fields fields_after
 churn_assert_refused "batch also reports STALE_REF without delivery" \
     "$batch_output" data.results.0.error STALE_REF
+churn_assert_no_field_changed "labeled removal batch" "$fields_before" "$fields_after" "poisoned"
 churn_expect_defaults "labeled removal batch"
 churn_stop
 
 note "Unlabeled look-alikes are refused before any change"
 churn_launch
 require_target_by_id alpha textfield shared-title
+churn_capture_fields fields_before
 output="$("$bin" set-value "$(target_ref "$alpha")" poisoned 2>/dev/null)"
+churn_capture_fields fields_after
 churn_assert_refused "unlabeled shared-title ref is AMBIGUOUS_TARGET without delivery" \
     "$output" error AMBIGUOUS_TARGET
+churn_assert_no_field_changed "unlabeled direct" "$fields_before" "$fields_after" "poisoned"
 churn_expect_defaults "unlabeled direct"
+churn_capture_fields fields_before
 batch_output="$(churn_batch_set_value "$(target_ref "$alpha")" poisoned)"
+churn_capture_fields fields_after
 churn_assert_refused "batch also refuses the unlabeled shared-title ref" \
     "$batch_output" data.results.0.error AMBIGUOUS_TARGET
+churn_assert_no_field_changed "unlabeled batch" "$fields_before" "$fields_after" "poisoned"
 churn_expect_defaults "unlabeled batch"
 churn_stop
 

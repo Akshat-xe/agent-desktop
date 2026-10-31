@@ -363,7 +363,8 @@ class KeyboardAndRefChurnLegTests(unittest.TestCase):
     def test_ref_churn_reads_the_fixture_readouts_not_the_command_result(self):
         source = REF_CHURN.read_text()
         self.assertIn('churn_has_text "Beta stored: Beta"', source)
-        self.assertIn('churn_has_text "Stable stored: stable-ok-again"', source)
+        self.assertIn("churn_capture_fields fields_before", source)
+        self.assertIn("churn_assert_no_field_changed", source)
         self.assertIn("data.found", source)
 
     def test_interaction_scroll_asserts_without_a_defect_skip(self):
