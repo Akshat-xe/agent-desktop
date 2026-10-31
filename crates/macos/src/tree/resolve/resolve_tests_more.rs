@@ -237,11 +237,6 @@ fn a_ref_with_no_recorded_basis_is_stale_before_any_live_search() {
         .err()
         .expect("the basis gate must refuse before any live search");
     assert_eq!(resolved.code, ErrorCode::StaleRef);
-
-    let anchored = resolve_locator_anchor_with_deadline(&stored, deadline)
-        .err()
-        .expect("the basis gate must refuse before any live search");
-    assert_eq!(anchored.code, ErrorCode::StaleRef);
 }
 
 #[test]
@@ -254,11 +249,25 @@ fn a_ref_whose_identity_was_never_unique_is_ambiguous_before_any_live_search() {
         .expect("the basis gate must refuse before any live search");
     assert_eq!(resolved.code, ErrorCode::AmbiguousTarget);
     assert_eq!(resolved.details.unwrap()["kind"], "identity_not_unique");
+}
 
-    let anchored = resolve_locator_anchor_with_deadline(&stored, deadline)
-        .err()
-        .expect("the basis gate must refuse before any live search");
-    assert_eq!(anchored.code, ErrorCode::AmbiguousTarget);
+#[test]
+fn a_locator_anchor_is_verified_by_hydration_not_refused_for_its_basis() {
+    let deadline = agent_desktop_core::Deadline::after(1_000).unwrap();
+    for basis in [None, Some(agent_desktop_core::IdentityBasis::Ambiguous)] {
+        let stored = current_process_entry(basis);
+        if let Err(error) = resolve_locator_anchor_with_deadline(&stored, deadline) {
+            let kind = error
+                .details
+                .as_ref()
+                .map(|details| details["kind"].clone());
+            assert_ne!(kind, Some(serde_json::json!("identity_not_unique")));
+            assert_ne!(
+                error.message,
+                "The saved ref was recorded before identity evidence was kept"
+            );
+        }
+    }
 }
 
 #[test]

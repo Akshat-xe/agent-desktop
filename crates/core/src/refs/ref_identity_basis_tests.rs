@@ -117,7 +117,7 @@ fn meaningful_identity_follows_the_recorded_basis() {
         (Some(crate::IdentityBasis::Name), true),
         (Some(crate::IdentityBasis::Description), true),
         (Some(crate::IdentityBasis::Ambiguous), false),
-        (Some(crate::IdentityBasis::Positional), false),
+        (Some(crate::IdentityBasis::Positional), true),
     ] {
         let mut entry = entry();
         entry.identity.basis = basis;
@@ -125,6 +125,29 @@ fn meaningful_identity_follows_the_recorded_basis() {
         entry.identity.name = Some("Alpha".into());
         assert_eq!(has_meaningful_identity(&entry), expected, "{basis:?}");
     }
+    let mut bare = entry();
+    bare.identity.basis = Some(crate::IdentityBasis::Positional);
+    bare.identity.name = None;
+    bare.identity.native_id = None;
+    bare.identity.description = None;
+    bare.identity.value = None;
+    assert!(!has_meaningful_identity(&bare));
+}
+
+#[test]
+fn a_positional_anchor_with_an_identifier_is_matched_on_that_identifier() {
+    let mut anchor = entry();
+    anchor.identity.basis = Some(crate::IdentityBasis::Positional);
+    anchor.identity.native_id = Some(identifier("click-status"));
+    anchor.identity.name = None;
+    assert_eq!(
+        match_of(&anchor, None, None, None, Some("click-status")),
+        IdentityMatch::Match
+    );
+    assert_eq!(
+        match_of(&anchor, None, None, None, Some("other-status")),
+        IdentityMatch::NoMatch
+    );
 }
 
 #[test]

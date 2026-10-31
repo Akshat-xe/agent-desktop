@@ -9,13 +9,16 @@ type TextKey = (String, Option<(IdentifierKind, String)>, String);
 
 /// Counts every identifier, stable name and description among the entries a
 /// snapshot allocated, so each entry can learn which of them is unique. A count
-/// is only a proof of uniqueness when the survey saw the whole tree, which
-/// `mark_incomplete` withdraws.
+/// proves uniqueness only for a field the survey read on every element:
+/// `mark_incomplete` withdraws every proof and `mark_unread` withdraws the
+/// proofs that rest on the fields it names.
 pub(crate) struct IdentityBasisCounts {
     identifiers: HashMap<IdentifierKey, usize>,
     names: HashMap<TextKey, usize>,
     descriptions: HashMap<TextKey, usize>,
-    complete: bool,
+    identifiers_read: bool,
+    names_read: bool,
+    descriptions_read: bool,
 }
 
 impl Default for IdentityBasisCounts {
@@ -24,7 +27,9 @@ impl Default for IdentityBasisCounts {
             identifiers: HashMap::new(),
             names: HashMap::new(),
             descriptions: HashMap::new(),
-            complete: true,
+            identifiers_read: true,
+            names_read: true,
+            descriptions_read: true,
         }
     }
 }
@@ -35,7 +40,13 @@ impl IdentityBasisCounts {
     }
 
     pub(crate) fn mark_incomplete(&mut self) {
-        self.complete = false;
+        self.mark_unread(true, true, true);
+    }
+
+    pub(crate) fn mark_unread(&mut self, identifiers: bool, names: bool, descriptions: bool) {
+        self.identifiers_read &= !identifiers;
+        self.names_read &= !names;
+        self.descriptions_read &= !descriptions;
     }
 
     pub(crate) fn record(&mut self, identity: &RefEntryIdentity) {
@@ -79,7 +90,7 @@ impl IdentityBasisCounts {
         let identifier = native_identifier(identity);
         let name = stable_name(identity);
         let description = crate::tree::accname::non_blank(identity.description.as_deref());
-        if !self.complete {
+        if !self.identifiers_read {
             return unproven_basis(identity);
         }
         if let Some(identifier) = identifier {
@@ -94,7 +105,7 @@ impl IdentityBasisCounts {
         }
         let identifier_group =
             identifier.map(|identifier| (identifier.kind, identifier.value.clone()));
-        if let Some(name) = name {
+        if let Some(name) = name.filter(|_| self.names_read) {
             let key = (
                 identity.role.clone(),
                 identifier_group.clone(),
@@ -104,7 +115,7 @@ impl IdentityBasisCounts {
                 return IdentityBasis::Name;
             }
         }
-        if let Some(description) = description {
+        if let Some(description) = description.filter(|_| self.descriptions_read) {
             let key = (
                 identity.role.clone(),
                 identifier_group,

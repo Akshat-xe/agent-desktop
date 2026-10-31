@@ -41,7 +41,6 @@ pub(crate) fn resolve_locator_anchor_with_deadline(
     operation_deadline: agent_desktop_core::Deadline,
 ) -> Result<NativeHandle, AdapterError> {
     verify_process_instance(entry)?;
-    basis_gate(&entry.identity)?;
     let deadline = crate::tree::locator_deadline::from_operation(operation_deadline)?;
     let result = retry_incomplete_until(deadline, || resolve_locator_anchor_once(entry, deadline));
     match result {

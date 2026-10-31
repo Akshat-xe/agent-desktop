@@ -26,9 +26,7 @@ pub(crate) fn materialize_refmap(
         if !addressable {
             continue;
         }
-        if !identity_fields_readable(&node.evidence) {
-            counts.mark_incomplete();
-        }
+        mark_unread_fields(&mut counts, &node.evidence);
         counts.record(&ref_entry(node, source, query).identity);
     }
     let indices = selected
@@ -51,14 +49,19 @@ pub(crate) fn materialize_refmap(
     Ok((refmap, complete))
 }
 
-/// Whether every field that decides this entry's identity was read. A candidate
-/// whose name, description or identifier list is unknown could be a look-alike
-/// the survey never saw, so uniqueness stays unproven for the whole tree.
-fn identity_fields_readable(evidence: &LocatorEvidence) -> bool {
-    !evidence.name.is_unknown()
-        && !evidence.description.is_unknown()
-        && !evidence.value.is_unknown()
-        && evidence.identifiers.is_complete()
+/// Withdraws the uniqueness proofs that rest on a field this element left
+/// unread, since it could be a look-alike the survey could not compare. A value
+/// matters only where a mutable-value role's stable name depends on it.
+fn mark_unread_fields(counts: &mut IdentityBasisCounts, evidence: &LocatorEvidence) {
+    let value_decides_name = evidence
+        .role
+        .known()
+        .is_some_and(|role| crate::tree::roles::is_mutable_value_role(role));
+    counts.mark_unread(
+        !evidence.identifiers.is_complete(),
+        evidence.name.is_unknown() || (value_decides_name && evidence.value.is_unknown()),
+        evidence.description.is_unknown(),
+    );
 }
 
 pub(crate) fn addressability(evidence: &LocatorEvidence) -> (bool, bool) {

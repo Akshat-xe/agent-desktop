@@ -8,11 +8,25 @@ use crate::{
 /// Whether the entry records evidence that singled it out from its look-alikes
 /// when it was captured. A positional entry, an entry whose evidence was not
 /// unique, and an entry written before bases were recorded carry none.
+/// Whether the entry carries identity a resolver can verify. A positional
+/// entry is judged by its own fields, which a snapshot's positional ref never
+/// has and a locator anchor observed in the same call may.
 pub fn has_meaningful_identity(entry: &RefEntry) -> bool {
-    matches!(
-        entry.identity.basis,
-        Some(IdentityBasis::NativeId | IdentityBasis::Name | IdentityBasis::Description)
-    )
+    match entry.identity.basis {
+        Some(IdentityBasis::NativeId | IdentityBasis::Name | IdentityBasis::Description) => true,
+        Some(IdentityBasis::Positional) => identity_fields_are_meaningful(
+            entry.identity.role.as_str(),
+            entry.identity.name.as_deref(),
+            entry.identity.value.as_deref(),
+            entry.identity.description.as_deref(),
+            entry
+                .identity
+                .native_id
+                .as_ref()
+                .map(|identifier| identifier.value.as_str()),
+        ),
+        None | Some(IdentityBasis::Ambiguous) => false,
+    }
 }
 
 pub fn has_stable_text_identity(entry: &RefEntry) -> bool {
@@ -76,9 +90,10 @@ pub fn identity_match(
             actual_description,
             actual_identifiers,
         ),
-        Some(IdentityBasis::Positional) => {
-            stable_text_match(entry, actual_name, actual_value, actual_description)
-        }
+        Some(IdentityBasis::Positional) => match entry.identity.native_id.as_ref() {
+            Some(expected) => identifier_evidence_match(expected, actual_identifiers),
+            None => stable_text_match(entry, actual_name, actual_value, actual_description),
+        },
         None | Some(IdentityBasis::Ambiguous) => IdentityMatch::NoMatch,
     }
 }

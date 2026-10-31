@@ -104,3 +104,66 @@ fn an_incomplete_observation_records_ambiguous_even_for_a_unique_identifier() {
 
     assert_eq!(bases, [Some(IdentityBasis::Ambiguous)]);
 }
+
+#[test]
+fn an_unread_field_withdraws_only_the_proofs_that_rest_on_it() {
+    use crate::LocatorField;
+    let mut unread_value_and_description = evidence("button", Some("Other"));
+    unread_value_and_description.value = LocatorField::Unknown;
+    unread_value_and_description.description = LocatorField::Unknown;
+    let button = with_identifier(evidence("button", Some("Save")), "save-button");
+    let bases = materialized_bases(
+        vec![
+            node(0, evidence("window", Some("Fixture")), vec![1, 2], &[]),
+            node(1, unread_value_and_description, vec![], &[0]),
+            node(2, button.clone(), vec![], &[1]),
+        ],
+        true,
+    );
+    assert_eq!(
+        bases,
+        [Some(IdentityBasis::Name), Some(IdentityBasis::NativeId)]
+    );
+
+    let mut unread_identifiers = evidence("button", Some("Other"));
+    unread_identifiers.identifiers = IdentifierEvidence::typed([], None, false);
+    let bases = materialized_bases(
+        vec![
+            node(0, evidence("window", Some("Fixture")), vec![1, 2], &[]),
+            node(1, unread_identifiers, vec![], &[0]),
+            node(2, button, vec![], &[1]),
+        ],
+        true,
+    );
+    assert_eq!(
+        bases,
+        [
+            Some(IdentityBasis::Ambiguous),
+            Some(IdentityBasis::Ambiguous)
+        ]
+    );
+}
+
+#[test]
+fn an_unread_description_blocks_only_a_description_basis() {
+    use crate::LocatorField;
+    let mut described = with_identifier(evidence("button", None), "shared");
+    described.description = LocatorField::Known("Archive".into());
+    let mut unread = with_identifier(evidence("button", None), "shared");
+    unread.description = LocatorField::Unknown;
+    let bases = materialized_bases(
+        vec![
+            node(0, evidence("window", Some("Fixture")), vec![1, 2], &[]),
+            node(1, described, vec![], &[0]),
+            node(2, unread, vec![], &[1]),
+        ],
+        true,
+    );
+    assert_eq!(
+        bases,
+        [
+            Some(IdentityBasis::Ambiguous),
+            Some(IdentityBasis::Ambiguous)
+        ]
+    );
+}

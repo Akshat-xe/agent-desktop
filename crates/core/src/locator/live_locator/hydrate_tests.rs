@@ -111,3 +111,23 @@ fn matching_geometry_cannot_confirm_an_anchor_that_recorded_a_name() {
         "an unread live name can never resolve"
     );
 }
+
+#[test]
+fn a_hydrated_match_keeps_the_basis_its_survey_proved() {
+    let observed = node(0, evidence("button", Some("Send")), vec![], &[]);
+    let tree = tree(vec![observed.clone()], vec![0], true);
+    let mut preliminary =
+        super::super::materialize::ref_entry(&observed, &tree.source, &LocatorQuery::default());
+    preliminary.identity.basis = Some(crate::IdentityBasis::NativeId);
+    let mut hydrated =
+        super::super::materialize::ref_entry(&observed, &tree.source, &LocatorQuery::default());
+    assert_eq!(
+        hydrated.identity.basis,
+        Some(crate::IdentityBasis::Ambiguous)
+    );
+    preserve_verified_identity(&preliminary, &observed, &mut hydrated);
+    assert_eq!(
+        hydrated.identity.basis,
+        Some(crate::IdentityBasis::NativeId)
+    );
+}
