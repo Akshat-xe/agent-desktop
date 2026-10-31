@@ -1,15 +1,26 @@
-use agent_desktop_core::{IdentifierEvidence, LocatorField};
+use agent_desktop_core::{IdentifierEvidence, IdentityBasis, LocatorField};
 
 use super::*;
 use crate::tree::live::test_support::{evidence, rect, ref_entry, with_identifier};
 
-fn named(role: &str, name: &str) -> RefEntry {
-    let mut entry = ref_entry(role);
-    entry.identity.name = Some(name.to_owned());
+fn positional(mut entry: RefEntry) -> RefEntry {
+    entry.identity.basis = Some(IdentityBasis::Positional);
     entry
 }
 
+fn identified(mut entry: RefEntry) -> RefEntry {
+    entry.identity.basis = Some(IdentityBasis::NativeId);
+    entry
+}
+
+fn named(role: &str, name: &str) -> RefEntry {
+    let mut entry = ref_entry(role);
+    entry.identity.name = Some(name.to_owned());
+    positional(entry)
+}
+
 fn sized(mut entry: RefEntry, bounds: Rect) -> RefEntry {
+    entry = positional(entry);
     entry.geometry.bounds = Some(bounds);
     entry.geometry.bounds_hash = bounds.bounds_hash();
     entry
@@ -31,14 +42,14 @@ fn an_unreadable_role_withholds_the_verdict_and_a_different_role_is_rejected() {
 
 #[test]
 fn an_identifier_match_with_no_stored_text_resolves_on_the_identifier_alone() {
-    let entry = with_identifier(ref_entry("button"), "toolbar.save");
+    let entry = identified(with_identifier(ref_entry("button"), "toolbar.save"));
     let live = evidence("button", Some("anything"), Some("toolbar.save"), None);
     assert_eq!(admit_node(&entry, &live), Admission::Collect);
 }
 
 #[test]
 fn an_identifier_read_that_was_incomplete_is_unread_and_never_a_refutation() {
-    let entry = with_identifier(named("button", "Save"), "toolbar.save");
+    let entry = identified(with_identifier(named("button", "Save"), "toolbar.save"));
     let mut live = evidence("button", Some("Save"), None, None);
     live.identifiers = IdentifierEvidence::typed([], None, false);
     assert_eq!(admit_node(&entry, &live), Admission::Unread);
@@ -46,7 +57,7 @@ fn an_identifier_read_that_was_incomplete_is_unread_and_never_a_refutation() {
 
 #[test]
 fn an_identifier_match_whose_stored_text_cannot_be_read_is_unread() {
-    let entry = with_identifier(named("button", "Save"), "toolbar.save");
+    let entry = identified(with_identifier(named("button", "Save"), "toolbar.save"));
     let mut live = evidence("button", None, Some("toolbar.save"), None);
     live.name = LocatorField::Unknown;
     assert_eq!(admit_node(&entry, &live), Admission::Unread);

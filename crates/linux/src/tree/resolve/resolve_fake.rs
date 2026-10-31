@@ -47,6 +47,7 @@ pub(in crate::tree) struct Faults {
     pub(in crate::tree) search_error: Option<AdapterError>,
     pub(in crate::tree) level_errors: HashMap<String, AdapterError>,
     pub(in crate::tree) evidence_errors: HashMap<String, AdapterError>,
+    pub(in crate::tree) walk_errors: HashMap<String, AdapterError>,
 }
 
 pub(in crate::tree) struct Fake {
@@ -54,6 +55,7 @@ pub(in crate::tree) struct Fake {
     pub(in crate::tree) pids: HashMap<String, u32>,
     pub(in crate::tree) web_process: bool,
     pub(in crate::tree) stopped: Option<String>,
+    pub(in crate::tree) limits: WalkLimits,
     pub(in crate::tree) faults: Faults,
     pub(in crate::tree) reads: Reads,
 }
@@ -108,6 +110,7 @@ impl Fake {
             pids: HashMap::from([(BUS.to_owned(), WINDOW_PID)]),
             web_process: false,
             stopped: None,
+            limits: WalkLimits::default(),
             faults: Faults::default(),
             reads: Reads::default(),
         };
@@ -171,9 +174,15 @@ impl Fake {
     pub(in crate::tree) fn walk(&self) -> Walk<ObservedRead> {
         walk_levels(
             self.frame(),
-            &WalkLimits::default(),
+            &self.limits,
             deadline(),
             |level| {
+                if let Some(error) = level
+                    .iter()
+                    .find_map(|element| self.faults.walk_errors.get(element.path()))
+                {
+                    return Err(error.clone());
+                }
                 Ok(level
                     .iter()
                     .map(|element| {

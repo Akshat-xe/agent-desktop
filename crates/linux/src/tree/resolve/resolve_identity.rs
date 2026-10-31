@@ -143,6 +143,9 @@ pub(crate) fn admit_node(entry: &RefEntry, evidence: &LocatorEvidence) -> Admiss
     if let Some(refusal) = role_gate(entry, evidence) {
         return refusal;
     }
+    if let Some(admission) = retained_object_admits(entry, evidence) {
+        return admission;
+    }
     match identity_verdict(entry, evidence) {
         IdentityMatch::Match => Admission::Collect,
         IdentityMatch::Unknown if geometry_matches(entry, evidence) => Admission::Collect,
@@ -236,6 +239,20 @@ fn description_admits(entry: &RefEntry, evidence: &LocatorEvidence) -> Admission
     }
 }
 
+/// A retained object is an address, not a description: the recorded token names
+/// one live object. A node carrying another token is a different object, so a
+/// ref whose object is gone is refused rather than re-matched on the role and
+/// rectangle it left behind. A node whose token nobody published withholds the
+/// answer, since nothing proves it is not the stored object.
+fn retained_object_admits(entry: &RefEntry, evidence: &LocatorEvidence) -> Option<Admission> {
+    let expected = entry.identity.retained_object.as_deref()?;
+    Some(match evidence.identifiers.retained_object() {
+        Some(actual) if actual == expected => Admission::Collect,
+        Some(_) => Admission::Reject,
+        None => Admission::Unread,
+    })
+}
+
 /// Decides one node's admission for a ref that resolves only on a unique live
 /// match. Only the recorded identity evidence counts: the whole rectangle is
 /// never a reason to collect or refute a node here, and a field the read could
@@ -244,8 +261,11 @@ pub(crate) fn identity_admission(entry: &RefEntry, evidence: &LocatorEvidence) -
     if let Some(refusal) = role_gate(entry, evidence) {
         return refusal;
     }
-    if entry.identity.retained_object.is_some() {
-        return verdict_admission(identity_verdict(entry, evidence));
+    if let Some(admission) = retained_object_admits(entry, evidence) {
+        return match admission {
+            Admission::Collect => verdict_admission(identity_verdict(entry, evidence)),
+            refusal => refusal,
+        };
     }
     match entry.identity.basis {
         Some(IdentityBasis::NativeId) if !has_identifier_evidence(entry) => Admission::Unread,

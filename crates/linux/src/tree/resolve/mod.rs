@@ -259,3 +259,7 @@ mod nested_tests;
 #[cfg(test)]
 #[path = "resolve_basis_tests.rs"]
 mod basis_tests;
+
+#[cfg(test)]
+#[path = "resolve_uncertainty_tests.rs"]
+mod uncertainty_tests;

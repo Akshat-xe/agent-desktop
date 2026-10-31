@@ -345,6 +345,7 @@ fn a_placement_timeout_cannot_authorize_or_refute_raw_coordinate_evidence() {
     assert!(evidence.ref_evidence.window_bounds.is_unknown());
     for space in [BoundsSpace::Window, BoundsSpace::Screen] {
         let mut entry = ref_entry("button");
+        entry.identity.basis = Some(agent_desktop_core::IdentityBasis::Positional);
         entry.geometry.bounds = Some(rect(0.0, 0.0, 10.0, 10.0));
         entry.geometry.bounds_space = Some(space);
         assert_eq!(admit_node(&entry, &evidence), Admission::Unread);
