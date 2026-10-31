@@ -254,3 +254,71 @@ fn an_incomplete_snapshot_is_ambiguous_even_when_the_tree_looks_whole() {
         Some(IdentityBasis::Ambiguous)
     );
 }
+
+#[test]
+fn identical_text_across_roles_never_becomes_ambiguous() {
+    let root = window_with(vec![
+        entry("button", Some("Save"), None, None),
+        entry("cell", Some("Save"), None, None),
+        entry("button", Some("Save"), None, None),
+    ]);
+
+    let (tree, refmap) = run(root, &allocation(None));
+
+    assert_eq!(
+        basis_of(&tree, &refmap, &[0]),
+        Some(IdentityBasis::Ambiguous)
+    );
+    assert_eq!(basis_of(&tree, &refmap, &[1]), Some(IdentityBasis::Name));
+    assert_eq!(
+        basis_of(&tree, &refmap, &[2]),
+        Some(IdentityBasis::Ambiguous)
+    );
+}
+
+#[test]
+fn identical_text_across_identifier_groups_never_becomes_ambiguous() {
+    let root = window_with(vec![
+        entry("button", Some("Save"), Some("row-a"), None),
+        entry("button", Some("Save"), Some("row-a"), None),
+        entry("button", Some("Save"), Some("row-b"), None),
+        entry("button", Some("Cancel"), Some("row-b"), None),
+    ]);
+
+    let (tree, refmap) = run(root, &allocation(None));
+
+    assert_eq!(
+        basis_of(&tree, &refmap, &[0]),
+        Some(IdentityBasis::Ambiguous)
+    );
+    assert_eq!(
+        basis_of(&tree, &refmap, &[1]),
+        Some(IdentityBasis::Ambiguous)
+    );
+    assert_eq!(basis_of(&tree, &refmap, &[2]), Some(IdentityBasis::Name));
+    assert_eq!(basis_of(&tree, &refmap, &[3]), Some(IdentityBasis::Name));
+}
+
+#[test]
+fn an_incomplete_capture_is_refused_with_ambiguous_target_before_any_live_search() {
+    let root = window_with(vec![entry(
+        "button",
+        Some("Save"),
+        Some("save-button"),
+        None,
+    )]);
+
+    let (tree, refmap) = run(root, &allocation_with(None, false));
+    let captured = refmap
+        .get(tree.children[0].ref_id.as_deref().unwrap())
+        .unwrap();
+
+    assert_eq!(captured.identity.basis, Some(IdentityBasis::Ambiguous));
+    assert!(!crate::refs::identity_basis_gate::requires_live_uniqueness(
+        &captured.identity
+    ));
+    let error = crate::refs::identity_basis_gate::basis_gate(&captured.identity).unwrap_err();
+    assert_eq!(error.code, crate::ErrorCode::AmbiguousTarget);
+    assert_eq!(error.details.unwrap()["kind"], "identity_not_unique");
+    assert_eq!(error.disposition, crate::DeliverySemantics::not_delivered());
+}

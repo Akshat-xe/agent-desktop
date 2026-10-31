@@ -360,3 +360,9 @@ fn exact_ref_entry_refuses_the_version_that_predates_the_geometry_frame() {
 
 #[path = "resolve_basis_tests.rs"]
 mod basis_tests;
+
+#[path = "resolve_refusal_tests.rs"]
+mod refusal_tests;
+
+#[path = "resolve_effect_tests.rs"]
+mod effect_tests;

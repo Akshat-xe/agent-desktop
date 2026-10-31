@@ -189,6 +189,34 @@ fn text_identity_counts_only_the_recorded_name() {
 }
 
 #[test]
+fn a_name_identity_never_matches_the_same_text_on_another_role() {
+    let stored = identity_entry(IdentityBasis::Name);
+    assert_eq!(stored.identity.role, "cell");
+    assert_eq!(stored.identity.name.as_deref(), Some("Investors"));
+    let other_role = evidence(
+        LocatorField::Known("button".into()),
+        LocatorField::Known("Investors".into()),
+        LocatorField::Absent,
+        IdentifierEvidence::absent(),
+    );
+    let same_role = evidence(
+        LocatorField::Known("cell".into()),
+        LocatorField::Known("Investors".into()),
+        LocatorField::Absent,
+        IdentifierEvidence::absent(),
+    );
+
+    assert_eq!(
+        identity_candidate_verdict(&stored, &other_role),
+        IdentityMatch::NoMatch
+    );
+    assert_eq!(
+        identity_candidate_verdict(&stored, &same_role),
+        IdentityMatch::Match
+    );
+}
+
+#[test]
 fn a_duplicate_is_never_reported_as_a_complete_single_match() {
     assert_eq!(classify_unique_matches(2, true), UniqueOutcome::Duplicate);
     assert_eq!(classify_unique_matches(1, false), UniqueOutcome::Incomplete);
