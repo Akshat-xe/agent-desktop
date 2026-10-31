@@ -167,3 +167,7 @@ fn sibling_list_was_cut<S: TreeSource>(
 #[cfg(all(test, target_os = "windows"))]
 #[path = "resolve_identity_tests.rs"]
 mod tests;
+
+#[cfg(all(test, target_os = "windows"))]
+#[path = "resolve_identity_count_tests.rs"]
+mod count_tests;
