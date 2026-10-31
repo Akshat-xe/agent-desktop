@@ -12,6 +12,9 @@ struct RefChurnView: View {
     @State private var labeledFiltered = false
     @State private var gamma = "Gamma"
     @State private var delta = "Delta"
+    @State private var equalVisible = true
+    @State private var equalFirst = "Same"
+    @State private var equalSecond = "Same"
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -34,6 +37,10 @@ struct RefChurnView: View {
                     duplicated = true
                 }
                 .accessibilityIdentifier("add-duplicate")
+                Button("Remove equal") {
+                    equalVisible = false
+                }
+                .accessibilityIdentifier("remove-equal")
             }
 
             VStack(alignment: .leading, spacing: 8) {
@@ -73,6 +80,18 @@ struct RefChurnView: View {
             .accessibilityElement(children: .contain)
             .accessibilityLabel("Labeled collection")
 
+            VStack(alignment: .leading, spacing: 8) {
+                if equalVisible {
+                    TextField("", text: $equalFirst)
+                        .accessibilityIdentifier("equal-title")
+                }
+                TextField("", text: $equalSecond)
+                    .accessibilityIdentifier("equal-title")
+            }
+            .frame(width: 300, height: 60, alignment: .topLeading)
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel("Equal collection")
+
             TextField("Stable editor", text: $stable)
                 .accessibilityIdentifier("stable-editor")
                 .accessibilityLabel("Stable editor")
@@ -87,9 +106,12 @@ struct RefChurnView: View {
             Text("Duplicate stored: \(duplicate)")
             Text("Gamma stored: \(gamma)")
             Text("Delta stored: \(delta)")
+            Text("Equal first stored: \(equalFirst)")
+            Text("Equal second stored: \(equalSecond)")
+            Text("Equal layout: \(equalVisible ? "pair" : "removed")")
             Text("Layout: \(labeledFiltered ? "labeled-filtered" : replaced ? "replaced" : swapped ? "swapped" : duplicated ? "duplicated" : "original")")
         }
         .padding(24)
-        .frame(width: 440, height: 640)
+        .frame(width: 440, height: 800)
     }
 }
