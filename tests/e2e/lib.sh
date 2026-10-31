@@ -135,9 +135,14 @@ find_target() {
 }
 
 find_target_by_id() {
-    local role="$1" native_id="$2" output value
+    local role="$1" native_id="$2" label="${3:-}" output value
     for _ in $(seq 1 25); do
-        if output="$("$bin" find --app "$app" --role "$role" --native-id "$native_id" --first 2>/dev/null)"; then
+        if [ -n "$label" ]; then
+            output="$("$bin" find --app "$app" --role "$role" --native-id "$native_id" --name "$label" --first 2>/dev/null)" || output=""
+        else
+            output="$("$bin" find --app "$app" --role "$role" --native-id "$native_id" --first 2>/dev/null)" || output=""
+        fi
+        if [ -n "$output" ]; then
             value="$(printf '%s' "$output" | python3 "$json_tool" target 2>/dev/null)"
             if [ -n "$value" ]; then
                 printf '%s' "$value"
@@ -158,8 +163,8 @@ require_target() {
 }
 
 require_target_by_id() {
-    local variable="$1" role="$2" native_id="$3" value
-    value="$(find_target_by_id "$role" "$native_id")" || {
+    local variable="$1" role="$2" native_id="$3" label="${4:-}" value
+    value="$(find_target_by_id "$role" "$native_id" "$label")" || {
         abort_suite "required fixture target '$native_id' ($role) is missing or lacks ref_id + snapshot_id"
     }
     printf -v "$variable" '%s' "$value"

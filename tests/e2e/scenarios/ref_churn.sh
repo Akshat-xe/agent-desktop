@@ -102,6 +102,49 @@ assert "original editor kept its value" "$(churn_has_text "Stable stored: stable
 assert "duplicate editor kept its value" "$(churn_has_text "Duplicate stored: Duplicate value")" ""
 churn_stop
 
+note "Labeled look-alikes: a name-based ref addresses its own field"
+churn_launch
+require_target_by_id gamma textfield labeled-title "Gamma label"
+first_write="$(act_target "$gamma" set-value gamma-ok 2>/dev/null)"
+assert "labeled field accepts a write through its name-based ref" \
+    "$([ "$(json_field "$first_write" ok)" = "True" ] && [ "$(churn_has_text "Gamma stored: gamma-ok")" = "1" ] && echo 1 || echo 0)" \
+    "ok=$(json_field "$first_write" ok) code=$(json_field "$first_write" error.code)"
+second_write="$("$bin" set-value "$(target_ref "$gamma")" gamma-ok-2 2>/dev/null)"
+assert "labeled field accepts a second write through the same ref" \
+    "$([ "$(json_field "$second_write" ok)" = "True" ] && [ "$(churn_has_text "Gamma stored: gamma-ok-2")" = "1" ] && echo 1 || echo 0)" \
+    "ok=$(json_field "$second_write" ok) code=$(json_field "$second_write" error.code)"
+assert "labeled neighbor kept its own value" "$(churn_has_text "Delta stored: Delta")" ""
+churn_stop
+
+note "Labeled removal: the removed field is STALE_REF while its look-alike takes its place"
+churn_launch
+require_target_by_id gamma textfield labeled-title "Gamma label"
+require_target_by_id labeled_filter button filter-labeled
+act_target "$labeled_filter" click >/dev/null 2>&1
+"$bin" wait --text "Layout: labeled-filtered" --app "$app" --timeout 5000 >/dev/null 2>&1
+live_count="$("$bin" find --app "$app" --role textfield --native-id labeled-title --count 2>/dev/null)"
+assert "the surviving look-alike is the single live match for the shared identifier" \
+    "$([ "$(json_field "$live_count" data.count)" = "1" ] && echo 1 || echo 0)" \
+    "count=$(json_field "$live_count" data.count)"
+output="$("$bin" set-value "$(target_ref "$gamma")" poisoned 2>/dev/null)"
+assert "removed labeled field is STALE_REF without delivery" \
+    "$([ "$(json_field "$output" ok)" = "False" ] && [ "$(json_field "$output" error.code)" = "STALE_REF" ] && [ "$(json_field "$output" error.disposition.delivery)" = "not_delivered" ] && echo 1 || echo 0)" \
+    "code=$(json_field "$output" error.code) delivery=$(json_field "$output" error.disposition.delivery)"
+assert "surviving labeled field kept its value" "$(churn_has_text "Delta stored: Delta")" ""
+assert "removed labeled field kept its value" "$(churn_has_text "Gamma stored: Gamma")" ""
+churn_stop
+
+note "Unlabeled look-alikes are refused before any change"
+churn_launch
+require_target_by_id alpha textfield shared-title
+output="$("$bin" set-value "$(target_ref "$alpha")" poisoned 2>/dev/null)"
+assert "unlabeled shared-title ref is AMBIGUOUS_TARGET without delivery" \
+    "$([ "$(json_field "$output" ok)" = "False" ] && [ "$(json_field "$output" error.code)" = "AMBIGUOUS_TARGET" ] && [ "$(json_field "$output" error.disposition.delivery)" = "not_delivered" ] && echo 1 || echo 0)" \
+    "code=$(json_field "$output" error.code) delivery=$(json_field "$output" error.disposition.delivery)"
+assert "first unlabeled field kept its value" "$(churn_has_text "Alpha stored: Alpha")" ""
+assert "second unlabeled field kept its value" "$(churn_has_text "Beta stored: Beta")" ""
+churn_stop
+
 note "Complete app inventory gives a terminal unknown-app response"
 run_timed "$bin" snapshot --app "AgentDeskMissing-$churn_pid" --timeout-ms 1500
 assert "unknown app is APP_NOT_FOUND without delivery" \

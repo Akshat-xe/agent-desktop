@@ -9,6 +9,9 @@ struct RefChurnView: View {
     @State private var swapped = false
     @State private var duplicated = false
     @State private var duplicate = "Duplicate value"
+    @State private var labeledFiltered = false
+    @State private var gamma = "Gamma"
+    @State private var delta = "Delta"
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -51,6 +54,25 @@ struct RefChurnView: View {
             .accessibilityElement(children: .contain)
             .accessibilityLabel("Changing collection")
 
+            Button("Filter labeled") {
+                labeledFiltered = true
+            }
+            .accessibilityIdentifier("filter-labeled")
+
+            VStack(alignment: .leading, spacing: 8) {
+                if !labeledFiltered {
+                    TextField("", text: $gamma)
+                        .accessibilityIdentifier("labeled-title")
+                        .accessibilityLabel("Gamma label")
+                }
+                TextField("", text: $delta)
+                    .accessibilityIdentifier("labeled-title")
+                    .accessibilityLabel("Delta label")
+            }
+            .frame(width: 300, height: 80, alignment: .topLeading)
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel("Labeled collection")
+
             TextField("Stable editor", text: $stable)
                 .accessibilityIdentifier("stable-editor")
                 .accessibilityLabel("Stable editor")
@@ -63,9 +85,11 @@ struct RefChurnView: View {
             Text("Beta stored: \(beta)")
             Text("Stable stored: \(stable)")
             Text("Duplicate stored: \(duplicate)")
-            Text("Layout: \(replaced ? "replaced" : swapped ? "swapped" : duplicated ? "duplicated" : "original")")
+            Text("Gamma stored: \(gamma)")
+            Text("Delta stored: \(delta)")
+            Text("Layout: \(labeledFiltered ? "labeled-filtered" : replaced ? "replaced" : swapped ? "swapped" : duplicated ? "duplicated" : "original")")
         }
         .padding(24)
-        .frame(width: 380, height: 420)
+        .frame(width: 440, height: 640)
     }
 }
