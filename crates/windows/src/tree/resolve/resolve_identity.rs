@@ -11,6 +11,10 @@
 //! Split from `resolve_search.rs`, which is at the file-size cap. The search
 //! there keeps the path and bounds tiers, which apply only to refs whose basis
 //! lets bounds decide.
+//!
+//! A second match ends the walk: no region it never read could turn two
+//! matches into one, so `AMBIGUOUS_TARGET` is already settled and the count
+//! this tier reports is the count the walk stopped at.
 
 use agent_desktop_core::{AdapterError, Deadline, LocatorEvidence, NativeHandle, RefEntry};
 
@@ -103,6 +107,9 @@ pub(crate) fn admit_identity_candidate(
 
 /// Walks the source scope counting every candidate the recorded identity
 /// admits, and records every part of the scope it could not read.
+///
+/// The walk ends as soon as the count settles the verdict, so a second match
+/// stops both the recursion that found it and the sibling traversal around it.
 fn search_source_scope(
     ctx: &SearchContext<'_>,
     element: &UIAElement,
@@ -110,6 +117,9 @@ fn search_source_scope(
     found: &mut Vec<Candidate>,
     unread_region: &mut bool,
 ) -> Result<(), AdapterError> {
+    if match_count_is_conclusive(found.len()) {
+        return Ok(());
+    }
     if ctx.budget.deadline.is_expired() {
         *unread_region = true;
         return Ok(());
@@ -120,16 +130,44 @@ fn search_source_scope(
         NodeAdmission::Unread => *unread_region = true,
         NodeAdmission::Reject => {}
     }
-    if depth + 1 >= MAX_RESOLVE_DEPTH {
+    if at_deepest_searched_level(depth) {
         *unread_region |= boundary_hides_descendants(ctx.source, element);
         return Ok(());
     }
     let children = enumerate_children(ctx.source, element, ctx.budget, unread_region)?;
     *unread_region |= sibling_list_was_cut(ctx.source, &children, ctx.budget);
     for child in &children {
+        if match_count_is_conclusive(found.len()) {
+            break;
+        }
         search_source_scope(ctx, child, depth + 1, found, unread_region)?;
     }
     Ok(())
+}
+
+/// Whether a node at `depth` is the deepest one this search evaluates.
+///
+/// The snapshot walker visits the node at its own raw-depth ceiling and cuts
+/// only the children below it (`walker_enumerate`'s `truncated_by_raw_depth`),
+/// and `resolve_walk_budget` sets that ceiling to `MAX_RESOLVE_DEPTH`. A ref
+/// can therefore name an element at exactly `MAX_RESOLVE_DEPTH`, so the count
+/// must evaluate such a node and stop one level below it. Stopping a level
+/// earlier leaves every ref the snapshot issued at the boundary unsearchable:
+/// its sole match sits one level up while the boundary node's child flags the
+/// scope unread, so the attempt never resolves.
+fn at_deepest_searched_level(depth: u8) -> bool {
+    depth >= MAX_RESOLVE_DEPTH
+}
+
+/// Whether the collected count already decides the verdict.
+///
+/// Two live elements that both answer to the recorded identity are
+/// `AMBIGUOUS_TARGET` on their own - [`classify_identity_search`] answers that
+/// for any count above one, whatever stays unread - and this tier has no
+/// bounds tie-break to separate them. A third candidate, and every read that
+/// would find it, can only cost time, so the walk stops at the second match.
+fn match_count_is_conclusive(match_count: usize) -> bool {
+    match_count > 1
 }
 
 /// Whether a node at the depth cap has children the search never read.
@@ -171,3 +209,7 @@ mod tests;
 #[cfg(all(test, target_os = "windows"))]
 #[path = "resolve_identity_count_tests.rs"]
 mod count_tests;
+
+#[cfg(all(test, target_os = "windows"))]
+#[path = "resolve_identity_scope_tests.rs"]
+mod scope_tests;

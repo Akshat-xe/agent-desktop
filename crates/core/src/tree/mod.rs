@@ -20,4 +20,5 @@ pub mod roles;
 pub(crate) mod search_text;
 pub mod state;
 pub mod tree_options;
+pub(crate) mod unread_identity;
 pub(crate) mod value_matches;

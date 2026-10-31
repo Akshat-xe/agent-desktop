@@ -1,7 +1,7 @@
 use super::test_support::{evidence, node, tree};
 use super::{
     IdentifierEvidence, LocatorEvidence, LocatorMaterialization, LocatorResolveRequest,
-    LocatorSelection, ObservedNode, evaluate_locator_tree,
+    LocatorSelection, ObservationSource, ObservedNode, evaluate_locator_tree,
 };
 use crate::IdentityBasis;
 use crate::locator::LocatorQuery;
@@ -272,6 +272,59 @@ fn an_unread_name_on_another_element_leaves_a_unique_identifier_proven() {
         Some(IdentityBasis::NativeId),
         "a look-alike whose identifiers were read cannot share this identifier"
     );
+}
+
+/// A survey rooted at one row proves uniqueness only inside that row, while a
+/// saved ref is resolved against the whole source window. Row Beta may hold a
+/// second Delete button the survey never saw, so every entry keeps no proof.
+#[test]
+fn a_survey_rooted_at_an_element_cannot_prove_window_wide_uniqueness() {
+    let delete = evidence("button", Some("Delete"));
+    let rows = vec![
+        node(0, evidence("group", Some("Row Alpha")), vec![1], &[]),
+        node(1, delete, vec![], &[0]),
+    ];
+    assert_eq!(
+        materialized_bases(rows.clone(), true),
+        [Some(IdentityBasis::Name)],
+        "a window-wide survey may prove the name unique"
+    );
+
+    let mut scoped = tree(rows, vec![0], true);
+    let root_entry =
+        super::materialize::ref_entry(&scoped.nodes[0], &scoped.source, &LocatorQuery::default());
+    scoped.source = ObservationSource::Element {
+        entry: Box::new(root_entry),
+        root_ref: Some("@e4".into()),
+    };
+    let resolution = evaluate_locator_tree(scoped, &LocatorQuery::default(), &request()).unwrap();
+    let refmap = resolution.refmap.unwrap();
+    let bases = (1..=refmap.len())
+        .map(|index| {
+            refmap
+                .get(&format!("@e{index}"))
+                .and_then(|entry| entry.identity.basis)
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(bases, [Some(IdentityBasis::Ambiguous)]);
+}
+
+/// A node whose role could not be read may be a look-alike of any role, so it
+/// withdraws the proofs of every role, including a readable Save button that
+/// precedes it.
+#[test]
+fn a_node_with_an_unread_role_withdraws_the_uniqueness_of_its_look_alikes() {
+    let mut unreadable = evidence("button", Some("Save"));
+    unreadable.role = crate::LocatorField::Unknown;
+    let bases = materialized_bases(
+        vec![
+            node(0, evidence("window", Some("Fixture")), vec![1, 2], &[]),
+            node(1, evidence("button", Some("Save")), vec![], &[0]),
+            node(2, unreadable, vec![], &[1]),
+        ],
+        true,
+    );
+    assert_eq!(bases, [Some(IdentityBasis::Ambiguous)]);
 }
 
 #[test]

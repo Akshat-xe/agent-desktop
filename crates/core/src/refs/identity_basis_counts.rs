@@ -10,12 +10,20 @@ type TextKey = (String, Option<(IdentifierKind, String)>, String);
 type RoleTextKey = (String, String);
 
 /// Counts every identifier, stable name and description among the entries a
-/// snapshot allocated, so each entry can learn which of them is unique. A count
-/// proves uniqueness only where the survey read that field on every element of
-/// the entry's role: `mark_incomplete` withdraws every proof and `mark_unread`
-/// the proofs that rest on the fields it names for one role. With identifiers
-/// unread, a name or description unique across the whole role still proves
-/// itself, because the live predicate is never broader than the role.
+/// snapshot allocated, so each entry can learn which of them is unique.
+///
+/// An element counts under every typed identifier it carries, not only the one
+/// it prefers, because a live native-id match accepts any of them. Text is
+/// counted per identifier for an entry that records one, and across the whole
+/// role for an entry that does not: a live name match then ignores the
+/// identifiers of the elements it compares, so a name unique only among
+/// identifier-free elements would still land on an identified look-alike.
+///
+/// A count proves uniqueness only where the survey read that field on every
+/// element of the entry's role: `mark_incomplete` withdraws every proof and
+/// `mark_unread` the proofs that rest on the fields it names for one role. With
+/// identifiers unread, a name or description unique across the whole role still
+/// proves itself, because the live predicate is never broader than the role.
 #[derive(Default)]
 pub(crate) struct IdentityBasisCounts {
     identifiers: HashMap<IdentifierKey, usize>,
@@ -45,33 +53,29 @@ impl IdentityBasisCounts {
         self.unread.mark(role, identifiers, names, descriptions);
     }
 
-    pub(crate) fn record(&mut self, identity: &RefEntryIdentity) {
-        let identifier = native_identifier(identity);
-        if let Some(identifier) = identifier {
+    pub(crate) fn record(
+        &mut self,
+        identity: &RefEntryIdentity,
+        identifiers: &[ElementIdentifier],
+    ) {
+        let keys = identifier_keys(identity, identifiers);
+        for (kind, value) in &keys {
             *self
                 .identifiers
-                .entry((
-                    identity.role.clone(),
-                    identifier.kind,
-                    identifier.value.clone(),
-                ))
+                .entry((identity.role.clone(), *kind, value.clone()))
                 .or_default() += 1;
         }
-        let identifier_group =
-            identifier.map(|identifier| (identifier.kind, identifier.value.clone()));
         if let Some(name) = stable_name(identity) {
             *self
                 .names_by_role
                 .entry((identity.role.clone(), name.to_string()))
                 .or_default() += 1;
-            *self
-                .names
-                .entry((
-                    identity.role.clone(),
-                    identifier_group.clone(),
-                    name.to_string(),
-                ))
-                .or_default() += 1;
+            for key in &keys {
+                *self
+                    .names
+                    .entry((identity.role.clone(), Some(key.clone()), name.to_string()))
+                    .or_default() += 1;
+            }
         }
         if let Some(description) = crate::tree::accname::non_blank(identity.description.as_deref())
         {
@@ -79,14 +83,16 @@ impl IdentityBasisCounts {
                 .descriptions_by_role
                 .entry((identity.role.clone(), description.to_string()))
                 .or_default() += 1;
-            *self
-                .descriptions
-                .entry((
-                    identity.role.clone(),
-                    identifier_group,
-                    description.to_string(),
-                ))
-                .or_default() += 1;
+            for key in &keys {
+                *self
+                    .descriptions
+                    .entry((
+                        identity.role.clone(),
+                        Some(key.clone()),
+                        description.to_string(),
+                    ))
+                    .or_default() += 1;
+            }
         }
     }
 
@@ -103,14 +109,17 @@ impl IdentityBasisCounts {
                 return IdentityBasis::NativeId;
             }
         }
-        let group = identifier.map(|identifier| (identifier.kind, identifier.value.clone()));
+        let group = identifier
+            .filter(|_| identifiers_read)
+            .map(|identifier| (identifier.kind, identifier.value.clone()));
         let unique_text = |text: &str,
                            grouped: &HashMap<TextKey, usize>,
                            by_role: &HashMap<RoleTextKey, usize>| {
-            let count = if identifiers_read {
-                grouped.get(&(role.to_owned(), group.clone(), text.to_owned()))
-            } else {
-                by_role.get(&(role.to_owned(), text.to_owned()))
+            let count = match &group {
+                Some(group) => {
+                    grouped.get(&(role.to_owned(), Some(group.clone()), text.to_owned()))
+                }
+                None => by_role.get(&(role.to_owned(), text.to_owned())),
             };
             count.copied().unwrap_or_default() == 1
         };
@@ -148,6 +157,30 @@ fn native_identifier(identity: &RefEntryIdentity) -> Option<&ElementIdentifier> 
         .native_id
         .as_ref()
         .filter(|identifier| !identifier.value.trim().is_empty())
+}
+
+/// Every typed identifier a look-alike could be matched by. A live native-id
+/// match accepts any identifier the candidate carries, not only the one it
+/// prefers, so each of them counts, and the recorded one counts even when the
+/// survey saw no others on this element.
+fn identifier_keys(
+    identity: &RefEntryIdentity,
+    identifiers: &[ElementIdentifier],
+) -> Vec<(IdentifierKind, String)> {
+    let mut keys: Vec<(IdentifierKind, String)> = Vec::new();
+    for identifier in identifiers {
+        let key = (identifier.kind, identifier.value.clone());
+        if !identifier.value.trim().is_empty() && !keys.contains(&key) {
+            keys.push(key);
+        }
+    }
+    if let Some(recorded) = native_identifier(identity) {
+        let key = (recorded.kind, recorded.value.clone());
+        if !keys.contains(&key) {
+            keys.push(key);
+        }
+    }
+    keys
 }
 
 fn stable_name(identity: &RefEntryIdentity) -> Option<&str> {

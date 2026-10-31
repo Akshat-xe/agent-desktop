@@ -344,3 +344,7 @@ fn meaningful_string(value: Option<String>) -> Option<String> {
 #[cfg(test)]
 #[path = "ref_alloc_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "ref_alloc_capture_tests.rs"]
+mod capture_tests;

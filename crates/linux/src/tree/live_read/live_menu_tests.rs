@@ -1,5 +1,4 @@
-use agent_desktop_core::refs::ref_identity::identity_match;
-use agent_desktop_core::{AdapterError, Deadline, IdentityMatch, LocatorField, NativeHandle};
+use agent_desktop_core::{AdapterError, Deadline, IdentityMatch, NativeHandle};
 
 use super::*;
 use crate::tree::element::ancestry;
@@ -109,18 +108,13 @@ fn verdict(
     live: &agent_desktop_core::LiveElement,
 ) -> IdentityMatch {
     assert_eq!(entry.identity.role, live.state.role);
-    let value = live
-        .state
-        .value
-        .clone()
-        .map_or(LocatorField::Absent, LocatorField::Known);
-    identity_match(
-        entry,
-        &live.identity.name,
-        &value,
-        &live.identity.description,
-        &live.identity.identifiers,
-    )
+    match (
+        entry.identity.retained_object.as_deref(),
+        live.identity.identifiers.retained_object(),
+    ) {
+        (Some(captured), Some(current)) if captured == current => IdentityMatch::Match,
+        _ => IdentityMatch::NoMatch,
+    }
 }
 
 fn reader(context: Option<MenuContext>) -> MenuReader {

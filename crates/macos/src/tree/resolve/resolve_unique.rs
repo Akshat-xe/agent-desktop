@@ -81,20 +81,23 @@ impl UniqueTally {
         self.matches.len() > 1
     }
 
+    /// Answers every count-only outcome first, so a proven duplicate stays a
+    /// duplicate without any candidate being inspected: no stored geometry, live
+    /// bounds read or element field may turn two matches into one.
     pub(in crate::tree) fn into_resolution(
-        mut self,
+        self,
         entry: &RefEntry,
     ) -> Result<NativeHandle, AdapterError> {
         match classify_unique_matches(self.matches.len(), self.incomplete.is_none()) {
-            UniqueOutcome::Resolved => match self.matches.pop() {
-                Some(candidate) => retained_candidate_handle(candidate),
-                None => Err(AdapterError::element_not_found("element")),
-            },
-            UniqueOutcome::Absent => Err(AdapterError::element_not_found("element")),
             UniqueOutcome::Duplicate => Err(ambiguous_target_error(&self.matches, entry)),
             UniqueOutcome::Incomplete => Err(self
                 .incomplete
                 .unwrap_or_else(|| incomplete_traversal("identity_uniqueness", 0))),
+            UniqueOutcome::Absent => Err(AdapterError::element_not_found("element")),
+            UniqueOutcome::Resolved => match self.matches.into_iter().next() {
+                Some(candidate) => retained_candidate_handle(candidate),
+                None => Err(AdapterError::element_not_found("element")),
+            },
         }
     }
 }

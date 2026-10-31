@@ -31,7 +31,8 @@ fn retained_unnamed_containers_are_not_blocked_by_named_peers() {
 }
 
 #[test]
-fn a_named_menu_item_resolves_only_its_context_scoped_object_path() {
+fn a_menu_twin_that_carries_the_recorded_name_makes_the_ref_ambiguous() {
+    use crate::tree::Field;
     use crate::tree::resolve::resolve_fake::{FRAME_PATH, node};
     use crate::tree::vocabulary::role_numbers::MENU_ITEM;
 
@@ -49,6 +50,18 @@ fn a_named_menu_item_resolves_only_its_context_scoped_object_path() {
     let found = evaluate(&fake.walk(), &entry, false);
     assert!(!found.unread_region);
     assert_eq!(found.candidates.len(), 1);
+    assert_eq!(found.candidates[0].element.path(), "/preferences");
+    assert_eq!(found.answers(), 2);
+
+    fake.nodes
+        .get_mut("/other")
+        .expect("other")
+        .read
+        .node
+        .properties
+        .name = Field::Present("Close".to_owned());
+    let found = evaluate(&fake.walk(), &entry, false);
+    assert_eq!(found.answers(), 1);
     assert_eq!(found.candidates[0].element.path(), "/preferences");
 
     entry.identity.retained_object = Some(":1.2/removed".to_owned());

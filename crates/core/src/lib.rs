@@ -155,6 +155,7 @@ pub use tree::rect::Rect;
 pub use tree::renderer_kind::RendererKind;
 pub use tree::role::Role;
 pub use tree::tree_options::TreeOptions;
+pub use tree::unread_identity::UnreadIdentity;
 pub use tree::value_matches::value_matches;
 pub use wait::deadline::{DEFAULT_OPERATION_TIMEOUT_MS, Deadline};
 pub use wait::event_kind::EventKind;

@@ -12,4 +12,8 @@ pub struct NodeIdentity {
     pub description: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub native_id: Option<crate::ElementIdentifier>,
+    #[serde(skip)]
+    pub native_ids: Vec<crate::ElementIdentifier>,
+    #[serde(skip)]
+    pub unread: crate::UnreadIdentity,
 }

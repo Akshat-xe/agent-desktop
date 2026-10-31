@@ -202,25 +202,32 @@ fn anchor_has_evidence(entry: &RefEntry) -> bool {
     )
 }
 
-/// Confirms the hydrated root against the anchor the locator just observed, by
-/// its identifier, else its stable text; geometry decides only for an anchor
-/// with neither, and an unread live field never resolves.
+/// Confirms the hydrated root against every stable field the anchor recorded:
+/// its identifier and its stable text. A field that was not recorded cannot
+/// decide, and only an anchor with no identity at all is confirmed by geometry.
+/// An unread live field never resolves, because it could hide a look-alike.
 fn anchor_matches(preliminary: &RefEntry, node: &ObservedNode) -> IdentityMatch {
-    if let Some(expected) = preliminary.identity.native_id.as_ref() {
-        return crate::refs::ref_identity::identifier_evidence_match(
-            expected,
-            &node.evidence.identifiers,
-        );
-    }
-    if crate::refs::ref_identity::has_stable_text_identity(preliminary) {
-        return crate::refs::ref_identity::stable_text_match(
+    let identifier = preliminary.identity.native_id.as_ref().map(|expected| {
+        crate::refs::ref_identity::identifier_evidence_match(expected, &node.evidence.identifiers)
+    });
+    let stable_text = crate::refs::ref_identity::has_stable_text_identity(preliminary).then(|| {
+        crate::refs::ref_identity::stable_text_match(
             preliminary,
             &node.evidence.name,
             &node.evidence.value,
             &node.evidence.description,
-        );
+        )
+    });
+    match (identifier, stable_text) {
+        (Some(IdentityMatch::NoMatch), _) | (_, Some(IdentityMatch::NoMatch)) => {
+            IdentityMatch::NoMatch
+        }
+        (Some(IdentityMatch::Unknown), _) | (_, Some(IdentityMatch::Unknown)) => {
+            IdentityMatch::Unknown
+        }
+        (Some(IdentityMatch::Match), _) | (_, Some(IdentityMatch::Match)) => IdentityMatch::Match,
+        (None, None) => bounds_anchor_match(preliminary, node),
     }
-    bounds_anchor_match(preliminary, node)
 }
 
 fn bounds_anchor_match(preliminary: &RefEntry, node: &ObservedNode) -> IdentityMatch {
@@ -240,8 +247,17 @@ fn bounds_anchor_match(preliminary: &RefEntry, node: &ObservedNode) -> IdentityM
     }
 }
 
+/// Keeps the basis the survey proved, unless hydration discovered identity the
+/// survey never read. A positional anchor carried no proof for that identity,
+/// so it records the unproven basis instead of letting the added field stand in
+/// for uniqueness the survey never established.
 fn preserve_verified_identity(preliminary: &RefEntry, node: &ObservedNode, entry: &mut RefEntry) {
-    entry.identity.basis = preliminary.identity.basis;
+    entry.identity.basis = match preliminary.identity.basis {
+        Some(crate::IdentityBasis::Positional) => Some(
+            crate::refs::identity_basis_counts::unproven_basis(&entry.identity),
+        ),
+        basis => basis,
+    };
     if node.evidence.name.is_unknown() {
         entry.identity.name.clone_from(&preliminary.identity.name);
     }

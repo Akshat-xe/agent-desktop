@@ -2,7 +2,8 @@ use agent_desktop_core::refs::identity_basis_gate::{basis_gate, requires_live_un
 use agent_desktop_core::refs::ref_identity::has_meaningful_identity;
 use agent_desktop_core::refs::resolve_errors::identity_unknown_error;
 use agent_desktop_core::{
-    AdapterError, BoundsSpace, Deadline, ErrorCode, LocatorEvidence, LocatorField, Rect, RefEntry,
+    AdapterError, BoundsSpace, Deadline, ErrorCode, IdentityBasis, LocatorEvidence, LocatorField,
+    Rect, RefEntry, RefEntryIdentity,
 };
 
 use super::AtspiElement;
@@ -135,11 +136,29 @@ fn verdict_by_geometry(candidates: &[Candidate], entry: &RefEntry, unread: bool)
     )
 }
 
+/// An ambiguous basis is refused before the geometry check and before any read
+/// of the application: the identity the ref recorded was not unique when it was
+/// captured, so no live search can make it unique and no rectangle it stored
+/// can stand in for one.
+fn refuse_unresolvable_basis(identity: &RefEntryIdentity) -> Result<(), AdapterError> {
+    match identity.basis {
+        Some(IdentityBasis::Ambiguous) => basis_gate(identity),
+        _ => Ok(()),
+    }
+}
+
+/// Resolves a stored ref under the identity contract. The basis gate runs
+/// before the geometry check, because an identity recorded as not unique can
+/// never resolve and a ref that also stored no usable rectangle would otherwise
+/// be reported as merely unverifiable. A ref written before bases existed still
+/// answers with the window gate first, since a replaced window is the stronger
+/// answer.
 fn attempt<S: Source>(
     source: &mut S,
     entry: &RefEntry,
     deadline: Deadline,
 ) -> Result<AtspiElement, AdapterError> {
+    refuse_unresolvable_basis(&entry.identity)?;
     if entry_is_unverifiable(entry) {
         return Err(unverifiable_entry());
     }
@@ -160,7 +179,7 @@ fn attempt<S: Source>(
     }
     let unread = path_unread || searched.unread_region;
     let verdict = if unique_live {
-        classify_identity(searched.candidates.len(), unread)
+        classify_identity(searched.answers(), searched.candidates.len(), unread)
     } else {
         verdict_by_geometry(&searched.candidates, entry, unread)
     };
@@ -172,7 +191,7 @@ fn attempt<S: Source>(
             .map(|candidate| candidate.element)
             .ok_or_else(no_candidate),
         Verdict::Stale => Err(no_candidate()),
-        Verdict::Ambiguous => Err(ambiguous(searched.candidates.len())),
+        Verdict::Ambiguous => Err(ambiguous(searched.answers())),
         Verdict::Incomplete => Err(identity_unknown_error(entry)),
     }
 }

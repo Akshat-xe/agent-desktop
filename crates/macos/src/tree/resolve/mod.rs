@@ -8,6 +8,8 @@ use std::time::{Duration, Instant};
 #[cfg(target_os = "macos")]
 use super::resolve::resolve_classify::identity_summary_for_message;
 #[cfg(target_os = "macos")]
+use super::resolve::resolve_identity_roots::identity_scope_roots;
+#[cfg(target_os = "macos")]
 use super::resolve::resolve_read_context::ResolveReadContext;
 #[cfg(target_os = "macos")]
 use super::resolve::resolve_roots::{candidate_roots, source_window_scope_required};
@@ -148,7 +150,7 @@ fn resolve_unique_in_source_scope(
     entry: &RefEntry,
     read_context: &mut ResolveReadContext,
 ) -> Result<NativeHandle, AdapterError> {
-    let roots = candidate_roots(entry, read_context)?;
+    let roots = identity_scope_roots(entry, read_context)?;
     find_unique_entry_in_roots(&roots.roots, entry, MAX_RESOLVE_DEPTH, read_context)
 }
 
@@ -328,6 +330,8 @@ pub(crate) mod resolve_ax_read;
 pub(super) mod resolve_bounds;
 pub(super) mod resolve_classify;
 pub(super) mod resolve_errors;
+#[cfg(target_os = "macos")]
+pub(super) mod resolve_identity_roots;
 pub(super) mod resolve_read_context;
 pub(super) mod resolve_roots;
 pub(super) mod resolve_search;

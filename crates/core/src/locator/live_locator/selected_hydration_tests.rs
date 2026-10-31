@@ -260,3 +260,117 @@ fn button_bounds() -> Rect {
         height: 30.0,
     }
 }
+
+/// `find --role button --first` reads no text, so its survey can prove nothing
+/// about a name. Hydration then discovers Save, identity the survey never
+/// proved: two Save buttons that swap positions must not let the saved ref
+/// accept the other one.
+struct RoleOnlyTextAdapter;
+
+impl ObservationOps for RoleOnlyTextAdapter {
+    fn observe_tree(
+        &self,
+        root: ObservationRoot<'_>,
+        _request: &ObservationRequest,
+    ) -> Result<ObservedTree, AdapterError> {
+        Ok(match root {
+            ObservationRoot::Window(_) => super::test_support::tree(
+                vec![super::test_support::node(
+                    0,
+                    unproven_button_evidence(),
+                    Vec::new(),
+                    &[],
+                )],
+                vec![0],
+                true,
+            ),
+            ObservationRoot::Element { .. } => {
+                let mut evidence = super::test_support::evidence("button", Some("Save"));
+                evidence.ref_evidence.bounds = LocatorField::Known(button_bounds());
+                evidence.ref_evidence.available_actions =
+                    LocatorField::Known(vec![crate::actions::capability::CLICK.into()]);
+                let mut tree = super::test_support::tree(
+                    vec![super::test_support::node(0, evidence, Vec::new(), &[])],
+                    vec![0],
+                    true,
+                );
+                tree.source = ObservationSource::from_root(&root, crate::SnapshotSurface::Window);
+                tree
+            }
+        })
+    }
+
+    fn resolve_locator_anchor(
+        &self,
+        _entry: &crate::RefEntry,
+        _deadline: crate::Deadline,
+    ) -> Result<NativeHandle, AdapterError> {
+        Ok(NativeHandle::null())
+    }
+}
+
+impl ActionOps for RoleOnlyTextAdapter {}
+impl InputOps for RoleOnlyTextAdapter {}
+impl SystemOps for RoleOnlyTextAdapter {}
+
+fn unproven_button_evidence() -> LocatorEvidence {
+    LocatorEvidence {
+        role: LocatorField::Known("button".into()),
+        name: LocatorField::Unknown,
+        description: LocatorField::Unknown,
+        value: LocatorField::Unknown,
+        identifiers: IdentifierEvidence::typed([], None, true),
+        states: LocatorField::Known(Vec::new()),
+        ref_evidence: LocatorRefEvidence {
+            window_bounds: LocatorField::Absent,
+            bounds: LocatorField::Known(button_bounds()),
+            available_actions: LocatorField::Known(Vec::new()),
+            descriptors: Default::default(),
+        },
+    }
+}
+
+#[test]
+fn hydration_that_discovers_unproven_identity_records_an_unproven_basis() {
+    let adapter = RoleOnlyTextAdapter;
+    let query = LocatorQuery {
+        identity: crate::IdentityPredicate {
+            role: Some("button".into()),
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let request = LocatorResolveRequest {
+        selection: LocatorSelection::First,
+        deadline: crate::Deadline::after(5_000).unwrap(),
+        max_raw_depth: 50,
+        surface: None,
+        materialization: LocatorMaterialization::SelectedMatches,
+    };
+
+    let resolution = resolve_query(
+        &adapter,
+        &query,
+        ObservationRoot::Window(&window()),
+        &request,
+    )
+    .expect("role-only selected hydration should still succeed");
+
+    assert_eq!(resolution.matches[0].data.name, "Save");
+    assert_eq!(
+        resolution.matches[0].entry.identity.basis,
+        Some(crate::IdentityBasis::Ambiguous),
+        "the survey proved nothing about the name it never read"
+    );
+    assert_eq!(
+        resolution
+            .refmap
+            .as_ref()
+            .unwrap()
+            .get("@e1")
+            .unwrap()
+            .identity
+            .basis,
+        Some(crate::IdentityBasis::Ambiguous)
+    );
+}

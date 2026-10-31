@@ -35,12 +35,15 @@ fn visit(
         admit_node(entry, &evidence)
     };
     match admission {
-        Admission::Collect => found.candidates.push(candidate(
-            entry,
-            &evidence,
-            node.payload.node.element.clone(),
-            path,
-        )),
+        Admission::Collect => {
+            found.candidates.push(candidate(
+                entry,
+                &evidence,
+                node.payload.node.element.clone(),
+                path,
+            ));
+        }
+        Admission::Partial => found.partial += 1,
         Admission::Unread => found.unread_region = true,
         Admission::Reject => {}
     }
@@ -60,6 +63,7 @@ fn visit(
 pub(crate) fn evaluate(walk: &Walk<ObservedRead>, entry: &RefEntry, web_process: bool) -> Searched {
     let mut found = Searched {
         candidates: Vec::new(),
+        partial: 0,
         unread_region: !walk.complete,
     };
     visit(&walk.root, entry, &mut Vec::new(), web_process, &mut found);

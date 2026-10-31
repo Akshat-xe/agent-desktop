@@ -135,7 +135,7 @@ fn source_surface_scoped_roots(
 }
 
 #[cfg(target_os = "macos")]
-fn source_window_scoped_roots(
+pub(super) fn source_window_scoped_roots(
     application: &AXElement,
     entry: &RefEntry,
     context: &mut ResolveReadContext,

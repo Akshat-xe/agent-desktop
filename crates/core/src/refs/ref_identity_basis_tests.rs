@@ -1,5 +1,16 @@
 use super::*;
 
+fn identifiers(native_id: Option<&str>) -> IdentifierEvidence {
+    IdentifierEvidence::typed(
+        native_id.into_iter().map(|value| crate::ElementIdentifier {
+            kind: crate::IdentifierKind::AxIdentifier,
+            value: value.to_string(),
+        }),
+        native_id.map(|_| 0),
+        true,
+    )
+}
+
 fn match_of(
     entry: &RefEntry,
     name: Option<&str>,
@@ -12,14 +23,7 @@ fn match_of(
         &option_field(name),
         &option_field(value),
         &option_field(description),
-        &IdentifierEvidence::typed(
-            native_id.into_iter().map(|value| crate::ElementIdentifier {
-                kind: crate::IdentifierKind::AxIdentifier,
-                value: value.to_string(),
-            }),
-            native_id.map(|_| 0),
-            true,
-        ),
+        &identifiers(native_id),
     )
 }
 
@@ -30,8 +34,12 @@ fn each_basis_resolves_only_on_the_evidence_it_recorded() {
     native.identity.native_id = Some(identifier("row-7"));
     native.identity.name = Some("Alpha".into());
     assert_eq!(
-        match_of(&native, Some("Renamed"), None, None, Some("row-7")),
+        match_of(&native, Some("Alpha"), None, None, Some("row-7")),
         IdentityMatch::Match
+    );
+    assert_eq!(
+        match_of(&native, Some("Renamed"), None, None, Some("row-7")),
+        IdentityMatch::NoMatch
     );
     assert_eq!(
         match_of(&native, Some("Alpha"), None, None, Some("row-8")),
@@ -72,6 +80,123 @@ fn each_basis_resolves_only_on_the_evidence_it_recorded() {
     assert_eq!(
         match_of(&positional, None, Some("Off"), None, None),
         IdentityMatch::NoMatch
+    );
+}
+
+#[test]
+fn a_description_entry_compares_only_the_live_description() {
+    let mut described = entry();
+    described.identity.basis = Some(crate::IdentityBasis::Description);
+    described.identity.description = Some("Billing".into());
+
+    assert_eq!(
+        match_of(&described, Some("Billing"), None, None, None),
+        IdentityMatch::NoMatch,
+        "another field's name is not this field's description"
+    );
+    assert_eq!(
+        match_of(&described, None, Some("Billing"), None, None),
+        IdentityMatch::NoMatch,
+        "a control value never stands in for a description"
+    );
+    assert_eq!(
+        match_of(&described, None, None, Some("Billing"), None),
+        IdentityMatch::Match
+    );
+}
+
+#[test]
+fn a_name_entry_compares_only_the_live_name() {
+    let mut named = entry();
+    named.identity.basis = Some(crate::IdentityBasis::Name);
+    named.identity.name = Some("Address".into());
+
+    assert_eq!(
+        match_of(&named, None, Some("Address"), None, None),
+        IdentityMatch::NoMatch,
+        "a control value never stands in for a name"
+    );
+    assert_eq!(
+        match_of(&named, Some("Address"), None, None, None),
+        IdentityMatch::Match
+    );
+    assert_eq!(
+        match_of(&named, Some("Address"), Some("Billing"), None, None),
+        IdentityMatch::Match,
+        "a live value never refutes a name it does not mirror"
+    );
+}
+
+#[test]
+fn a_native_identifier_entry_also_requires_the_recorded_stable_text() {
+    let mut native = entry();
+    native.identity.basis = Some(crate::IdentityBasis::NativeId);
+    native.identity.native_id = Some(identifier("toolbar-action"));
+    native.identity.name = Some("Save".into());
+
+    assert_eq!(
+        match_of(&native, Some("Delete"), None, None, Some("toolbar-action")),
+        IdentityMatch::NoMatch,
+        "a control renamed under the same typed identifier is not the captured element"
+    );
+    assert_eq!(
+        match_of(&native, None, Some("Save"), None, Some("toolbar-action")),
+        IdentityMatch::NoMatch,
+        "a value never stands in for the recorded name"
+    );
+    assert_eq!(
+        match_of(&native, Some("Save"), None, None, Some("toolbar-action")),
+        IdentityMatch::Match
+    );
+    assert_eq!(
+        identity_match(
+            &native,
+            &LocatorField::Unknown,
+            &LocatorField::Absent,
+            &LocatorField::Absent,
+            &identifiers(Some("toolbar-action")),
+        ),
+        IdentityMatch::Unknown,
+        "an unreadable recorded name never confirms the identifier"
+    );
+}
+
+#[test]
+fn a_shared_identifier_is_separated_by_the_recorded_name() {
+    let mut native = entry();
+    native.identity.basis = Some(crate::IdentityBasis::NativeId);
+    native.identity.native_id = Some(identifier("shared-row"));
+    native.identity.name = Some("Billing".into());
+
+    assert_eq!(
+        match_of(&native, Some("Shipping"), None, None, Some("shared-row")),
+        IdentityMatch::NoMatch
+    );
+    assert_eq!(
+        match_of(&native, Some("Billing"), None, None, Some("shared-row")),
+        IdentityMatch::Match
+    );
+}
+
+#[test]
+fn a_name_entry_also_requires_the_recorded_description() {
+    let mut named = entry();
+    named.identity.basis = Some(crate::IdentityBasis::Name);
+    named.identity.name = Some("Address".into());
+    named.identity.description = Some("Billing".into());
+
+    assert_eq!(
+        match_of(&named, Some("Address"), None, Some("Shipping"), None),
+        IdentityMatch::NoMatch
+    );
+    assert_eq!(
+        match_of(&named, Some("Address"), None, None, None),
+        IdentityMatch::NoMatch,
+        "a recorded description that is gone refutes the candidate"
+    );
+    assert_eq!(
+        match_of(&named, Some("Address"), None, Some("Billing"), None),
+        IdentityMatch::Match
     );
 }
 

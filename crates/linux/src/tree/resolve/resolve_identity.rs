@@ -245,20 +245,9 @@ fn retained_object_admits(entry: &RefEntry, evidence: &LocatorEvidence) -> Optio
     })
 }
 
-/// Decides one node's admission for a ref that resolves only on a unique live
-/// match. Only the recorded identity evidence counts: the whole rectangle is
-/// never a reason to collect or refute a node here, and a field the read could
-/// not produce leaves the region unread.
-pub(crate) fn identity_admission(entry: &RefEntry, evidence: &LocatorEvidence) -> Admission {
-    if let Some(refusal) = role_gate(entry, evidence) {
-        return refusal;
-    }
-    if let Some(admission) = retained_object_admits(entry, evidence) {
-        return match admission {
-            Admission::Collect => verdict_admission(identity_verdict(entry, evidence)),
-            refusal => refusal,
-        };
-    }
+/// The identity evidence of one node, for a ref that resolves only on a unique
+/// live match.
+fn recorded_identity(entry: &RefEntry, evidence: &LocatorEvidence) -> Admission {
     match entry.identity.basis {
         Some(IdentityBasis::NativeId) if !has_identifier_evidence(entry) => Admission::Unread,
         Some(IdentityBasis::NativeId) => identifier_admits(entry, evidence),
@@ -268,21 +257,53 @@ pub(crate) fn identity_admission(entry: &RefEntry, evidence: &LocatorEvidence) -
     }
 }
 
-/// The verdict for a ref that resolves only on a unique live match: several
-/// matches are ambiguous whatever stayed unread, and a lone match beside an
-/// unread region is withheld, because the count is incomplete and could still
-/// hide a second match.
-pub(crate) fn classify_identity(matches: usize, unread_region: bool) -> Verdict {
-    if matches > 1 {
+/// Decides one node's admission for a ref that resolves only on a unique live
+/// match. The recorded identity and the recorded object path are evidence about
+/// the same element, so a node holding one of them and not the other still
+/// answers the ref: its identity agrees while the object path names another
+/// element, or the object path is the ref's while its identity has moved on.
+/// Both are answers that can never be resolved to, so a second one makes the
+/// ref ambiguous instead of letting the object path alone pick the element.
+/// Only a node both agree on is collected. The rectangle is never a reason to
+/// collect or refute a node here, and a field the read could not produce leaves
+/// the region unread.
+pub(crate) fn identity_admission(entry: &RefEntry, evidence: &LocatorEvidence) -> Admission {
+    if let Some(refusal) = role_gate(entry, evidence) {
+        return refusal;
+    }
+    let identity = recorded_identity(entry, evidence);
+    match retained_object_admits(entry, evidence) {
+        None => identity,
+        Some(Admission::Collect) => match identity {
+            Admission::Reject => Admission::Partial,
+            admission => admission,
+        },
+        Some(Admission::Unread) => Admission::Unread,
+        Some(Admission::Reject | Admission::Partial) => match identity {
+            Admission::Collect => Admission::Partial,
+            _ => Admission::Reject,
+        },
+    }
+}
+
+/// The verdict for a ref that resolves only on a unique live match: a second
+/// node answering the record, even one that holds only part of it, is ambiguous
+/// whatever stayed unread, because nothing then proves which element the ref
+/// was taken from. A lone answer resolves only when it agrees with the whole
+/// record; one that agrees with part of it is stale, since the element the ref
+/// names is not proved live. A lone match beside an unread region is withheld,
+/// because the count is incomplete and could still hide a second match.
+pub(crate) fn classify_identity(answers: usize, candidates: usize, unread_region: bool) -> Verdict {
+    if answers > 1 {
         return Verdict::Ambiguous;
     }
     if unread_region {
         return Verdict::Incomplete;
     }
-    match matches {
-        0 => Verdict::Stale,
-        _ => Verdict::Resolved(0),
+    if candidates == 1 {
+        return Verdict::Resolved(0);
     }
+    Verdict::Stale
 }
 
 /// The one candidate whose rectangle or compact snapshot hash matches in its recorded frame.

@@ -9,19 +9,27 @@ use crate::{
 };
 
 /// Counts the look-alikes among every addressable element the locator
-/// observed, so each match can learn which of its fields is unique.
+/// observed, so each match can learn which of its fields is unique. A survey
+/// that did not cover the whole source scope proves nothing about it: a ref
+/// from an element-rooted survey is resolved against the whole source window,
+/// which may hold a look-alike the survey never saw. Every observed node is
+/// asked what it left unread before addressability filtering, because a node
+/// with no readable role could be a look-alike of any role.
 pub(crate) fn survey_counts(tree: &ObservedTree, query: &LocatorQuery) -> IdentityBasisCounts {
     let mut counts = IdentityBasisCounts::new();
-    if !tree.structurally_complete {
+    if !tree.structurally_complete || !matches!(tree.source, ObservationSource::Window { .. }) {
         counts.mark_incomplete();
     }
     for node in &tree.nodes {
+        mark_unread_fields(&mut counts, &node.evidence);
         let (addressable, _) = addressability(&node.evidence);
         if !addressable {
             continue;
         }
-        mark_unread_fields(&mut counts, &node.evidence);
-        counts.record(&ref_identity(&node.evidence, query));
+        counts.record(
+            &ref_identity(&node.evidence, query),
+            node.evidence.identifiers.identifiers(),
+        );
     }
     counts
 }

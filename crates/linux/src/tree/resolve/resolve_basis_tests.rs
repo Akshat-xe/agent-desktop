@@ -4,7 +4,7 @@ use super::*;
 use crate::tree::Field;
 use crate::tree::resolve::resolve_errors::window_replaced;
 use crate::tree::resolve::resolve_fake::{FRAME_PATH, Fake, deadline, node};
-use crate::tree::vocabulary::role_numbers::{PANEL, PUSH_BUTTON};
+use crate::tree::vocabulary::role_numbers::{MENU_ITEM, PANEL, PUSH_BUTTON};
 
 fn kind(error: &AdapterError) -> &str {
     error
@@ -258,6 +258,90 @@ fn a_description_that_cannot_be_read_withholds_the_answer() {
     let error = refusal(&mut fake, &entry);
     assert_eq!(error.code, ErrorCode::StaleRef);
     assert!(is_incomplete(&error));
+}
+
+fn open_item(description: &str) -> crate::tree::ObservedRead {
+    let mut read = node(MENU_ITEM, "Open", 120, 24);
+    read.node.properties.description = Field::Present(description.to_owned());
+    read
+}
+
+fn set_description(fake: &mut Fake, path: &str, description: &str) {
+    fake.nodes
+        .get_mut(path)
+        .expect("the item is in the menu")
+        .read
+        .node
+        .properties
+        .description = Field::Present(description.to_owned());
+}
+
+/// The ref a menu snapshot stores for the item at `path`: the description alone
+/// singled it out there, and the menu context keeps the object path it was
+/// captured at.
+fn open_item_ref(fake: &Fake, path: &str, description: &str) -> RefEntry {
+    let mut entry = fake.entry_of(path, true);
+    entry.identity.description = Some(description.to_owned());
+    entry.identity.basis = Some(IdentityBasis::Description);
+    entry.identity.retained_object = Some(format!(":1.2{path}"));
+    entry
+}
+
+fn open_menu() -> Fake {
+    let mut fake = Fake::new();
+    fake.add(FRAME_PATH, "/left", open_item("left"));
+    fake.add(FRAME_PATH, "/right", open_item("right"));
+    fake
+}
+
+#[test]
+fn a_menu_ref_whose_description_now_names_a_twin_is_ambiguous_not_resolved() {
+    let mut fake = open_menu();
+    let entry = open_item_ref(&fake, "/left", "left");
+    set_description(&mut fake, "/right", "left");
+
+    let error = refusal(&mut fake, &entry);
+    assert_eq!(error.code, ErrorCode::AmbiguousTarget);
+    assert_eq!(candidate_count(&error), 2);
+}
+
+#[test]
+fn a_menu_ref_whose_description_moved_to_its_twin_is_ambiguous_not_stale() {
+    let mut fake = open_menu();
+    let entry = open_item_ref(&fake, "/left", "left");
+    set_description(&mut fake, "/left", "right");
+    set_description(&mut fake, "/right", "left");
+
+    let error = refusal(&mut fake, &entry);
+    assert_eq!(error.code, ErrorCode::AmbiguousTarget);
+    assert_eq!(candidate_count(&error), 2);
+
+    set_description(&mut fake, "/right", "other");
+    let error = refusal(&mut fake, &entry);
+    assert_eq!(error.code, ErrorCode::StaleRef);
+    assert_eq!(kind(&error), "resolve_no_candidate");
+    assert_eq!(error.disposition, DeliverySemantics::not_delivered());
+}
+
+#[test]
+fn duplicate_offscreen_controls_are_ambiguous_even_without_usable_bounds() {
+    let mut fake = Fake::new();
+    for path in ["/first", "/second"] {
+        fake.add(FRAME_PATH, path, node(PUSH_BUTTON, "Save", 0, 0));
+    }
+    let mut entry = fake.entry_of("/first", false);
+    assert!(entry.geometry.bounds.is_none());
+    entry.identity.basis = Some(IdentityBasis::Ambiguous);
+
+    let error = refusal(&mut fake, &entry);
+    assert_eq!(error.code, ErrorCode::AmbiguousTarget);
+    assert_eq!(kind(&error), "identity_not_unique");
+    assert_eq!(fake.reads.gate + fake.reads.levels + fake.reads.searches, 0);
+
+    entry.identity.basis = None;
+    let error = refusal(&mut fake, &entry);
+    assert_eq!(error.code, ErrorCode::StaleRef);
+    assert_eq!(kind(&error), "resolve_unverifiable_entry");
 }
 
 #[test]

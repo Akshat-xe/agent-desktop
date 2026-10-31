@@ -139,6 +139,14 @@ impl ObservedTree {
             .nodes
             .get_mut(index)
             .ok_or_else(|| AdapterError::internal("observed child index is out of bounds"))?;
+        let unread = crate::UnreadIdentity {
+            role: node.evidence.role.is_unknown(),
+            identifiers: !node.evidence.identifiers.is_complete(),
+            names: node.evidence.name.is_unknown(),
+            values: node.evidence.value.is_unknown(),
+            descriptions: node.evidence.description.is_unknown(),
+        };
+        let native_ids = node.evidence.identifiers.identifiers().to_vec();
         let role = node
             .evidence
             .role
@@ -170,6 +178,8 @@ impl ObservedTree {
                     .take_known()
                     .filter(|value| !value.is_empty()),
                 native_id: node.evidence.identifiers.preferred_identifier().cloned(),
+                native_ids,
+                unread,
             },
             presentation: crate::NodePresentation {
                 hint: None,

@@ -45,11 +45,15 @@ impl RefAllocPlan {
         anchors: &HashSet<Vec<usize>>,
         counts: &mut IdentityBasisCounts,
     ) {
-        if node.subtree_truncated {
+        if node.subtree_truncated || node.children_count.is_some_and(|count| count > 0) {
             counts.mark_incomplete();
         }
+        if node.identity.unread.role {
+            counts.mark_incomplete();
+        }
+        mark_unread(counts, node);
         if receives_ref(node, path, anchors) {
-            counts.record(&identity_from_node(node));
+            counts.record(&identity_from_node(node), &node.identity.native_ids);
         }
         for (index, child) in node.children.iter().enumerate() {
             path.push(index);
@@ -57,6 +61,19 @@ impl RefAllocPlan {
             path.pop();
         }
     }
+}
+
+/// Withdraws the proofs a node's unread fields could hide a look-alike from. A
+/// mutable-value role's stable name rests on its value, so an unread value is
+/// an unread name there too.
+fn mark_unread(counts: &mut IdentityBasisCounts, node: &AccessibilityNode) {
+    let unread = node.identity.unread;
+    counts.mark_unread(
+        &node.role,
+        unread.identifiers,
+        unread.names || (unread.values && crate::tree::roles::is_mutable_value_role(&node.role)),
+        unread.descriptions,
+    );
 }
 
 /// Mirrors the allocation itself: a node is an entry when it is ref-able or a

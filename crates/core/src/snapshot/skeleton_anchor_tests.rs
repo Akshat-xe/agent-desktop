@@ -84,12 +84,15 @@ fn unlabeled_bounded_boundary_gets_drill_ref() {
     assert!(entry.geometry.bounds_hash.is_some());
 }
 
-/// The narrowing holds: an anchor carrying a name of its own is resolved by
-/// that name, so hiding bounds still strips its rect. Without this the
-/// assertion above would read as "always keep bounds" and would re-open the
-/// size decision the ref-able allocation path already settled.
+/// Finding: a boundary whose children were not walked can hide a look-alike,
+/// so its own name proves nothing about it. The previous shape of this test
+/// asserted that such an anchor is resolved by that name and may therefore
+/// lose its rect, which is exactly what the omitted descendants disprove.
+/// Both directions are kept here: an anchor at an omitted boundary records an
+/// ambiguous basis and keeps its geometry, while a fully walked element with
+/// meaningful identity still has its rect stripped.
 #[test]
-fn a_named_bounded_boundary_still_has_its_rect_stripped() {
+fn a_named_boundary_with_omitted_children_keeps_its_rect() {
     let mut boundary = node("group");
     boundary.identity.name = Some("Sidebar".into());
     boundary.children_count = Some(5);
@@ -107,6 +110,31 @@ fn a_named_bounded_boundary_still_has_its_rect_stripped() {
 
     let boundary = &result.children[0];
     let entry = refmap.get(boundary.ref_id.as_deref().unwrap()).unwrap();
+    assert_eq!(entry.identity.basis, Some(crate::IdentityBasis::Ambiguous));
+    assert!(!crate::refs::ref_identity::has_meaningful_identity(entry));
+    assert!(
+        entry.geometry.bounds.is_some(),
+        "an entry whose identity is not proven keeps the geometry that could still locate it"
+    );
+
+    let mut button = node("button");
+    button.identity.name = Some("Save".into());
+    button.presentation.bounds = Some(crate::Rect {
+        x: 0.0,
+        y: 0.0,
+        width: 10.0,
+        height: 10.0,
+    });
+    let mut root = node("window");
+    root.children = vec![button];
+
+    let mut refmap = RefMap::new();
+    let result = ref_alloc::allocate_refs(root, &mut refmap, &run_config(false, false)).unwrap();
+
+    let entry = refmap
+        .get(result.children[0].ref_id.as_deref().unwrap())
+        .unwrap();
+    assert_eq!(entry.identity.basis, Some(crate::IdentityBasis::Name));
     assert!(crate::refs::ref_identity::has_meaningful_identity(entry));
     assert!(entry.geometry.bounds.is_none());
 }

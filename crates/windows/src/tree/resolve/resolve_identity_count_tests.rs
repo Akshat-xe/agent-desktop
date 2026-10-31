@@ -125,13 +125,17 @@ fn a_second_match_past_the_sibling_cap_withholds_the_count() {
     );
 }
 
-/// The depth cap is the other node limit. The search stops above the level it
-/// would discard and one child probe is the only signal that the subtree below
-/// holds anything at all, so a match down there is never counted and the sole
-/// match above the cap is withheld.
+/// The depth cap is the other node limit. The search evaluates the deepest level
+/// the snapshot walker emits and stops below it, and one child probe is the only
+/// signal that the subtree past that level holds anything at all, so a match
+/// down there is never counted and the sole match above the cap is withheld.
+///
+/// The fixture root is depth 0, so the node at the deepest searched level is
+/// index `MAX_RESOLVE_DEPTH + 1` and the look-alike one level past it is the
+/// child the walk never reaches.
 #[test]
 fn a_second_match_beyond_the_depth_cap_withholds_the_count() {
-    let last = i32::from(MAX_RESOLVE_DEPTH);
+    let last = i32::from(MAX_RESOLVE_DEPTH) + 1;
     let spine: Vec<i32> = (1..=last).collect();
     let tree = FakeTree::default()
         .with_chain(&spine)

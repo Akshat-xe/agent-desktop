@@ -90,9 +90,9 @@ fn description_identity_matches_blank_title_controls() {
         Some(""),
         None,
         Some("Insert Text Box"),
-        None,
+        None
     ));
-    assert!(identity_matches(
+    assert!(!identity_matches(
         &entry,
         Some("Insert Text Box"),
         None,
@@ -110,14 +110,20 @@ fn description_identity_matches_blank_title_controls() {
 }
 
 #[test]
-fn name_identity_cannot_be_rescued_by_matching_description() {
+fn name_identity_cannot_be_rescued_by_a_value_or_a_description() {
     let mut entry = entry();
     entry.identity.basis = Some(crate::IdentityBasis::Name);
     entry.identity.name = Some("Primary".into());
     entry.identity.description = Some("Generic".into());
 
-    assert!(identity_matches(&entry, Some("Primary"), None, None, None));
-    assert!(identity_matches(&entry, None, Some("Primary"), None, None));
+    assert!(identity_matches(
+        &entry,
+        Some("Primary"),
+        None,
+        Some("Generic"),
+        None
+    ));
+    assert!(!identity_matches(&entry, None, Some("Primary"), None, None));
     assert!(!identity_matches(
         &entry,
         Some("Other"),
@@ -259,7 +265,7 @@ fn mutable_role_label_different_from_value_remains_stable_identity() {
 }
 
 #[test]
-fn native_id_is_strongest_identity_signal() {
+fn native_id_identity_resolves_only_with_the_text_it_recorded() {
     let mut entry = entry();
     entry.identity.basis = Some(crate::IdentityBasis::NativeId);
     entry.identity.native_id = Some(identifier("submit-btn"));
@@ -268,17 +274,17 @@ fn native_id_is_strongest_identity_signal() {
     assert!(has_meaningful_identity(&entry));
     assert!(identity_matches(
         &entry,
-        Some("Renamed"),
+        Some("Old Label"),
         None,
         None,
-        Some("submit-btn"),
+        Some("submit-btn")
     ));
     assert!(!identity_matches(
         &entry,
         Some("Renamed"),
         None,
         None,
-        Some("cancel-btn"),
+        Some("submit-btn")
     ));
 }
 

@@ -229,6 +229,21 @@ fn current_process_entry(basis: Option<agent_desktop_core::IdentityBasis>) -> Re
 }
 
 #[test]
+fn a_focused_surface_ref_resolves_in_its_recorded_window_not_the_focused_one() {
+    let mut stored = current_process_entry(Some(agent_desktop_core::IdentityBasis::Name));
+    stored.source.source_surface = agent_desktop_core::SnapshotSurface::Focused;
+    stored.source.source_window_id = Some("w-4294967295".into());
+    stored.source.source_window_title = Some("Recorded Window".into());
+    let deadline = agent_desktop_core::Deadline::after(1_000).unwrap();
+
+    let error = resolve_element_with_deadline(&stored, deadline)
+        .err()
+        .expect("the recorded window is gone, so the ref must not resolve anywhere");
+
+    assert_eq!(error.code, ErrorCode::WindowNotFound);
+}
+
+#[test]
 fn a_ref_with_no_recorded_basis_is_stale_before_any_live_search() {
     let stored = current_process_entry(None);
     let deadline = agent_desktop_core::Deadline::after(1_000).unwrap();

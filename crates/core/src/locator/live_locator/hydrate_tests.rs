@@ -113,6 +113,31 @@ fn matching_geometry_cannot_confirm_an_anchor_that_recorded_a_name() {
 }
 
 #[test]
+fn an_anchor_that_shared_its_identifier_is_refuted_by_the_name_it_recorded() {
+    use crate::{ElementIdentifier, IdentifierEvidence, IdentifierKind, LocatorField};
+    let shared = ElementIdentifier {
+        kind: IdentifierKind::AxIdentifier,
+        value: "row".into(),
+    };
+    let mut alpha = evidence("cell", Some("Alpha"));
+    alpha.identifiers = IdentifierEvidence::typed([shared], Some(0), true);
+    let observed = node(0, alpha, vec![], &[]);
+    let tree = tree(vec![observed.clone()], vec![0], true);
+    let mut entry =
+        super::super::materialize::ref_entry(&observed, &tree.source, &LocatorQuery::default());
+    entry.identity.basis = Some(crate::IdentityBasis::Name);
+    assert_eq!(anchor_matches(&entry, &observed), IdentityMatch::Match);
+
+    let mut beta = observed.clone();
+    beta.evidence.name = LocatorField::Known("Beta".into());
+    assert_eq!(
+        anchor_matches(&entry, &beta),
+        IdentityMatch::NoMatch,
+        "the identifier is shared, so only the recorded name can tell Alpha from Beta"
+    );
+}
+
+#[test]
 fn a_hydrated_match_keeps_the_basis_its_survey_proved() {
     let observed = node(0, evidence("button", Some("Send")), vec![], &[]);
     let tree = tree(vec![observed.clone()], vec![0], true);

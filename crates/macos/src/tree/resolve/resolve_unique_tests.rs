@@ -57,6 +57,27 @@ fn a_recorded_bounds_hash_never_breaks_a_duplicate_identity() {
 }
 
 #[test]
+fn the_duplicate_verdict_depends_only_on_the_count_not_on_basis_or_bounds() {
+    for basis in [IdentityBasis::NativeId, IdentityBasis::Positional] {
+        let stored = identity_entry(basis);
+        assert_eq!(stored.geometry.bounds_hash, Some(42));
+        let mut tally = UniqueTally::default();
+        tally.record(AXElement(std::ptr::null_mut()));
+        tally.record(AXElement(std::ptr::null_mut()));
+
+        let error = tally
+            .into_resolution(&stored)
+            .err()
+            .expect("two candidates must never resolve");
+
+        assert_eq!(error.code, ErrorCode::AmbiguousTarget);
+        let details = error.details.unwrap();
+        assert_eq!(details["candidate_count"], 2);
+        assert_ne!(details["kind"], "bounds_mismatch");
+    }
+}
+
+#[test]
 fn one_match_in_an_unfinished_search_never_resolves() {
     let stored = identity_entry(IdentityBasis::NativeId);
     let mut tally = UniqueTally::default();
