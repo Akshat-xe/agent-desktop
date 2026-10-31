@@ -35,6 +35,7 @@ fn allocate_refs_assigns_refs_in_depth_first_order() {
             root_ref_id: None,
             path_prefix: &[],
         },
+        complete: true,
     };
     let out = allocate_refs(root, &mut refmap, &config).unwrap();
 
@@ -115,6 +116,7 @@ fn allocate_refs_keeps_bounds_in_refmap_when_snapshot_includes_bounds() {
             root_ref_id: None,
             path_prefix: &[],
         },
+        complete: true,
     };
 
     let out = allocate_refs(root, &mut refmap, &config).unwrap();
@@ -211,6 +213,7 @@ fn allocation_config(include_bounds: bool) -> RefAllocConfig<'static> {
             root_ref_id: None,
             path_prefix: &[],
         },
+        complete: true,
     }
 }
 

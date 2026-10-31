@@ -187,6 +187,7 @@ fn live_renderer_bus_departure_keeps_the_answering_frame_owner_alive() {
     let pid = std::process::id();
     let mut entry = crate::tree::live::test_support::ref_entry("button");
     entry.identity.name = Some("Target".to_owned());
+    entry.identity.basis = Some(agent_desktop_core::IdentityBasis::Name);
     entry.process.pid = pid.into();
     entry.process.process_instance = Some(
         process_facts::read(pid)

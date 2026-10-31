@@ -44,69 +44,43 @@ fn kind(error: &AdapterError) -> &str {
 }
 
 #[test]
-fn the_search_separates_the_second_twin_by_stored_size() {
-    let mut fake = files();
-    let entry = fake.entry_of("/opts2", true);
-    assert_eq!(entry.scope.path.as_slice(), [0, 1]);
-    assert_eq!(resolved(&mut fake, &entry), "/opts2");
-    assert_eq!(fake.reads.searches, 1);
-    assert_eq!(fake.reads.levels, 2);
-    assert_eq!(fake.reads.evidence, 1);
+fn a_stored_size_never_separates_two_buttons_that_share_their_name() {
+    for keep_rect in [true, false] {
+        let mut fake = files();
+        let entry = fake.entry_of("/opts2", keep_rect);
+        assert_eq!(entry.scope.path.as_slice(), [0, 1]);
+        assert_eq!(
+            entry.identity.basis,
+            Some(agent_desktop_core::IdentityBasis::Name)
+        );
+        let error = refusal(&mut fake, &entry);
+        assert_eq!(error.code, ErrorCode::AmbiguousTarget);
+        assert_eq!(kind(&error), "resolve_ambiguous");
+        assert_eq!(
+            error.details.as_ref().expect("details")["candidate_count"],
+            2
+        );
+        assert_eq!(fake.reads.searches, 1);
+    }
 }
 
 #[test]
-fn a_ref_with_no_stored_size_cannot_distinguish_its_twin() {
+fn moved_bounds_change_nothing_for_a_ref_that_carries_a_name() {
     let mut fake = files();
-    let entry = fake.entry_of("/opts2", false);
-    assert!(entry.geometry.bounds.is_none());
-    assert_eq!(refusal(&mut fake, &entry).code, ErrorCode::AmbiguousTarget);
-    assert_eq!(fake.reads.searches, 1);
-}
-
-#[test]
-fn moved_screen_geometry_cannot_separate_twins_until_refreshed() {
-    let mut fake = files();
-    let entry = fake.entry_of("/opts2", true);
+    let mut entry = fake.entry_of("/opts2", true);
     fake.shift_every_position(120, 64);
     assert_eq!(refusal(&mut fake, &entry).code, ErrorCode::AmbiguousTarget);
-    assert_eq!(fake.reads.searches, 1);
 
-    let mut without_path = fake.entry_of("/opts2", true);
-    without_path.scope.path.clear();
-    assert_eq!(resolved(&mut fake, &without_path), "/opts2");
-    assert_eq!(fake.reads.searches, 2);
-}
-
-#[test]
-fn twins_the_path_cannot_separate_are_ambiguous_without_a_size_that_does() {
-    let mut fake = files();
-    let mut entry = fake.entry_of("/opts2", false);
     entry.scope.path.clear();
-    let none = refusal(&mut fake, &entry);
-    assert_eq!(none.code, ErrorCode::AmbiguousTarget);
-    assert_eq!(kind(&none), "resolve_ambiguous");
-    assert!(!none.is_explicitly_retryable());
-    assert_eq!(
-        none.details.as_ref().expect("details")["candidate_count"],
-        2
-    );
-
-    let mut elsewhere = fake.entry_of("/opts2", true);
-    elsewhere.scope.path.clear();
-    elsewhere.geometry.bounds = Some(rect(0.0, 0.0, 99.0, 34.0));
-    assert_eq!(
-        refusal(&mut fake, &elsewhere).code,
-        ErrorCode::AmbiguousTarget
-    );
+    assert_eq!(refusal(&mut fake, &entry).code, ErrorCode::AmbiguousTarget);
 }
 
 #[test]
-fn a_path_that_lands_on_something_else_is_declined_and_the_search_decides() {
+fn a_stored_path_never_picks_between_look_alikes() {
     let mut fake = files();
     let mut twin = fake.entry_of("/opts2", true);
     twin.scope.path = [0, 0].into_iter().collect();
-    assert_eq!(resolved(&mut fake, &twin), "/opts2");
-    assert_eq!(fake.reads.searches, 1);
+    assert_eq!(refusal(&mut fake, &twin).code, ErrorCode::AmbiguousTarget);
 
     let mut back = fake.entry_of("/back", true);
     back.scope.path = [0, 0].into_iter().collect();
@@ -114,12 +88,11 @@ fn a_path_that_lands_on_something_else_is_declined_and_the_search_decides() {
 }
 
 #[test]
-fn a_landing_whose_size_contradicts_the_stored_one_is_declined_even_when_its_name_matches() {
+fn a_path_landing_on_the_other_look_alike_does_not_decide_either() {
     let mut fake = files();
     let mut entry = fake.entry_of("/opts1", true);
     entry.scope.path = [0, 1].into_iter().collect();
-    assert_eq!(resolved(&mut fake, &entry), "/opts1");
-    assert_eq!(fake.reads.searches, 1);
+    assert_eq!(refusal(&mut fake, &entry).code, ErrorCode::AmbiguousTarget);
 }
 
 #[test]
@@ -264,12 +237,14 @@ fn a_geometry_only_ref_refuses_even_a_one_pixel_resize() {
 
 #[test]
 fn a_twin_whose_extents_cannot_be_read_is_never_replaced_by_the_twin_of_its_size() {
-    let mut fake = files();
-    let mut entry = fake.entry_of("/opts2", true);
+    let mut fake = Fake::new();
+    fake.add(FRAME_PATH, "/first", node(PANEL, "", 34, 34));
+    fake.add(FRAME_PATH, "/second", node(PANEL, "", 23, 34));
+    let mut entry = fake.entry_of("/second", true);
     entry.scope.path.clear();
     fake.nodes
-        .get_mut("/opts1")
-        .expect("opts1")
+        .get_mut("/first")
+        .expect("first")
         .read
         .node
         .extents = crate::tree::Field::Present(crate::tree::Extents {
@@ -279,8 +254,8 @@ fn a_twin_whose_extents_cannot_be_read_is_never_replaced_by_the_twin_of_its_size
         height: 34,
     });
     fake.nodes
-        .get_mut("/opts2")
-        .expect("opts2")
+        .get_mut("/second")
+        .expect("second")
         .read
         .node
         .extents = crate::tree::Field::Failed("extents unavailable".to_owned());
@@ -315,46 +290,38 @@ fn a_destroyed_landing_declines_settled_and_any_other_failed_read_leaves_the_reg
 fn geometry_requires_the_recorded_frame_and_position() {
     use agent_desktop_core::BoundsSpace::{Screen, Window};
 
-    for named in [true, false] {
-        for (stored_space, live_window, shifted, resolves) in [
-            (Some(Screen), false, false, true),
-            (Some(Screen), false, true, false),
-            (Some(Window), false, false, false),
-            (Some(Window), true, false, true),
-            (Some(Window), true, true, false),
-            (None, false, false, true),
-            (None, false, true, false),
-        ] {
-            let mut fake = Fake::new();
-            let name = if named { "target" } else { "" };
-            fake.add(FRAME_PATH, "/first", node(PUSH_BUTTON, name, 80, 20));
-            fake.add(FRAME_PATH, "/second", node(PUSH_BUTTON, name, 140, 20));
-            let mut entry = fake.entry_of("/first", true);
-            entry.geometry.bounds_space = stored_space;
-            for path in ["/first", "/second"] {
-                let read = &mut fake.nodes.get_mut(path).expect("candidate").read;
-                let mut bounds = *read.node.extents.present().expect("rectangle");
-                bounds.x += if shifted { 100 } else { 0 };
-                read.node.extents = crate::tree::Field::Present(bounds);
-                if live_window {
-                    read.evidence_bounds = Some((bounds, Window));
-                }
+    for (stored_space, live_window, shifted, resolves) in [
+        (Some(Screen), false, false, true),
+        (Some(Screen), false, true, false),
+        (Some(Window), false, false, false),
+        (Some(Window), true, false, true),
+        (Some(Window), true, true, false),
+        (None, false, false, true),
+        (None, false, true, false),
+    ] {
+        let mut fake = Fake::new();
+        fake.add(FRAME_PATH, "/first", node(PANEL, "", 80, 20));
+        fake.add(FRAME_PATH, "/second", node(PANEL, "", 140, 20));
+        let mut entry = fake.entry_of("/first", true);
+        entry.geometry.bounds_space = stored_space;
+        for path in ["/first", "/second"] {
+            let read = &mut fake.nodes.get_mut(path).expect("candidate").read;
+            let mut bounds = *read.node.extents.present().expect("rectangle");
+            bounds.x += if shifted { 100 } else { 0 };
+            read.node.extents = crate::tree::Field::Present(bounds);
+            if live_window {
+                read.evidence_bounds = Some((bounds, Window));
             }
-            let result = resolve(&mut fake, &entry, deadline());
-            if resolves {
-                assert_eq!(result.expect("same recorded rectangle").path(), "/first");
-            } else {
-                let expected = if named {
-                    ErrorCode::AmbiguousTarget
-                } else {
-                    ErrorCode::StaleRef
-                };
-                assert_eq!(
-                    result.expect_err("unproven geometry must refuse").code,
-                    expected,
-                    "{named:?} {stored_space:?} {live_window} {shifted}"
-                );
-            }
+        }
+        let result = resolve(&mut fake, &entry, deadline());
+        if resolves {
+            assert_eq!(result.expect("same recorded rectangle").path(), "/first");
+        } else {
+            assert_eq!(
+                result.expect_err("unproven geometry must refuse").code,
+                ErrorCode::StaleRef,
+                "{stored_space:?} {live_window} {shifted}"
+            );
         }
     }
 }
@@ -364,7 +331,7 @@ fn twins_with_both_coordinate_frames_use_the_refs_recorded_frame() {
     use agent_desktop_core::BoundsSpace;
     let mut fake = Fake::new();
     for (path, x) in [("/first", 10), ("/second", 40)] {
-        let mut read = node(PUSH_BUTTON, "Same", 23, 34);
+        let mut read = node(PANEL, "", 23, 34);
         read.node.extents = Field::Present(Extents {
             x,
             y: 10,
@@ -384,15 +351,15 @@ fn twins_with_both_coordinate_frames_use_the_refs_recorded_frame() {
     }
     let mut entry = fake.entry_of("/first", false);
     entry.scope.path.clear();
-    entry.geometry.bounds = Some(rect(10.0, 10.0, 23.0, 34.0));
-    entry.geometry.bounds_space = Some(BoundsSpace::Screen);
+    entry.geometry.bounds = Some(rect(0.0, 0.0, 23.0, 34.0));
+    entry.geometry.bounds_space = Some(BoundsSpace::Window);
     assert_eq!(
         resolve(&mut fake, &entry, deadline()).unwrap().path(),
         "/first"
     );
-    entry.geometry.bounds = Some(rect(90.0, 10.0, 23.0, 34.0));
+    entry.geometry.bounds_space = Some(BoundsSpace::Screen);
     assert_eq!(
         resolve(&mut fake, &entry, deadline()).unwrap_err().code,
-        ErrorCode::AmbiguousTarget
+        ErrorCode::StaleRef
     );
 }

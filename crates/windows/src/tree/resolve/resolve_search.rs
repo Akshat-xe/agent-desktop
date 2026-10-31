@@ -14,7 +14,9 @@ use agent_desktop_core::{
     AdapterError, Deadline, LocatorEvidence, RefEntry, refs::ref_identity::has_meaningful_identity,
 };
 
-use super::resolve_match::{Candidate, CandidateOutcome, bounds_hash_of};
+use super::resolve_match::{
+    Candidate, CandidateOutcome, admitted_outcome, bounds_hash_of, role_admission,
+};
 use crate::system::runtime::hresult::ReadDisposition;
 use crate::tree::automation::{UiaFailure, uia_failure_disposition};
 use crate::tree::element::UIAElement;
@@ -217,24 +219,6 @@ pub(crate) fn entry_is_unverifiable(entry: &RefEntry) -> bool {
     !has_meaningful_identity(entry) && !provisional_geometry_candidate(entry)
 }
 
-/// Whether an already-collected match count settles `AMBIGUOUS_TARGET` on
-/// its own, with nothing left to read that could change the answer.
-///
-/// Despite the name, nothing here stops `search_under`'s own walk early -
-/// Windows's search always collects the whole depth-bounded subtree, and
-/// this predicate is consulted only after collection finishes, inside
-/// `classify_search`. Two or more matches with no stored hash to
-/// disambiguate is conclusively ambiguous already: nothing left unread could
-/// turn it into anything other than `AMBIGUOUS_TARGET`, so an incomplete
-/// region elsewhere in the tree must not withhold that verdict. Mirrors
-/// macOS's `should_stop_collecting`
-/// (`crates/macos/src/tree/resolve/resolve_search.rs:374-376`), which does stop its
-/// walk early on this signal - Windows only reuses its name and its
-/// classification rule, not its early exit.
-pub(crate) fn should_stop_collecting(match_count: usize, entry: &RefEntry) -> bool {
-    match_count > 1 && entry.geometry.bounds_hash.is_none()
-}
-
 /// Bundles the three values that stay invariant across `search_under`'s
 /// recursive descent - the tree source, the stored ref being resolved
 /// against, and the walk budget - so the recursive signature threads one
@@ -293,22 +277,14 @@ pub(crate) enum NodeAdmission {
 /// it. An unpromoted `Incomplete` is never a refutation - the tri-state
 /// discipline the whole resolver is built on.
 pub(crate) fn admit_node(entry: &RefEntry, evidence: &LocatorEvidence) -> NodeAdmission {
-    let role_matches = evidence
-        .role
-        .known()
-        .is_some_and(|role| role == &entry.identity.role);
-    if !role_matches {
-        if evidence.role.is_unknown() {
-            return NodeAdmission::Unread;
-        }
-        return NodeAdmission::Reject;
+    if let Some(verdict) = role_admission(entry, evidence) {
+        return verdict;
     }
-    match super::resolve_match::candidate_outcome(entry, evidence) {
-        CandidateOutcome::Matched => NodeAdmission::Collect,
-        CandidateOutcome::Incomplete if geometry_matches(entry, evidence) => NodeAdmission::Collect,
-        CandidateOutcome::Incomplete => NodeAdmission::Unread,
-        CandidateOutcome::Refuted => NodeAdmission::Reject,
+    let outcome = super::resolve_match::candidate_outcome(entry, evidence);
+    if outcome == CandidateOutcome::Incomplete && geometry_matches(entry, evidence) {
+        return NodeAdmission::Collect;
     }
+    admitted_outcome(outcome)
 }
 
 /// Searches the subtree under `element` to the resolve depth, collecting the

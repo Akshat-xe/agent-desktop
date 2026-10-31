@@ -203,14 +203,15 @@ fn window_field(x: i32, y: i32, width: i32, height: i32) -> crate::tree::Observe
 
 #[test]
 fn a_known_absent_rectangle_separates_twins_but_an_unread_rectangle_does_not() {
-    for (unread, keep_rectangle) in [(false, true), (true, true), (false, false), (true, false)] {
+    for unread in [false, true] {
         let mut fake = Fake::new();
-        fake.add(FRAME_PATH, "/visible", node(PUSH_BUTTON, "Name", 378, 46));
-        let mut entry = fake.entry_of("/visible", true);
-        if !keep_rectangle {
-            entry.geometry.bounds = None;
-        }
-        let mut hidden = node(PUSH_BUTTON, "Name", 1, 1);
+        fake.add(
+            FRAME_PATH,
+            "/visible",
+            node(crate::tree::vocabulary::role_numbers::PANEL, "", 378, 46),
+        );
+        let entry = fake.entry_of("/visible", true);
+        let mut hidden = node(crate::tree::vocabulary::role_numbers::PANEL, "", 1, 1);
         hidden.node.extents = if unread {
             Field::Failed("unread rectangle".into())
         } else {

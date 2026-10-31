@@ -84,13 +84,16 @@ fn removed_sibling_refs_stay_stale_while_surviving_twins_keep_identity() {
 }
 
 #[test]
-fn nested_twins_resolve_by_the_stored_path_and_stay_ambiguous_without_it() {
+fn nested_twins_of_the_same_name_are_ambiguous_with_or_without_the_stored_path() {
     for keep_bounds in [false, true] {
         let mut fake = rows(&["beta"]);
-        let entry = fake.entry_of("/beta", keep_bounds);
-        assert_eq!(resolved(&mut fake, &entry), "/beta");
-        let inner = fake.entry_of("/beta-inner", keep_bounds);
-        assert_eq!(resolved(&mut fake, &inner), "/beta-inner");
+        for path in ["/beta", "/beta-inner"] {
+            let entry = fake.entry_of(path, keep_bounds);
+            let error = resolve(&mut fake, &entry, deadline())
+                .expect_err("the path never decides between two nodes of one name");
+            assert_eq!(error.code, ErrorCode::AmbiguousTarget);
+            assert_eq!(error.details.expect("details")["candidate_count"], 2);
+        }
         let mut shifted = fake.entry_of("/beta", keep_bounds);
         shifted.scope.path = [9].into_iter().collect();
         let error = resolve(&mut fake, &shifted, deadline()).expect_err("ambiguous");
@@ -112,6 +115,7 @@ fn two_twins_at_the_stored_depth_stay_ambiguous() {
 #[test]
 fn a_region_left_unread_withholds_resolution() {
     let mut fake = rows(&["alpha", "beta"]);
+    identify_beta(&mut fake);
     let outer = fake.entry_of("/beta", false);
     without_row(&mut fake, "alpha");
     fake.nodes.get_mut("/list").expect("list").children_unread = true;
@@ -140,17 +144,10 @@ fn a_reparented_twin_never_loses_identity_to_the_control_at_its_old_depth() {
             .expect("wrapper")
             .children
             .push("/original".to_owned());
-        let outcome = resolve(&mut fake, &entry, deadline());
-        if keep_bounds {
-            assert_eq!(
-                outcome.expect("stored size distinguishes original").path(),
-                "/original"
-            );
-        } else {
-            let error = outcome.expect_err("depth cannot distinguish twins");
-            assert_eq!(error.code, ErrorCode::AmbiguousTarget);
-            assert_eq!(error.details.expect("details")["candidate_count"], 2);
-        }
+        let error = resolve(&mut fake, &entry, deadline())
+            .expect_err("two nodes carry the same name and neither is refuted");
+        assert_eq!(error.code, ErrorCode::AmbiguousTarget);
+        assert_eq!(error.details.expect("details")["candidate_count"], 2);
     }
 }
 

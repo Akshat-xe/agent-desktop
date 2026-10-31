@@ -4,6 +4,7 @@ use agent_desktop_core::{
 };
 use serde_json::json;
 
+use super::resolve_search::NodeAdmission;
 use crate::tree::element::UIAElement;
 
 /// A matched live element plus the tie-break hash read off its evidence.
@@ -120,6 +121,60 @@ pub(crate) fn select_by_bounds_hash(
         (1, Some(index)) => Selection::Resolved(index),
         _ => Selection::Ambiguous,
     }
+}
+
+/// The role gate every admission rule shares: `None` when the candidate's role
+/// matches the stored one, so the identity rule decides, and otherwise the
+/// gate's own answer. A role that could not be read leaves the region unread,
+/// while a role that read back as something else is a real refusal.
+///
+/// One copy rather than one per admission rule, so the positional search and
+/// the identity-uniqueness search can never accept different elements on the
+/// strength of the role alone.
+pub(crate) fn role_admission(
+    entry: &RefEntry,
+    evidence: &LocatorEvidence,
+) -> Option<NodeAdmission> {
+    if evidence
+        .role
+        .known()
+        .is_some_and(|role| role == &entry.identity.role)
+    {
+        return None;
+    }
+    if evidence.role.is_unknown() {
+        return Some(NodeAdmission::Unread);
+    }
+    Some(NodeAdmission::Reject)
+}
+
+/// The one mapping from a core verdict to the resolver's admission. Written
+/// once so no admission rule can drift apart from another: an unreadable field
+/// is always `Unread`, never a refutation.
+pub(crate) fn admitted_outcome(outcome: CandidateOutcome) -> NodeAdmission {
+    match outcome {
+        CandidateOutcome::Matched => NodeAdmission::Collect,
+        CandidateOutcome::Incomplete => NodeAdmission::Unread,
+        CandidateOutcome::Refuted => NodeAdmission::Reject,
+    }
+}
+
+/// Whether an already-collected match count settles `AMBIGUOUS_TARGET` on
+/// its own, with nothing left to read that could change the answer.
+///
+/// Despite the name, nothing here stops `search_under`'s own walk early -
+/// Windows's search always collects the whole depth-bounded subtree, and
+/// this predicate is consulted only after collection finishes, inside
+/// `classify_search`. Two or more matches with no stored hash to
+/// disambiguate is conclusively ambiguous already: nothing left unread could
+/// turn it into anything other than `AMBIGUOUS_TARGET`, so an incomplete
+/// region elsewhere in the tree must not withhold that verdict. Mirrors
+/// macOS's `should_stop_collecting`
+/// (`crates/macos/src/tree/resolve/resolve_search.rs:374-376`), which does stop its
+/// walk early on this signal - Windows only reuses its name and its
+/// classification rule, not its early exit.
+pub(crate) fn should_stop_collecting(match_count: usize, entry: &RefEntry) -> bool {
+    match_count > 1 && entry.geometry.bounds_hash.is_none()
 }
 
 pub(crate) fn stale_ref_error(_entry: &RefEntry) -> AdapterError {

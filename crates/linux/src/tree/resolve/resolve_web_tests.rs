@@ -55,6 +55,11 @@ fn a_dom_id_ref_keeps_the_web_context_with_or_without_a_stored_path() {
 fn rows_that_share_a_native_id_resolve_to_the_one_whose_text_matches() {
     let mut fake = rows();
     let mut beta = fake.entry_of("/beta", true);
+    assert_eq!(
+        beta.identity.native_id.as_ref().map(|id| id.value.as_str()),
+        Some("app.list.row")
+    );
+    beta.identity.basis = Some(agent_desktop_core::IdentityBasis::Name);
     beta.scope.path.clear();
     let found = resolve(&mut fake, &beta, deadline()).expect("resolves");
     assert_eq!(found.path(), "/beta");
@@ -71,6 +76,7 @@ fn rows_with_equal_text_and_equal_size_stay_ambiguous() {
         .properties
         .name = Field::Present("alpha".to_owned());
     let mut alpha = fake.entry_of("/alpha", true);
+    alpha.identity.basis = Some(agent_desktop_core::IdentityBasis::Name);
     alpha.scope.path.clear();
     let error = resolve(&mut fake, &alpha, deadline()).expect_err("ambiguous");
     assert_eq!(error.code, ErrorCode::AmbiguousTarget);
@@ -211,12 +217,15 @@ fn window_with_background_tab() -> Fake {
 }
 
 #[test]
-fn the_window_frame_resolves_though_a_background_tab_document_lists_no_children() {
+fn the_window_frame_is_withheld_while_a_background_tab_document_lists_no_children() {
     let mut fake = window_with_background_tab();
     let entry = fake.entry_of(FRAME_PATH, true);
     assert!(entry.scope.path.is_empty());
-    let found = resolve(&mut fake, &entry, deadline()).expect("the frame resolves");
-    assert_eq!(found.path(), FRAME_PATH);
+    let error = resolve(&mut fake, &entry, deadline()).expect_err("a region is unread");
+    assert_eq!(error.code, ErrorCode::StaleRef);
+    assert!(error.is_explicitly_retryable());
+    assert!(is_incomplete(&error));
+    assert_eq!(error.details.as_ref().expect("details")["complete"], false);
     assert_eq!(fake.reads.searches, 1);
 }
 

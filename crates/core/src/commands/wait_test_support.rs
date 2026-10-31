@@ -164,7 +164,7 @@ fn save_ref_in_store(store: RefStore, states: Vec<String>) -> String {
             process_instance: Some("test-instance".into()),
         },
         identity: crate::RefEntryIdentity {
-            basis: None,
+            basis: Some(crate::IdentityBasis::Name),
             retained_object: None,
             role: "button".into(),
             name: Some("Run".into()),

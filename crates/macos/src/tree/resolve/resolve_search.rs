@@ -329,7 +329,7 @@ fn provisional_geometry_candidate(entry: &RefEntry) -> bool {
 }
 
 #[cfg(target_os = "macos")]
-fn read_node(
+pub(in crate::tree) fn read_node(
     element: &AXElement,
     requirements: EvidenceRequirements,
     context: &mut ResolveReadContext,
@@ -358,7 +358,7 @@ fn read_node(
     Ok(read)
 }
 
-fn identity_requirements(entry: &RefEntry) -> EvidenceRequirements {
+pub(in crate::tree) fn identity_requirements(entry: &RefEntry) -> EvidenceRequirements {
     let semantic_text = has_stable_text_identity(entry) || entry.identity.role == "cell";
     EvidenceRequirements {
         role: true,

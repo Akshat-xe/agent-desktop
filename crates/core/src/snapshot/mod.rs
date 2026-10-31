@@ -69,6 +69,7 @@ pub fn build(
             root_ref_id: None,
             path_prefix: &[],
         },
+        complete,
     };
     let mut tree = ref_alloc::allocate_refs(raw_tree, &mut refmap, &config)?;
 

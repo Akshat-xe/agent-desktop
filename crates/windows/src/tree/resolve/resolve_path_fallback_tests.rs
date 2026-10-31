@@ -44,6 +44,7 @@ fn stored_entry(
         ),
     };
     entry.identity.name = evidence.name.known().cloned();
+    entry.identity.basis = Some(agent_desktop_core::IdentityBasis::Name);
     entry.source.source_app = Some("fixture.exe".into());
     entry.source.source_window_id = Some(format!("w-{fixture_handle}"));
     entry.scope.path_is_absolute = true;
@@ -129,15 +130,15 @@ fn the_path_tier_settles_on_the_element_the_stored_path_names_and_on_no_other() 
     );
 }
 
-/// The path fast-path's fall-through, driven against a live tree.
+/// The stored path's refutation does not settle the resolution.
 ///
 /// The stored child-index path still lands on a live element - so this is
 /// not the path-missed case - but the element now occupying that index is a
 /// different one of the same role, which the identity evidence refutes. A
 /// refutation at the stored index is evidence about that element only, never
-/// about the stored one, so resolution must continue into the broad search
-/// and find the real target elsewhere in the tree. Settling `STALE_REF` there
-/// instead would strand every ref whose siblings were reordered.
+/// about the stored one, so resolution must keep looking and find the real
+/// target elsewhere in the tree. Settling `STALE_REF` there instead would
+/// strand every ref whose siblings were reordered.
 #[test]
 fn a_refuted_element_at_the_stored_path_falls_through_to_the_broad_search() {
     crate::tree::fixture::ensure_test_apartment();
@@ -180,7 +181,7 @@ fn a_refuted_element_at_the_stored_path_falls_through_to_the_broad_search() {
     );
     assert!(
         crate::tree::resolve::resolve_search::can_use_path_fast_path(&entry),
-        "the fast path must actually run, or the fall-through is never reached"
+        "the stored path is still walkable, so only the identity rule keeps it from settling there"
     );
 
     let landed = crate::tree::resolve::resolve_search::walk_stored_path(

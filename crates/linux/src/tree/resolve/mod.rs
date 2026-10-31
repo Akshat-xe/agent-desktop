@@ -1,7 +1,8 @@
+use agent_desktop_core::refs::identity_basis_gate::{basis_gate, requires_live_uniqueness};
 use agent_desktop_core::refs::ref_identity::has_meaningful_identity;
 use agent_desktop_core::refs::resolve_errors::identity_unknown_error;
 use agent_desktop_core::{
-    AdapterError, Deadline, ErrorCode, LocatorEvidence, LocatorField, Rect, RefEntry,
+    AdapterError, BoundsSpace, Deadline, ErrorCode, LocatorEvidence, LocatorField, Rect, RefEntry,
 };
 
 use super::AtspiElement;
@@ -13,8 +14,8 @@ use super::resolve::resolve_errors::{
     ambiguous, descendant_owner_gone, is_incomplete, no_candidate, settle_gone, stopped_aware,
     unverifiable_entry,
 };
-use super::resolve::resolve_identity::classify;
-use super::resolve::resolve_identity::entry_is_unverifiable;
+use super::resolve::resolve_identity::classify_identity;
+use super::resolve::resolve_identity::{classify, entry_is_unverifiable};
 use super::resolve::searched::Searched;
 use super::walk::level::Level;
 use super::walk::walker_expand::UNKNOWN_PID;
@@ -100,16 +101,38 @@ fn path_tier<S: Source>(
     }
 }
 
-/// The verified window frame, when the ref stored an empty path and the frame
-/// answers to the stored evidence. The gate has proved the process and the
-/// window, and exactly one node sits at depth zero, so no twin can exist
-/// elsewhere in the tree and an unread region below it (a background tab's
-/// document lists no children) cannot change the answer.
-fn frame_candidate<'a>(candidates: &'a [Candidate], entry: &RefEntry) -> Option<&'a Candidate> {
+/// The position of the verified window frame among the candidates, when the
+/// ref stored an empty path and the frame answers to the stored evidence. The
+/// gate has proved the process and the window, and exactly one node sits at
+/// depth zero, so no twin can exist elsewhere in the tree and an unread region
+/// below it (a background tab's document lists no children) cannot change the
+/// answer. Bounds are what may decide a ref like this one.
+fn frame_candidate(candidates: &[Candidate], entry: &RefEntry) -> Option<usize> {
     if !window_rooted(entry) || !entry.scope.path.is_empty() {
         return None;
     }
-    candidates.iter().find(|candidate| candidate.depth == 0)
+    candidates.iter().position(|candidate| candidate.depth == 0)
+}
+
+/// The verdict for a ref whose bounds may decide among its candidates.
+fn verdict_by_geometry(candidates: &[Candidate], entry: &RefEntry, unread: bool) -> Verdict {
+    if let Some(index) = frame_candidate(candidates, entry) {
+        return Verdict::Resolved(index);
+    }
+    let rects: Vec<LocatorField<Rect>> = candidates
+        .iter()
+        .map(|candidate| candidate.bounds.clone())
+        .collect();
+    let spaces: Vec<BoundsSpace> = candidates
+        .iter()
+        .map(|candidate| candidate.bounds_space)
+        .collect();
+    classify(
+        &rects,
+        &spaces,
+        has_meaningful_identity(entry).then_some(&entry.geometry),
+        unread,
+    )
 }
 
 fn attempt<S: Source>(
@@ -124,35 +147,24 @@ fn attempt<S: Source>(
         return Err(deadline.timeout_error());
     }
     let frame = source.open_window(entry)?;
+    basis_gate(&entry.identity)?;
+    let unique_live = requires_live_uniqueness(&entry.identity);
     let path_unread = if path_tier_applies(entry) {
         path_tier(source, &frame, entry, deadline)?
     } else {
         false
     };
     let mut searched = source.search(&frame, entry)?;
-    if path_tier_applies(entry) {
+    if path_tier_applies(entry) && !unique_live {
         without_nested_relatives(&mut searched.candidates, &entry.scope.path);
     }
-    let rects: Vec<LocatorField<Rect>> = searched
-        .candidates
-        .iter()
-        .map(|candidate| candidate.bounds.clone())
-        .collect();
-    let spaces: Vec<agent_desktop_core::BoundsSpace> = searched
-        .candidates
-        .iter()
-        .map(|candidate| candidate.bounds_space)
-        .collect();
-    if let Some(frame) = frame_candidate(&searched.candidates, entry) {
-        return Ok(frame.element.clone());
-    }
     let unread = path_unread || searched.unread_region;
-    match classify(
-        &rects,
-        &spaces,
-        has_meaningful_identity(entry).then_some(&entry.geometry),
-        unread,
-    ) {
+    let verdict = if unique_live {
+        classify_identity(searched.candidates.len(), unread)
+    } else {
+        verdict_by_geometry(&searched.candidates, entry, unread)
+    };
+    match verdict {
         Verdict::Resolved(index) => searched
             .candidates
             .into_iter()
@@ -168,11 +180,13 @@ fn attempt<S: Source>(
 /// Resolves a stored ref to the live element it was taken from, or refuses.
 /// A ref with no identity evidence is refused before any read: a child index
 /// cannot distinguish an unnamed node from a replacement or reordered sibling.
-/// The window gate proves the process and window are the stored ones. Every
-/// ref also searches the bounded window tree: a positional landing cannot
-/// prove that no matching sibling exists.
-/// An application that left, a destroyed object and a timeout are told apart
-/// at this boundary, and a timeout on a stopped process is `APP_UNRESPONSIVE`.
+/// The window gate proves the process and window are the stored ones, and the
+/// identity basis then decides what the search must prove: a ref whose basis is
+/// an identifier, name or description resolves only when a complete search of
+/// the window finds exactly one live node answering to it, and a ref whose basis
+/// is positional keeps the path-and-bounds behavior. An application that left, a
+/// destroyed object and a timeout are told apart at this boundary, and a timeout
+/// on a stopped process is `APP_UNRESPONSIVE`.
 pub(crate) fn resolve<S: Source>(
     source: &mut S,
     entry: &RefEntry,
@@ -241,3 +255,7 @@ mod shift_tests;
 #[cfg(test)]
 #[path = "resolve_nested_tests.rs"]
 mod nested_tests;
+
+#[cfg(test)]
+#[path = "resolve_basis_tests.rs"]
+mod basis_tests;

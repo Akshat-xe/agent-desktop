@@ -113,7 +113,7 @@ fn save_refmap(source_app: Option<String>) -> String {
             process_instance: Some("test-instance".into()),
         },
         identity: crate::RefEntryIdentity {
-            basis: None,
+            basis: Some(crate::IdentityBasis::Name),
             retained_object: None,
             role: "button".into(),
             name: Some("Open".into()),

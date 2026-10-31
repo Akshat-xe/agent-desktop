@@ -9,19 +9,20 @@ use crate::tree::resolve::resolve_search::{
 };
 
 /// The bounds tie-break returns the stored candidate, not the first one it
-/// collected.
+/// collected - and an identity ref never gets to ask it.
 ///
 /// Two live controls share role, `Name` and `AutomationId`, so every identity
-/// tier matches both and the bounds hash is the only tier that separates them.
-/// The stored ref carries the hash of the candidate the search collects
-/// **second**, so a resolver that took the head of its candidate list instead
-/// of the selected index would return the other control and report success -
-/// the silent-wrong-target class A7-3 measured, where Explorer re-resolved 5
-/// of 29 refs onto a different element without an error. A first-match-wins
-/// regression therefore cannot pass here by luck: the correct answer is never
-/// at index zero.
+/// tier matches both and the stored bounds hash is the only evidence that
+/// separates them. The stored ref carries the hash of the candidate the search
+/// collects **second**, so the pure classification resolves index one. An
+/// identity ref, though, promises a unique current match: two live elements
+/// answer to its recorded identity, and the stored rectangle is never allowed
+/// to choose between them - it would name the position of a row that may since
+/// have been replaced by a look-alike, the silent-wrong-target class A7-3
+/// measured. So resolution settles `AMBIGUOUS_TARGET` on the full count rather
+/// than resolving the hash-matching one.
 #[test]
-fn the_bounds_tie_break_resolves_the_stored_candidate_not_the_first_collected() {
+fn the_bounds_tie_break_selects_the_stored_candidate_but_an_identity_ref_stays_ambiguous() {
     crate::tree::fixture::ensure_test_apartment();
     let hosted =
         DuplicatePairWindow::create(PairGeometry::Separated).expect("a duplicate window hosts");
@@ -77,6 +78,7 @@ fn the_bounds_tie_break_resolves_the_stored_candidate_not_the_first_collected() 
     };
     entry.identity.name = Some(name);
     entry.identity.native_id = native_id;
+    entry.identity.basis = Some(agent_desktop_core::IdentityBasis::NativeId);
     entry.geometry = agent_desktop_core::RefGeometry {
         bounds_space: None,
         bounds: Some(rect),
@@ -100,17 +102,23 @@ fn the_bounds_tie_break_resolves_the_stored_candidate_not_the_first_collected() 
         "the stored hash selects the second candidate, so index zero is the wrong answer"
     );
 
-    let handle = resolve_element_strict(&entry, deadline)
-        .expect("the stored hash separates the pair, so resolution settles on one of them");
+    let error = resolve_element_strict(&entry, deadline)
+        .err()
+        .expect("two live elements answer to the stored identity, so neither one is the answer");
 
-    let resolved = handle
-        .downcast_ref::<UIAElement>()
-        .expect("the resolved handle carries a UI Automation element");
-    let (_, resolved_evidence, _) = source.evidence(resolved);
     assert_eq!(
-        crate::tree::resolve::resolve_match::bounds_hash_of(&resolved_evidence),
-        Some(target_hash),
-        "the resolver returned the candidate the stored hash selected, not the first collected"
+        error.code,
+        ErrorCode::AmbiguousTarget,
+        "the stored rectangle must never pick between two equally matching elements: {error:?}"
+    );
+    assert_eq!(
+        error
+            .details
+            .as_ref()
+            .and_then(|details| details.get("candidate_count"))
+            .and_then(serde_json::Value::as_u64),
+        Some(2),
+        "the count covers every live match, not just the one the hash happens to name"
     );
 }
 
@@ -176,6 +184,7 @@ fn duplicate_entry(
     };
     entry.identity.name = Some(name);
     entry.identity.native_id = native_id;
+    entry.identity.basis = Some(agent_desktop_core::IdentityBasis::NativeId);
     entry.geometry = agent_desktop_core::RefGeometry {
         bounds_space: None,
         bounds: Some(rect),
@@ -187,20 +196,21 @@ fn duplicate_entry(
     entry
 }
 
-/// The concrete failure the fast path's early return created, and the
-/// unchanged case beside it. A ref stored against one duplicate control lands,
-/// at its own stored path, on the *other* one - same role, name and
-/// `AutomationId` - because the index the ref names now holds a different
-/// sibling. Every identity tier agrees on the impostor, so only the stored
-/// bounds hash can refuse it. Before the fix, `accept_path_landing` returned
-/// the impostor immediately and the broad search - the only tier that applies
-/// the bounds hash - never ran; after it, the contradiction falls through to
-/// the broad search, which finds both duplicates and tie-breaks onto the one
-/// the stored hash actually names. The same catalogue drives the unchanged
-/// case too: a landing whose live hash agrees with the stored one is still
-/// accepted directly, so the refutation is not a rejection of every mismatch.
+/// The path tier's own refutation, and what an identity ref does instead.
+///
+/// A ref stored against one duplicate control lands, at its own stored path, on
+/// the *other* one - same role, name and `AutomationId` - because the index the
+/// ref names now holds a different sibling. Every identity tier agrees on the
+/// impostor, so only the stored bounds hash can refuse the landing, and
+/// `accept_path_landing` does refuse it. A landing whose live hash agrees is
+/// still accepted, so the refutation is not a rejection of every mismatch.
+///
+/// Resolution of the identity ref itself is decided over the whole scope and
+/// not at the landing: two live elements answer to its recorded identity, so
+/// it settles `AMBIGUOUS_TARGET` whether or not the stored rectangle happens to
+/// name one of them.
 #[test]
-fn the_fast_path_refuses_a_contradicting_hash_and_still_accepts_an_agreeing_one() {
+fn the_fast_path_refuses_a_contradicting_hash_and_the_identity_ref_stays_ambiguous() {
     crate::tree::fixture::ensure_test_apartment();
     let hosted =
         DuplicatePairWindow::create(PairGeometry::Separated).expect("a duplicate window hosts");
@@ -263,16 +273,13 @@ fn the_fast_path_refuses_a_contradicting_hash_and_still_accepts_an_agreeing_one(
         "a live bounds hash that contradicts the stored one must not be accepted by the fast path"
     );
 
-    let handle = resolve_element_strict(&contradicting, deadline)
-        .expect("the broad search still finds the stored candidate by its bounds hash");
-    let resolved = handle
-        .downcast_ref::<UIAElement>()
-        .expect("the resolved handle carries a UI Automation element");
-    let (_, resolved_evidence, _) = source.evidence(resolved);
+    let error = resolve_element_strict(&contradicting, deadline)
+        .err()
+        .expect("the scope holds two elements that answer to the stored identity");
     assert_eq!(
-        crate::tree::resolve::resolve_match::bounds_hash_of(&resolved_evidence),
-        Some(stored_hash),
-        "resolution must return the element the stored hash names, not the impostor at the stored path"
+        error.code,
+        ErrorCode::AmbiguousTarget,
+        "the stored hash must not choose between two identity matches: {error:?}"
     );
 
     let equal_hash_entry = duplicate_entry(

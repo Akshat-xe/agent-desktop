@@ -61,6 +61,7 @@ fn entry() -> RefEntry {
 #[test]
 fn empty_identity_remains_unknown_without_positive_evidence() {
     let mut entry = entry();
+    entry.identity.basis = Some(crate::IdentityBasis::Positional);
     entry.identity.role = "menubutton".into();
     entry.identity.name = Some(String::new());
 
@@ -80,6 +81,7 @@ fn empty_identity_remains_unknown_without_positive_evidence() {
 #[test]
 fn description_identity_matches_blank_title_controls() {
     let mut entry = entry();
+    entry.identity.basis = Some(crate::IdentityBasis::Description);
     entry.identity.description = Some("Insert Text Box".into());
 
     assert!(has_meaningful_identity(&entry));
@@ -110,6 +112,7 @@ fn description_identity_matches_blank_title_controls() {
 #[test]
 fn name_identity_cannot_be_rescued_by_matching_description() {
     let mut entry = entry();
+    entry.identity.basis = Some(crate::IdentityBasis::Name);
     entry.identity.name = Some("Primary".into());
     entry.identity.description = Some("Generic".into());
 
@@ -128,6 +131,7 @@ fn name_identity_cannot_be_rescued_by_matching_description() {
 #[test]
 fn value_identity_cannot_be_rescued_by_matching_name_when_value_mismatches() {
     let mut entry = entry();
+    entry.identity.basis = Some(crate::IdentityBasis::Positional);
     entry.identity.value = Some("On".into());
 
     assert!(identity_matches(&entry, None, Some("On"), None, None));
@@ -144,6 +148,7 @@ fn value_identity_cannot_be_rescued_by_matching_name_when_value_mismatches() {
 #[test]
 fn mutable_value_change_cannot_prove_identity_by_itself() {
     let mut entry = entry();
+    entry.identity.basis = Some(crate::IdentityBasis::Positional);
     entry.identity.role = "textfield".into();
     entry.identity.value = Some("seed".into());
 
@@ -154,6 +159,7 @@ fn mutable_value_change_cannot_prove_identity_by_itself() {
 #[test]
 fn unnamed_mutable_value_role_cannot_use_content_as_identity() {
     let mut entry = entry();
+    entry.identity.basis = Some(crate::IdentityBasis::Positional);
     entry.identity.role = "textfield".into();
 
     assert!(!has_meaningful_identity(&entry));
@@ -169,6 +175,7 @@ fn unnamed_mutable_value_role_cannot_use_content_as_identity() {
 #[test]
 fn mutable_value_text_promoted_to_name_remains_unknown() {
     let mut entry = entry();
+    entry.identity.basis = Some(crate::IdentityBasis::Positional);
     entry.identity.role = "textfield".into();
     entry.identity.name = Some("00:01".into());
     entry.identity.value = Some("00:01".into());
@@ -186,6 +193,7 @@ fn mutable_value_text_promoted_to_name_remains_unknown() {
 #[test]
 fn formatted_numeric_mutable_value_promoted_to_name_is_not_stable_identity() {
     let mut entry = entry();
+    entry.identity.basis = Some(crate::IdentityBasis::Positional);
     entry.identity.role = "slider".into();
     entry.identity.name = Some("50".into());
     entry.identity.value = Some("50.0".into());
@@ -203,6 +211,7 @@ fn formatted_numeric_mutable_value_promoted_to_name_is_not_stable_identity() {
 #[test]
 fn named_mutable_value_role_still_uses_name_identity() {
     let mut entry = entry();
+    entry.identity.basis = Some(crate::IdentityBasis::Name);
     entry.identity.role = "textfield".into();
     entry.identity.name = Some("Search".into());
     entry.identity.value = Some("old query".into());
@@ -227,6 +236,7 @@ fn named_mutable_value_role_still_uses_name_identity() {
 #[test]
 fn mutable_role_label_different_from_value_remains_stable_identity() {
     let mut entry = entry();
+    entry.identity.basis = Some(crate::IdentityBasis::Name);
     entry.identity.role = "combobox".into();
     entry.identity.name = Some("Font".into());
     entry.identity.value = Some("Helvetica".into());
@@ -251,6 +261,7 @@ fn mutable_role_label_different_from_value_remains_stable_identity() {
 #[test]
 fn native_id_is_strongest_identity_signal() {
     let mut entry = entry();
+    entry.identity.basis = Some(crate::IdentityBasis::NativeId);
     entry.identity.native_id = Some(identifier("submit-btn"));
     entry.identity.name = Some("Old Label".into());
 
@@ -274,6 +285,7 @@ fn native_id_is_strongest_identity_signal() {
 #[test]
 fn differing_native_ids_are_hard_non_match() {
     let mut entry = entry();
+    entry.identity.basis = Some(crate::IdentityBasis::NativeId);
     entry.identity.native_id = Some(identifier("field-a"));
     entry.identity.name = Some("Same".into());
 
@@ -289,6 +301,7 @@ fn differing_native_ids_are_hard_non_match() {
 #[test]
 fn missing_live_native_id_fails_closed_even_with_stable_name() {
     let mut entry = entry();
+    entry.identity.basis = Some(crate::IdentityBasis::NativeId);
     entry.identity.native_id = Some(identifier("compose-message"));
     entry.identity.name = Some("Send".into());
 
@@ -299,6 +312,7 @@ fn missing_live_native_id_fails_closed_even_with_stable_name() {
 #[test]
 fn incomplete_identifier_slots_cannot_prove_a_non_match() {
     let mut entry = entry();
+    entry.identity.basis = Some(crate::IdentityBasis::NativeId);
     entry.identity.native_id = Some(identifier("dom-submit"));
     let identifiers = IdentifierEvidence::typed([identifier("ax-submit")], Some(0), false);
 
@@ -317,6 +331,7 @@ fn incomplete_identifier_slots_cannot_prove_a_non_match() {
 #[test]
 fn unavailable_identifier_fails_closed_before_stable_text_fallback() {
     let mut entry = entry();
+    entry.identity.basis = Some(crate::IdentityBasis::NativeId);
     entry.identity.native_id = Some(identifier("old-dom-id"));
     entry.identity.name = Some("Submit".into());
     let absent = IdentifierEvidence::absent();
@@ -348,6 +363,7 @@ fn unavailable_identifier_fails_closed_before_stable_text_fallback() {
 #[test]
 fn unknown_stable_text_field_does_not_collapse_to_absence() {
     let mut entry = entry();
+    entry.identity.basis = Some(crate::IdentityBasis::Name);
     entry.identity.name = Some("Submit".into());
 
     assert_eq!(
@@ -361,6 +377,10 @@ fn unknown_stable_text_field_does_not_collapse_to_absence() {
         IdentityMatch::Unknown
     );
 }
+
+#[path = "ref_identity_basis_tests.rs"]
+mod basis_tests;
+
 #[path = "ref_identity_scroll_tests.rs"]
 mod scroll_tests;
 

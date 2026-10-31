@@ -1,6 +1,7 @@
 use agent_desktop_core::RefEntry;
+use agent_desktop_core::refs::identity_basis_gate::requires_live_uniqueness;
 
-use super::resolve_identity::{admit_node, candidate};
+use super::resolve_identity::{admit_node, candidate, identity_admission};
 use super::searched::Searched;
 use crate::tree::observe::projection::project_node;
 use crate::tree::vocabulary::role_numbers::is_web_document;
@@ -28,7 +29,11 @@ fn visit(
             .identifiers
             .with_retained_object(node.payload.node.element.object_identity());
     }
-    let admission = admit_node(entry, &evidence);
+    let admission = if requires_live_uniqueness(&entry.identity) {
+        identity_admission(entry, &evidence)
+    } else {
+        admit_node(entry, &evidence)
+    };
     match admission {
         Admission::Collect => found.candidates.push(candidate(
             entry,

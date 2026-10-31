@@ -17,6 +17,17 @@ fn identifiers(token: Option<&str>) -> IdentifierEvidence {
     }
 }
 
+fn other_identifiers() -> IdentifierEvidence {
+    IdentifierEvidence::typed(
+        [crate::ElementIdentifier {
+            kind: crate::IdentifierKind::AxIdentifier,
+            value: "replacement-title".into(),
+        }],
+        Some(0),
+        true,
+    )
+}
+
 fn observed() -> super::ObservedTree {
     let mut field = evidence("textfield", None);
     field.value = LocatorField::Known("Alpha".into());
@@ -29,33 +40,53 @@ fn saved() -> RefEntry {
     super::materialize::ref_entry(&tree.nodes[0], &tree.source, &LocatorQuery::default())
 }
 
-fn matches(entry: &RefEntry, token: Option<&str>, value: &str) -> IdentityMatch {
+fn matches(entry: &RefEntry, live: &IdentifierEvidence, value: &str) -> IdentityMatch {
     crate::refs::ref_identity::identity_match(
         entry,
         &LocatorField::Absent,
         &LocatorField::Known(value.into()),
         &LocatorField::Absent,
-        &identifiers(token),
+        live,
     )
 }
 
 #[test]
-fn retained_identity_rejects_replacements_without_freezing_control_values() {
+fn a_retained_token_never_stands_in_for_a_recorded_identifier() {
+    let mut entry = saved();
+    entry.identity.basis = Some(crate::IdentityBasis::NativeId);
+    assert!(entry.identity.retained_object.is_some());
+    assert_eq!(
+        matches(
+            &entry,
+            &identifiers(Some("host-generation:object-1")),
+            "Edited"
+        ),
+        IdentityMatch::Match,
+        "the identifier still matches while the control value changed"
+    );
+    assert_eq!(
+        matches(&entry, &other_identifiers(), "Alpha"),
+        IdentityMatch::NoMatch,
+        "the same value under a different identifier is a different element"
+    );
+    assert_eq!(
+        matches(&entry, &IdentifierEvidence::absent(), "Alpha"),
+        IdentityMatch::NoMatch
+    );
+}
+
+#[test]
+fn an_entry_without_a_decided_basis_never_resolves() {
     let entry = saved();
     assert_eq!(
-        matches(&entry, Some("host-generation:object-1"), "Edited"),
-        IdentityMatch::Match
-    );
-    assert_eq!(
-        matches(&entry, Some("host-generation:object-2"), "Alpha"),
+        matches(
+            &entry,
+            &identifiers(Some("host-generation:object-1")),
+            "Alpha"
+        ),
         IdentityMatch::NoMatch
     );
-    assert_eq!(
-        matches(&entry, Some("other-host:object-1"), "Alpha"),
-        IdentityMatch::NoMatch
-    );
-    assert_eq!(matches(&entry, None, "Alpha"), IdentityMatch::Unknown);
-    assert!(crate::refs::ref_identity::has_meaningful_identity(&entry));
+    assert!(!crate::refs::ref_identity::has_meaningful_identity(&entry));
 }
 
 #[test]
@@ -83,12 +114,4 @@ fn snapshot_and_find_preserve_identical_private_identity_evidence() {
     let public = serde_json::to_value(projected).unwrap();
     assert!(public.get("retained_object").is_none());
     assert_eq!(public["native_id"]["value"], "shared-title");
-}
-
-#[test]
-fn empty_retained_token_cannot_downgrade_to_native_id_matching() {
-    let mut entry = saved();
-    entry.identity.retained_object = Some(String::new());
-    assert_eq!(matches(&entry, Some(""), "Alpha"), IdentityMatch::Unknown);
-    assert_eq!(matches(&entry, None, "Alpha"), IdentityMatch::Unknown);
 }

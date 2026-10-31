@@ -8,7 +8,7 @@ fn minimal_entry(role: &str) -> RefEntry {
             process_instance: Some("test-instance".into()),
         },
         identity: crate::RefEntryIdentity {
-            basis: None,
+            basis: Some(crate::IdentityBasis::Positional),
             retained_object: None,
             role: role.into(),
             name: None,
@@ -182,7 +182,7 @@ fn ref_entry_full_roundtrip_preserves_all_fields() {
             process_instance: Some("test-instance".into()),
         },
         identity: crate::RefEntryIdentity {
-            basis: None,
+            basis: Some(crate::IdentityBasis::NativeId),
             retained_object: None,
             role: "textfield".into(),
             name: Some("Email".into()),

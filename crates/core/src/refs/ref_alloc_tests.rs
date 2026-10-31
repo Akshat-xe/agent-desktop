@@ -276,6 +276,7 @@ fn allocate_refs_skips_web_container_noise() {
             root_ref_id: None,
             path_prefix: &[],
         },
+        complete: true,
     };
     let out = allocate_refs(root, &mut refmap, &config).unwrap();
 
@@ -316,6 +317,7 @@ fn allocate_refs_records_structural_paths() {
             root_ref_id: None,
             path_prefix: &[],
         },
+        complete: true,
     };
     let out = allocate_refs(root, &mut refmap, &config).unwrap();
 
@@ -358,6 +360,7 @@ fn allocate_refs_keeps_bounds_hash_when_snapshot_hides_bounds() {
             root_ref_id: None,
             path_prefix: &[],
         },
+        complete: true,
     };
 
     let out = allocate_refs(root, &mut refmap, &config).unwrap();
@@ -386,6 +389,8 @@ fn entry_hash() -> u64 {
     .unwrap()
 }
 
+#[path = "ref_alloc_basis_tests.rs"]
+mod basis_tests;
 #[path = "ref_alloc_bounds_tests.rs"]
 mod bounds_tests;
 #[path = "ref_alloc_ordering_tests.rs"]

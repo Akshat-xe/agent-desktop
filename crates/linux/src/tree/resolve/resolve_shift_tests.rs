@@ -36,12 +36,14 @@ fn shifted_same_named_sibling_without_bounds_is_ambiguous() {
 }
 
 #[test]
-fn shifted_same_named_sibling_with_distinguishing_size_resolves_original() {
+fn a_distinguishing_size_does_not_separate_two_buttons_that_share_their_name() {
     let mut fake = buttons();
     let entry = fake.entry_of("/save-a", true);
     remove_other(&mut fake);
-    let element = resolve(&mut fake, &entry, deadline()).expect("size distinguishes Save A");
-    assert_eq!(element.path(), "/save-a");
+    let error =
+        resolve(&mut fake, &entry, deadline()).expect_err("the size of a named ref never decides");
+    assert_eq!(error.code, ErrorCode::AmbiguousTarget);
+    assert_eq!(error.details.expect("details")["candidate_count"], 2);
 }
 
 #[test]

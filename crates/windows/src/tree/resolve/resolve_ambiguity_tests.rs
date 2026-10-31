@@ -29,10 +29,9 @@ fn assert_redacted(error: &AdapterError, secret: &str, slot: &str) {
 /// asserted rather than eyeballed.
 ///
 /// The pair shares role, name, `AutomationId` and rectangle, so the identity
-/// tiers both match and the bounds tie-break is handed two equal hashes plus
-/// the stored one - the arm that must stay ambiguous rather than pick a
-/// candidate, since picking one is the silent-wrong-target shape A7-3
-/// measured. The second half pins a deliberate divergence from macOS, which
+/// rule counts both and no stored evidence can choose between them - picking
+/// one is the silent-wrong-target shape A7-3 measured. The second half pins a
+/// deliberate divergence from macOS, which
 /// embeds entry name, description and window title in its ambiguous details:
 /// here the resolver's answer carries shape only - kind and candidate count -
 /// with no application-derived text in the message, the suggestion, the
@@ -92,6 +91,7 @@ fn duplicate_evidence_candidates_settle_ambiguous_target_carrying_no_application
     };
     entry.identity.name = Some(name);
     entry.identity.native_id = native_id;
+    entry.identity.basis = Some(agent_desktop_core::IdentityBasis::NativeId);
     entry.geometry = agent_desktop_core::RefGeometry {
         bounds_space: None,
         bounds: Some(rect),

@@ -5,6 +5,7 @@ fn scroll_positions_neither_prove_nor_reject_element_identity() {
     for role in ["scrollbar", "handle"] {
         for promoted_name in [false, true] {
             let mut saved = entry();
+            saved.identity.basis = Some(crate::IdentityBasis::Positional);
             saved.identity.role = role.into();
             saved.identity.value = Some("0".into());
             saved.identity.name = promoted_name.then(|| "0".into());
@@ -35,6 +36,7 @@ fn scroll_positions_neither_prove_nor_reject_element_identity() {
 fn named_scroll_controls_still_require_the_same_label() {
     for role in ["scrollbar", "handle"] {
         let mut saved = entry();
+        saved.identity.basis = Some(crate::IdentityBasis::Name);
         saved.identity.role = role.into();
         saved.identity.name = Some("Document scroll position".into());
         saved.identity.value = Some("0".into());

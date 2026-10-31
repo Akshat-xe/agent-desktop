@@ -40,6 +40,7 @@ fn drill_config<'a>(
             root_ref_id: Some(root_ref_id),
             path_prefix: &[],
         },
+        complete: true,
     }
 }
 

@@ -1,4 +1,6 @@
 #[cfg(target_os = "macos")]
+use agent_desktop_core::refs::identity_basis_gate::{basis_gate, requires_live_uniqueness};
+#[cfg(target_os = "macos")]
 use agent_desktop_core::refs::ref_identity::has_meaningful_identity;
 use agent_desktop_core::{AdapterError, ErrorCode, NativeHandle, RefEntry, SnapshotSurface};
 use std::time::{Duration, Instant};
@@ -11,6 +13,8 @@ use super::resolve::resolve_read_context::ResolveReadContext;
 use super::resolve::resolve_roots::{candidate_roots, source_window_scope_required};
 #[cfg(target_os = "macos")]
 use super::resolve::resolve_search::{find_entry_by_path, find_entry_in_roots};
+#[cfg(target_os = "macos")]
+use super::resolve::resolve_unique::find_unique_entry_in_roots;
 
 const MAX_RESOLVE_DEPTH: u8 = 50;
 
@@ -20,6 +24,7 @@ pub(crate) fn resolve_element_with_deadline(
     operation_deadline: agent_desktop_core::Deadline,
 ) -> Result<NativeHandle, AdapterError> {
     verify_process_instance(entry)?;
+    basis_gate(&entry.identity)?;
     let deadline = crate::tree::locator_deadline::from_operation(operation_deadline)?;
     let result = retry_incomplete_until(deadline, || resolve_once(entry, deadline));
     match result {
@@ -36,6 +41,7 @@ pub(crate) fn resolve_locator_anchor_with_deadline(
     operation_deadline: agent_desktop_core::Deadline,
 ) -> Result<NativeHandle, AdapterError> {
     verify_process_instance(entry)?;
+    basis_gate(&entry.identity)?;
     let deadline = crate::tree::locator_deadline::from_operation(operation_deadline)?;
     let result = retry_incomplete_until(deadline, || resolve_locator_anchor_once(entry, deadline));
     match result {
@@ -72,6 +78,10 @@ fn resolve_once(entry: &RefEntry, deadline: Instant) -> Result<NativeHandle, Ada
     let started = Instant::now();
     crate::tree::locator_deadline::remaining(deadline)?;
     let mut read_context = ResolveReadContext::new(deadline);
+    if requires_live_uniqueness(&entry.identity) {
+        let result = resolve_unique_in_source_scope(entry, &mut read_context);
+        return finish_resolution(result, &mut read_context, started, "identity_unique", false);
+    }
     if can_use_path_fast_path(entry) {
         let roots = match candidate_roots(entry, &mut read_context) {
             Ok(roots) => roots,
@@ -135,6 +145,15 @@ fn resolve_once(entry: &RefEntry, deadline: Instant) -> Result<NativeHandle, Ada
 }
 
 #[cfg(target_os = "macos")]
+fn resolve_unique_in_source_scope(
+    entry: &RefEntry,
+    read_context: &mut ResolveReadContext,
+) -> Result<NativeHandle, AdapterError> {
+    let roots = candidate_roots(entry, read_context)?;
+    find_unique_entry_in_roots(&roots.roots, entry, MAX_RESOLVE_DEPTH, read_context)
+}
+
+#[cfg(target_os = "macos")]
 fn resolve_locator_anchor_once(
     entry: &RefEntry,
     deadline: Instant,
@@ -142,6 +161,16 @@ fn resolve_locator_anchor_once(
     let started = Instant::now();
     crate::tree::locator_deadline::remaining(deadline)?;
     let mut read_context = ResolveReadContext::new(deadline);
+    if requires_live_uniqueness(&entry.identity) {
+        let result = resolve_unique_in_source_scope(entry, &mut read_context);
+        return finish_resolution(
+            result,
+            &mut read_context,
+            started,
+            "locator_anchor_unique",
+            false,
+        );
+    }
     if !can_use_locator_anchor_path(entry) {
         return finish_resolution(
             Err(AdapterError::element_not_found("locator anchor")),
@@ -250,6 +279,7 @@ fn stale_ref_error(entry: &RefEntry, cause: &AdapterError) -> AdapterError {
         format!("Element not found: {}", identity_summary_for_message(entry)),
     )
     .with_suggestion("Run 'snapshot' to refresh, then retry with the updated ref.")
+    .with_disposition(agent_desktop_core::DeliverySemantics::not_delivered())
     .with_details(serde_json::json!({
         "kind": "resolution_complete_absence",
         "complete": true,
@@ -303,6 +333,8 @@ pub(super) mod resolve_read_context;
 pub(super) mod resolve_roots;
 pub(super) mod resolve_search;
 pub(super) mod resolve_source_app;
+#[cfg(target_os = "macos")]
+pub(super) mod resolve_unique;
 pub(crate) mod retained;
 pub(super) mod retained_store;
 #[cfg(test)]

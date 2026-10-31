@@ -55,6 +55,7 @@ fn a_fixture_ref_resolves_to_the_same_element_end_to_end() {
 
     let mut entry =
         crate::tree::walk::walker_fake::ref_entry(&captured.1.clone().unwrap_or_default());
+    entry.identity.basis = Some(agent_desktop_core::IdentityBasis::NativeId);
     entry.process = agent_desktop_core::RefProcess {
         pid: window.pid,
         process_instance: Some(token),
@@ -124,6 +125,7 @@ fn a_blank_secure_ref_resolves_through_the_path_and_geometry_tier() {
     let expected_stamp = (pid.get(), token.clone());
 
     let mut entry = crate::tree::walk::walker_fake::ref_entry(&role.clone().unwrap_or_default());
+    entry.identity.basis = Some(agent_desktop_core::IdentityBasis::Positional);
     entry.process = agent_desktop_core::RefProcess {
         pid,
         process_instance: Some(token),
@@ -226,6 +228,7 @@ fn a_ref_whose_window_belongs_to_another_process_never_resolves_into_it() {
     let mut entry = crate::tree::walk::walker_fake::ref_entry(
         &evidence.role.known().cloned().unwrap_or_default(),
     );
+    entry.identity.basis = Some(agent_desktop_core::IdentityBasis::Positional);
     entry.process = agent_desktop_core::RefProcess {
         pid,
         process_instance: Some(token),

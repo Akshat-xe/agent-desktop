@@ -1,6 +1,9 @@
 use agent_desktop_core::{AdapterError, Deadline, ErrorCode, NativeHandle, RefEntry};
 
 #[cfg(target_os = "windows")]
+use agent_desktop_core::refs::identity_basis_gate::{basis_gate, requires_live_uniqueness};
+
+#[cfg(target_os = "windows")]
 use super::resolve::resolve_pacing::{FIRST_RETRY_PAUSE, next_retry_pause, sleep_before_retry};
 
 #[cfg(target_os = "windows")]
@@ -11,14 +14,15 @@ use super::resolve::resolve_chrome_repair::repair_past_leading_chrome;
 use super::resolve::resolve_match::CandidateOutcome;
 use super::resolve::resolve_match::stale_ref_error;
 #[cfg(target_os = "windows")]
-use super::resolve::resolve_match::{ambiguous_target_error, owning_process_exited_error};
+use super::resolve::resolve_match::{
+    ambiguous_target_error, owning_process_exited_error, should_stop_collecting,
+};
 #[cfg(target_os = "windows")]
 use super::resolve::resolve_search::descent::PathLanding;
 #[cfg(target_os = "windows")]
 use super::resolve::resolve_search::{
     SearchContext, accept_path_landing, can_use_path_fast_path, entry_is_unverifiable,
-    identity_unknown_error, resolve_walk_budget, search_under, should_stop_collecting,
-    walk_stored_path,
+    identity_unknown_error, resolve_walk_budget, search_under, walk_stored_path,
 };
 #[cfg(all(test, target_os = "windows"))]
 use super::walk::walker::{TreeSource, WalkBudget};
@@ -62,10 +66,10 @@ pub(crate) fn resolve_element_strict(
     retry_incomplete_until(deadline, || resolve_attempt(entry, deadline))
 }
 
-/// One resolution attempt: the path tier, then the broad search, then the
-/// verdict.
+/// One resolution attempt: the recorded basis decides the tier, and only a
+/// bounds-decidable one reaches the path tier and broad search below.
 ///
-/// The two tiers report what they left unread separately and keep it separate
+/// Those tiers report what they left unread separately and keep it separate
 /// all the way to [`attempt_verdict`], because a landing and a region are
 /// different claims. The path tier's landing is decided by
 /// [`accept_path_landing`], which is handed the landed element alone; the
@@ -73,8 +77,12 @@ pub(crate) fn resolve_element_strict(
 /// is composed once, at the end, by the function that settles it.
 #[cfg(target_os = "windows")]
 fn resolve_attempt(entry: &RefEntry, deadline: Deadline) -> Result<NativeHandle, AdapterError> {
+    basis_gate(&entry.identity)?;
     if entry_is_unverifiable(entry) {
         return Err(stale_ref_error(entry));
+    }
+    if requires_live_uniqueness(&entry.identity) {
+        return resolve_identity::resolve_unique_identity(entry, deadline);
     }
     let root = resolve_window_root(entry, deadline)?;
     let source = UiaTreeSource::for_root(&root)?;
@@ -378,6 +386,8 @@ fn verify_stored_failure_error(entry: &RefEntry, deadline: Deadline) -> AdapterE
 pub(crate) mod resolve_anchor;
 #[cfg(target_os = "windows")]
 pub(crate) mod resolve_chrome_repair;
+#[cfg(target_os = "windows")]
+pub(crate) mod resolve_identity;
 pub(crate) mod resolve_match;
 pub(crate) mod resolve_pacing;
 pub(crate) mod resolve_search;

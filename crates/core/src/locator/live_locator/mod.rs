@@ -88,6 +88,8 @@ mod evaluator_identifier_tests;
 #[cfg(test)]
 mod evaluator_tests;
 #[cfg(test)]
+mod materialize_basis_tests;
+#[cfg(test)]
 mod materialize_tests;
 #[cfg(test)]
 mod observed_tree_tests;

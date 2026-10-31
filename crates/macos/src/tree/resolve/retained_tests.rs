@@ -131,15 +131,22 @@ fn candidate_match_fails_closed_on_a_stale_token() {
 }
 
 #[test]
-fn tokenless_candidates_keep_the_legacy_identity_rules() {
+fn tokenless_entries_resolve_only_through_a_recorded_basis() {
     let pid = i32::try_from(std::process::id()).unwrap();
     let tokenless = entry(None);
     assert_eq!(
         candidate_match(&app(pid), &tokenless, &text_evidence("Target")).unwrap(),
+        agent_desktop_core::IdentityMatch::NoMatch
+    );
+
+    let mut named = entry(None);
+    named.identity.basis = Some(agent_desktop_core::IdentityBasis::Name);
+    assert_eq!(
+        candidate_match(&app(pid), &named, &text_evidence("Target")).unwrap(),
         agent_desktop_core::IdentityMatch::Match
     );
     assert_eq!(
-        candidate_match(&app(pid), &tokenless, &text_evidence("Other")).unwrap(),
+        candidate_match(&app(pid), &named, &text_evidence("Other")).unwrap(),
         agent_desktop_core::IdentityMatch::NoMatch
     );
 }

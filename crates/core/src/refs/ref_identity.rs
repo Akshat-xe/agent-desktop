@@ -1,17 +1,18 @@
 use crate::{
-    IdentityMatch,
+    IdentityBasis, IdentityMatch,
     locator::live_locator::{IdentifierEvidence, LocatorField},
     refs::RefEntry,
     tree::roles::is_mutable_value_role,
 };
 
+/// Whether the entry records evidence that singled it out from its look-alikes
+/// when it was captured. A positional entry, an entry whose evidence was not
+/// unique, and an entry written before bases were recorded carry none.
 pub fn has_meaningful_identity(entry: &RefEntry) -> bool {
-    if entry.identity.retained_object.is_some() {
-        return true;
-    }
-    entry.identity.native_id.as_ref().is_some_and(|identifier| {
-        crate::tree::accname::non_blank(Some(identifier.value.as_str())).is_some()
-    }) || has_stable_text_identity(entry)
+    matches!(
+        entry.identity.basis,
+        Some(IdentityBasis::NativeId | IdentityBasis::Name | IdentityBasis::Description)
+    )
 }
 
 pub fn has_stable_text_identity(entry: &RefEntry) -> bool {
@@ -47,6 +48,15 @@ pub fn identity_fields_are_meaningful(
         || crate::tree::accname::non_blank(description).is_some()
 }
 
+/// Whether a live element still carries the evidence the entry recorded.
+///
+/// The recorded basis decides which evidence counts. A native-id entry matches
+/// on identifier kind and value alone. A name or description entry matches on
+/// that text and, when the entry also has an identifier, on the identifier too.
+/// A positional entry keeps the text rules it had before bases existed. An
+/// entry without a basis, and an ambiguous one, never matches: only the basis
+/// gate may decide how they resolve. Roles are checked by the resolver, and
+/// control values never decide a match.
 pub fn identity_match(
     entry: &RefEntry,
     actual_name: &LocatorField<String>,
@@ -54,34 +64,116 @@ pub fn identity_match(
     actual_description: &LocatorField<String>,
     actual_identifiers: &IdentifierEvidence,
 ) -> IdentityMatch {
-    if let Some(expected) = entry.identity.retained_object.as_deref() {
-        return match (
-            crate::tree::accname::non_blank(Some(expected)),
-            actual_identifiers.retained_object(),
-        ) {
-            (Some(expected), Some(actual)) => equality_match(expected, actual),
-            _ => IdentityMatch::Unknown,
-        };
-    }
-    if let Some(expected) = entry.identity.native_id.as_ref() {
-        let Some(expected_value) = crate::tree::accname::non_blank(Some(expected.value.as_str()))
-        else {
-            return IdentityMatch::Unknown;
-        };
-        if actual_identifiers
-            .identifiers()
-            .iter()
-            .any(|actual| actual.kind == expected.kind && actual.value == expected_value)
-        {
-            return IdentityMatch::Match;
+    match entry.identity.basis {
+        Some(IdentityBasis::NativeId) => native_identity_match(entry, actual_identifiers),
+        Some(IdentityBasis::Name) => {
+            name_identity_match(entry, actual_name, actual_value, actual_identifiers)
         }
-        if !actual_identifiers.is_complete() {
-            return IdentityMatch::Unknown;
+        Some(IdentityBasis::Description) => description_identity_match(
+            entry,
+            actual_name,
+            actual_value,
+            actual_description,
+            actual_identifiers,
+        ),
+        Some(IdentityBasis::Positional) => {
+            stable_text_match(entry, actual_name, actual_value, actual_description)
         }
-        return IdentityMatch::NoMatch;
+        None | Some(IdentityBasis::Ambiguous) => IdentityMatch::NoMatch,
     }
+}
 
-    stable_text_match(entry, actual_name, actual_value, actual_description)
+fn native_identity_match(
+    entry: &RefEntry,
+    actual_identifiers: &IdentifierEvidence,
+) -> IdentityMatch {
+    match entry.identity.native_id.as_ref() {
+        Some(expected) => identifier_evidence_match(expected, actual_identifiers),
+        None => IdentityMatch::NoMatch,
+    }
+}
+
+fn name_identity_match(
+    entry: &RefEntry,
+    actual_name: &LocatorField<String>,
+    actual_value: &LocatorField<String>,
+    actual_identifiers: &IdentifierEvidence,
+) -> IdentityMatch {
+    let role = entry.identity.role.as_str();
+    let Some(expected) = stable_name(
+        role,
+        entry.identity.name.as_deref(),
+        entry.identity.value.as_deref(),
+    ) else {
+        return IdentityMatch::NoMatch;
+    };
+    text_identity_match(
+        expected,
+        entry.identity.native_id.as_ref(),
+        stable_name_field(role, actual_name, actual_value),
+        stable_value_field(role, actual_value),
+        actual_identifiers,
+    )
+}
+
+fn description_identity_match(
+    entry: &RefEntry,
+    actual_name: &LocatorField<String>,
+    actual_value: &LocatorField<String>,
+    actual_description: &LocatorField<String>,
+    actual_identifiers: &IdentifierEvidence,
+) -> IdentityMatch {
+    let Some(expected) = crate::tree::accname::non_blank(entry.identity.description.as_deref())
+    else {
+        return IdentityMatch::NoMatch;
+    };
+    text_identity_match(
+        expected,
+        entry.identity.native_id.as_ref(),
+        meaningful_field(actual_description),
+        stable_name_field(entry.identity.role.as_str(), actual_name, actual_value),
+        actual_identifiers,
+    )
+}
+
+fn text_identity_match(
+    expected_text: &str,
+    expected_identifier: Option<&crate::ElementIdentifier>,
+    actual_primary: LocatorField<&str>,
+    actual_fallback: LocatorField<&str>,
+    actual_identifiers: &IdentifierEvidence,
+) -> IdentityMatch {
+    if let Some(expected) = expected_identifier {
+        match identifier_evidence_match(expected, actual_identifiers) {
+            IdentityMatch::Match => {}
+            refusal => return refusal,
+        }
+    }
+    match_primary_identity(expected_text, actual_primary, actual_fallback)
+}
+
+/// Whether a live element still carries one typed identifier. An incomplete
+/// identifier read never proves a non-match, so it reports `Unknown`.
+pub fn identifier_evidence_match(
+    expected: &crate::ElementIdentifier,
+    actual_identifiers: &IdentifierEvidence,
+) -> IdentityMatch {
+    let Some(expected_value) = crate::tree::accname::non_blank(Some(expected.value.as_str()))
+    else {
+        return IdentityMatch::NoMatch;
+    };
+    if actual_identifiers
+        .identifiers()
+        .iter()
+        .any(|actual| actual.kind == expected.kind && actual.value == expected_value)
+    {
+        return IdentityMatch::Match;
+    }
+    if actual_identifiers.is_complete() {
+        IdentityMatch::NoMatch
+    } else {
+        IdentityMatch::Unknown
+    }
 }
 
 #[cfg(test)]
@@ -120,8 +212,9 @@ pub(crate) fn identity_matches(
 /// Public because the Windows resolver composes it with `identity_match` to
 /// keep its AutomationId-first corroboration rule: an id that still resolves
 /// onto a candidate whose stable text drifted must be refuted, the A7-3
-/// wrong-target shape. macOS consumes only `identity_match`, which already
-/// routes id-less entries here; Windows runs the corroboration tier itself.
+/// wrong-target shape. It reads the entry's stable text only, never the
+/// recorded basis, so a caller that gates on the basis can still ask whether
+/// the live text corroborates a candidate.
 pub fn stable_text_match(
     entry: &RefEntry,
     actual_name: &LocatorField<String>,
@@ -241,7 +334,11 @@ fn stable_value_field<'a>(role: &str, value: &'a LocatorField<String>) -> Locato
     }
 }
 
-fn stable_name<'a>(role: &str, name: Option<&'a str>, value: Option<&str>) -> Option<&'a str> {
+pub(crate) fn stable_name<'a>(
+    role: &str,
+    name: Option<&'a str>,
+    value: Option<&str>,
+) -> Option<&'a str> {
     let name = crate::tree::accname::non_blank(name)?;
     if is_mutable_value_role(role)
         && value_matches_name(crate::tree::accname::non_blank(value), name)

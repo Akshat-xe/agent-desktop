@@ -26,7 +26,7 @@ pub(super) fn entry(
             process_instance: Some("test-instance".into()),
         },
         identity: RefEntryIdentity {
-            basis: None,
+            basis: Some(agent_desktop_core::IdentityBasis::Positional),
             retained_object: None,
             role: "cell".into(),
             name: Some("Investors".into()),
@@ -60,19 +60,17 @@ pub(super) fn entry(
 
 #[test]
 fn path_fast_path_requires_a_hard_window_scope() {
-    assert!(!can_use_path_fast_path(&entry(None, None, None, None)));
-    assert!(can_use_path_fast_path(&entry(
-        None,
-        Some("w-10"),
-        None,
-        None
-    )));
-    assert!(can_use_path_fast_path(&entry(
-        None,
-        None,
-        Some("Documents"),
-        None
-    )));
+    let mut unscoped = entry(None, None, None, None);
+    unscoped.identity.basis = Some(agent_desktop_core::IdentityBasis::Name);
+    assert!(!can_use_path_fast_path(&unscoped));
+
+    unscoped.source.source_window_id = Some("w-10".into());
+    assert!(can_use_path_fast_path(&unscoped));
+
+    unscoped.source.source_window_id = None;
+    unscoped.source.source_window_title = Some("Documents".into());
+    assert!(can_use_path_fast_path(&unscoped));
+
     let mut menu = entry(Some(42), Some("w-10"), None, None);
     menu.source.source_surface = SnapshotSurface::Menu;
     assert!(can_use_path_fast_path(&menu));
@@ -110,11 +108,14 @@ fn broad_search_requires_bounds_or_stable_identity() {
     blank.identity.name = None;
 
     assert!(!can_use_broad_search(&blank));
+    assert!(can_use_broad_search(&entry(Some(42), None, None, None)));
+    blank.identity.basis = Some(agent_desktop_core::IdentityBasis::NativeId);
     blank.identity.native_id = Some(agent_desktop_core::ElementIdentifier {
         kind: agent_desktop_core::IdentifierKind::AxDomIdentifier,
         value: "dom-id".into(),
     });
     assert!(can_use_broad_search(&blank));
+    blank.identity.basis = Some(agent_desktop_core::IdentityBasis::Description);
     blank.identity.native_id = None;
     blank.identity.description = Some("Insert Text Box".into());
     assert!(can_use_broad_search(&blank));
@@ -293,9 +294,12 @@ fn ambiguity_reports_bounded_candidate_summaries() {
 
 #[test]
 fn unique_scoped_candidate_resolves_even_after_bounds_move() {
+    let mut stored = entry(Some(42), Some("w-42"), None, None);
+    stored.identity.basis = Some(agent_desktop_core::IdentityBasis::Name);
+
     let handle = classify_candidates(
         vec![AXElement(std::ptr::null_mut())],
-        &entry(Some(42), Some("w-42"), None, None),
+        &stored,
         true,
         Instant::now() + Duration::from_secs(1),
     );
@@ -327,6 +331,7 @@ fn authoritatively_absent_native_identifier_is_a_definitive_mismatch() {
     };
 
     let mut stored = entry(Some(42), Some("w-42"), None, None);
+    stored.identity.basis = Some(agent_desktop_core::IdentityBasis::NativeId);
     stored.identity.native_id = Some(agent_desktop_core::ElementIdentifier {
         kind: agent_desktop_core::IdentifierKind::AxIdentifier,
         value: "stable-id".into(),

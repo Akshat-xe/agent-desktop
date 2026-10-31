@@ -1,5 +1,6 @@
 use agent_desktop_core::{
-    AdapterError, NativeHandle, RefEntry, refs::ref_identity::has_meaningful_identity,
+    AdapterError, NativeHandle, RefEntry, refs::identity_basis_gate::requires_live_uniqueness,
+    refs::ref_identity::has_meaningful_identity,
 };
 
 #[cfg(target_os = "macos")]
@@ -23,7 +24,7 @@ pub(in crate::tree) fn classify_candidates(
                 source_window_verified,
                 deadline,
             )? {
-                retained_handle(candidate)
+                retained_candidate_handle(candidate)
             } else {
                 Err(AdapterError::element_not_found("element"))
             }
@@ -39,6 +40,9 @@ fn candidate_is_sufficiently_verified(
     source_window_verified: bool,
     deadline: std::time::Instant,
 ) -> Result<bool, AdapterError> {
+    if requires_live_uniqueness(&entry.identity) {
+        return Ok(true);
+    }
     if source_window_verified && !candidate_requires_bounds(entry) {
         return Ok(true);
     }
@@ -67,6 +71,9 @@ fn classify_ambiguous_candidates(
     entry: &RefEntry,
     deadline: std::time::Instant,
 ) -> Result<NativeHandle, AdapterError> {
+    if requires_live_uniqueness(&entry.identity) {
+        return Err(ambiguous_target_error(&matches, entry));
+    }
     let has_bounds_hash = entry.geometry.bounds_hash.is_some();
     let mut bounds_matches = Vec::new();
     if has_bounds_hash {
@@ -77,7 +84,7 @@ fn classify_ambiguous_candidates(
         }
     }
     match classify_bounds_matches(bounds_matches.len(), has_bounds_hash) {
-        BoundsMatchOutcome::Resolved => retained_handle(bounds_matches.remove(0)),
+        BoundsMatchOutcome::Resolved => retained_candidate_handle(bounds_matches.remove(0)),
         BoundsMatchOutcome::Stale => Err(stale_ref_from_bounds_mismatch(entry, matches.len())),
         BoundsMatchOutcome::Ambiguous => Err(ambiguous_target_error(&matches, entry)),
     }
@@ -118,7 +125,10 @@ fn stale_ref_from_bounds_mismatch(entry: &RefEntry, candidate_count: usize) -> A
 }
 
 #[cfg(target_os = "macos")]
-fn ambiguous_target_error(matches: &[AXElement], entry: &RefEntry) -> AdapterError {
+pub(in crate::tree) fn ambiguous_target_error(
+    matches: &[AXElement],
+    entry: &RefEntry,
+) -> AdapterError {
     let count = matches.len();
     AdapterError::ambiguous_target(format!(
         "Ambiguous target: {count} candidates matched {}",
@@ -153,7 +163,9 @@ fn text_len(value: Option<&str>) -> usize {
 }
 
 #[cfg(target_os = "macos")]
-fn retained_handle(candidate: AXElement) -> Result<NativeHandle, AdapterError> {
+pub(in crate::tree) fn retained_candidate_handle(
+    candidate: AXElement,
+) -> Result<NativeHandle, AdapterError> {
     if candidate.0.is_null() {
         #[cfg(test)]
         return Ok(NativeHandle::null());

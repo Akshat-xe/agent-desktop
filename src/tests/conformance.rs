@@ -1,9 +1,9 @@
 use agent_desktop_core::{ActionOps, InputOps, ObservationOps, PlatformAdapter, SystemOps};
 use agent_desktop_core::{
     ActionRequest, ActionResult, AdapterError, Deadline, ElementState, ErrorCode,
-    IdentifierEvidence, InteractionLease, LiveElement, LiveIdentity, LocatorField, NativeHandle,
-    Rect, RefCapabilities, RefEntry, RefEntryIdentity, RefGeometry, RefProcess, RefScope,
-    RefSource, SnapshotSurface, actions::capability,
+    IdentifierEvidence, IdentityBasis, InteractionLease, LiveElement, LiveIdentity, LocatorField,
+    NativeHandle, Rect, RefCapabilities, RefEntry, RefEntryIdentity, RefGeometry, RefProcess,
+    RefScope, RefSource, SnapshotSurface, actions::capability,
 };
 use std::sync::atomic::{AtomicU32, Ordering};
 
@@ -168,7 +168,7 @@ fn entry(bounds: Rect) -> RefEntry {
             process_instance: Some("contract-process".into()),
         },
         identity: RefEntryIdentity {
-            basis: None,
+            basis: Some(IdentityBasis::Name),
             retained_object: None,
             role: "button".into(),
             name: Some("OK".into()),

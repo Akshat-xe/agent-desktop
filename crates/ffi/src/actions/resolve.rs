@@ -1,12 +1,13 @@
 use crate::AdAdapter;
-use crate::convert::string::optional_adapter_string;
 use crate::convert::surface::snapshot_surface_from_c;
 use crate::error::{self, AdResult};
 use crate::ffi_try::trap_panic;
+
+use super::ref_input::{optional_string, ref_path, string_array};
 use crate::types::{AdExactRefEntry, AdIdentifierKind, AdNativeHandle, AdRefEntry};
 use agent_desktop_core::{
-    AdapterError, ElementIdentifier, ErrorCode, Rect, RefCapabilities, RefEntry as CoreRefEntry,
-    RefEntryIdentity, RefGeometry, RefProcess, RefScope, RefSource,
+    AdapterError, ElementIdentifier, ErrorCode, IdentityBasis, Rect, RefCapabilities,
+    RefEntry as CoreRefEntry, RefEntryIdentity, RefGeometry, RefProcess, RefScope, RefSource,
 };
 
 const MAX_REF_FIELD_BYTES: usize = 65_536;
@@ -54,6 +55,10 @@ unsafe fn resolve_core_entry(
         }
     };
     let deadline = crate::operation::operation_deadline!();
+    if let Err(error) = agent_desktop_core::refs::identity_basis_gate::basis_gate(&entry.identity) {
+        error::set_last_error(&error);
+        return error::last_error_code();
+    }
     match adapter.inner.resolve_element_strict(entry, deadline) {
         Ok(handle) => {
             match crate::actions::native_handle::into_ffi_handle(adapter_id, handle, process) {
@@ -263,7 +268,11 @@ unsafe fn decode_core_ref_entry(
             process_instance: Some(process_instance),
         },
         identity: RefEntryIdentity {
-            basis: None,
+            basis: Some(identity_basis(
+                native_id.as_ref(),
+                name.as_deref(),
+                description.as_deref(),
+            )),
             retained_object: None,
             role,
             name,
@@ -304,6 +313,26 @@ unsafe fn decode_core_ref_entry(
     Ok(decoded)
 }
 
+/// The basis a caller-supplied entry can prove on its own: the strongest
+/// non-blank identity field it carries. Snapshot uniqueness cannot be proven
+/// here, so the live search that follows must find exactly one match.
+fn identity_basis(
+    native_id: Option<&ElementIdentifier>,
+    name: Option<&str>,
+    description: Option<&str>,
+) -> IdentityBasis {
+    if native_id.is_some_and(|identifier| !identifier.value.trim().is_empty()) {
+        return IdentityBasis::NativeId;
+    }
+    if name.is_some_and(|value| !value.trim().is_empty()) {
+        return IdentityBasis::Name;
+    }
+    if description.is_some_and(|value| !value.trim().is_empty()) {
+        return IdentityBasis::Description;
+    }
+    IdentityBasis::Positional
+}
+
 fn process_identity(
     entry: &CoreRefEntry,
 ) -> Result<agent_desktop_core::ProcessIdentity, AdapterError> {
@@ -317,82 +346,6 @@ fn process_identity(
         entry.process.pid,
         instance,
     ))
-}
-
-unsafe fn optional_string(
-    ptr: *const std::os::raw::c_char,
-    field: &str,
-) -> Result<Option<String>, AdapterError> {
-    optional_adapter_string(ptr, field)
-}
-
-fn check_array_len(
-    len: usize,
-    is_null: bool,
-    field: &str,
-    constant: &str,
-    max: usize,
-) -> Result<(), AdapterError> {
-    if len > max {
-        return Err(AdapterError::new(
-            ErrorCode::InvalidArgs,
-            format!("{field} count {len} exceeds {constant} ({max})"),
-        ));
-    }
-    if is_null {
-        return Err(AdapterError::new(
-            ErrorCode::InvalidArgs,
-            format!("{field} count is nonzero but pointer is null"),
-        ));
-    }
-    Ok(())
-}
-
-unsafe fn string_array(
-    ptr: *const *const std::os::raw::c_char,
-    len: usize,
-    field: &str,
-    constant: &str,
-    max: usize,
-) -> Result<Vec<String>, AdapterError> {
-    if len == 0 {
-        return Ok(Vec::new());
-    }
-    check_array_len(len, ptr.is_null(), field, constant, max)?;
-    let items = unsafe { std::slice::from_raw_parts(ptr, len) };
-    items
-        .iter()
-        .enumerate()
-        .map(|(index, item)| {
-            let element = format!("{field}[{index}]");
-            unsafe { optional_string(*item, &element) }?.ok_or_else(|| {
-                AdapterError::new(ErrorCode::InvalidArgs, format!("{element} is null"))
-            })
-        })
-        .collect()
-}
-
-unsafe fn ref_path(
-    ptr: *const u32,
-    len: usize,
-) -> Result<smallvec::SmallVec<[usize; 8]>, AdapterError> {
-    if len == 0 {
-        return Ok(smallvec::SmallVec::new());
-    }
-    check_array_len(
-        len,
-        ptr.is_null(),
-        "path",
-        "AD_MAX_REF_PATH_DEPTH",
-        crate::types::ref_entry::AD_MAX_REF_PATH_DEPTH,
-    )?;
-    let mut path = smallvec::SmallVec::new();
-    path.extend(
-        unsafe { std::slice::from_raw_parts(ptr, len) }
-            .iter()
-            .map(|item| *item as usize),
-    );
-    Ok(path)
 }
 
 #[cfg(test)]

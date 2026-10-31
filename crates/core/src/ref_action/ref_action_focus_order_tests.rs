@@ -131,6 +131,7 @@ fn execute_within(
     let _clock = crate::wait::deadline::VirtualClock::freeze();
     let entry: RefEntry = serde_json::from_value(serde_json::json!({
         "pid": 1, "process_instance": "test-instance", "role": "button", "name": "Run",
+        "basis": "name",
         "source_window_id": "w-test", "source_surface": "window", "path": [0],
         "bounds": bounds(), "bounds_hash": bounds().bounds_hash(), "available_actions": ["Click"], "states": []
     })).unwrap();

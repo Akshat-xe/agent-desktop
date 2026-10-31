@@ -1,4 +1,5 @@
 use crate::AccessibilityNode;
+use crate::refs::ref_alloc_plan::RefAllocPlan;
 use crate::refs::ref_identity::has_meaningful_identity;
 use crate::refs::{RefEntry, RefMap};
 use std::collections::HashSet;
@@ -6,6 +7,22 @@ use std::collections::HashSet;
 pub(crate) use crate::refs::ref_alloc_config::RefAllocConfig;
 
 pub(crate) use crate::tree::roles::INTERACTIVE_ROLES;
+
+pub(crate) fn identity_from_node(node: &AccessibilityNode) -> crate::RefEntryIdentity {
+    crate::RefEntryIdentity {
+        basis: None,
+        retained_object: node.identity.retained_object.clone(),
+        role: node.role.clone(),
+        name: meaningful_string(node.identity.name.clone()),
+        value: meaningful_string(node.identity.value.clone()),
+        description: meaningful_string(node.identity.description.clone()),
+        native_id: node
+            .identity
+            .native_id
+            .clone()
+            .filter(|id| !id.value.trim().is_empty()),
+    }
+}
 
 pub(crate) fn ref_entry_from_node(
     node: &AccessibilityNode,
@@ -17,24 +34,16 @@ pub(crate) fn ref_entry_from_node(
     let bounds = window_bounds
         .or(node.presentation.bounds)
         .filter(|bounds| bounds.validate().is_ok());
+    let mut identity = identity_from_node(node);
+    identity.basis = Some(crate::refs::identity_basis_counts::unproven_basis(
+        &identity,
+    ));
     RefEntry {
         process: crate::RefProcess {
             pid: source.pid,
             process_instance: source.process_instance.map(str::to_string),
         },
-        identity: crate::RefEntryIdentity {
-            basis: None,
-            retained_object: node.identity.retained_object.clone(),
-            role: node.role.clone(),
-            name: meaningful_string(node.identity.name.clone()),
-            value: meaningful_string(node.identity.value.clone()),
-            description: meaningful_string(node.identity.description.clone()),
-            native_id: node
-                .identity
-                .native_id
-                .clone()
-                .filter(|id| !id.value.trim().is_empty()),
-        },
+        identity,
         geometry: crate::RefGeometry {
             bounds,
             bounds_hash: bounds.and_then(|bounds| bounds.bounds_hash()),
@@ -180,12 +189,19 @@ pub(crate) fn allocate_refs(
     if config.scope.root_ref_id.is_none() {
         plan_skeleton_anchors(&node, &mut Vec::new(), &mut skeleton_anchors);
     }
+    let plan = RefAllocPlan::new(
+        &node,
+        skeleton_anchors,
+        config.scope.path_prefix,
+        config.scope.root_ref_id.is_some(),
+        config.complete,
+    );
     allocate_refs_at_path(
         node,
         refmap,
         config,
         &mut config.scope.path_prefix.to_vec(),
-        &skeleton_anchors,
+        &plan,
     )
 }
 
@@ -248,7 +264,7 @@ fn allocate_refs_at_path(
     refmap: &mut RefMap,
     config: &RefAllocConfig,
     path: &mut Vec<usize>,
-    skeleton_anchors: &HashSet<Vec<usize>>,
+    plan: &RefAllocPlan,
 ) -> Result<AccessibilityNode, crate::AppError> {
     let node_is_ref_able = is_ref_able(&node);
 
@@ -260,17 +276,19 @@ fn allocate_refs_at_path(
             path,
         );
         entry.scope.path_is_absolute = config.scope.root_ref_id.is_some();
+        entry.identity.basis = plan.basis(path);
         if !config.options.include_bounds && has_meaningful_identity(&entry) {
             entry.geometry.bounds = None;
         }
         node.ref_id = allocate_observed_ref(refmap, entry)?;
     }
 
-    let is_skeleton_anchor = !node_is_ref_able && skeleton_anchors.contains(path.as_slice());
+    let is_skeleton_anchor = !node_is_ref_able && plan.is_skeleton_anchor(path);
 
     if is_skeleton_anchor {
         let mut entry = ref_entry_from_node(&node, &config.source, None, path);
         entry.capabilities.available_actions = vec![];
+        entry.identity.basis = plan.basis(path);
         if !config.options.include_bounds && has_meaningful_identity(&entry) {
             entry.geometry.bounds = None;
         }
@@ -285,7 +303,7 @@ fn allocate_refs_at_path(
     for (idx, child) in node.children.into_iter().enumerate() {
         let collapsible = config.options.compact && is_collapsible(&child);
         path.push(idx);
-        let child = allocate_refs_at_path(child, refmap, config, path, skeleton_anchors)?;
+        let child = allocate_refs_at_path(child, refmap, config, path, plan)?;
         path.pop();
         if collapsible {
             if let Some(child) = child.children.into_iter().next() {

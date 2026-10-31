@@ -284,6 +284,7 @@ fn a_structurally_unverifiable_entry_settles_stale_in_one_attempt() {
     .expect("a live fixture process has a token");
 
     let mut entry = crate::tree::walk::walker_fake::ref_entry(&role);
+    entry.identity.basis = Some(agent_desktop_core::IdentityBasis::Positional);
     entry.process = agent_desktop_core::RefProcess {
         pid: agent_desktop_core::ProcessId::from(fixture.process_id()),
         process_instance: Some(token),

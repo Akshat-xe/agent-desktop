@@ -92,6 +92,7 @@ pub fn run_from_ref_with_context(
             root_ref_id: Some(&local_root_ref),
             path_prefix: path_prefix.as_slice(),
         },
+        complete: false,
     };
 
     let (mut tree, refmap) = store.update_existing_snapshot(

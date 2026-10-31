@@ -2,6 +2,7 @@ use super::{LocatorEvidence, LocatorField, ObservationSource, ObservedTree};
 use crate::{
     adapter::SnapshotSurface,
     locator::LocatorQuery,
+    refs::identity_basis_counts::{IdentityBasisCounts, unproven_basis},
     refs::ref_alloc::is_ref_able_role_actions,
     refs::{RefEntry, RefMap, RefPath},
 };
@@ -11,10 +12,25 @@ pub(crate) fn materialize_refmap(
     query: &LocatorQuery,
     selected: Option<&[usize]>,
 ) -> Result<(RefMap, bool), crate::AdapterError> {
+    let structurally_complete = tree.structurally_complete;
     let source = &tree.source;
     let nodes = &mut tree.nodes;
     let mut refmap = RefMap::new();
+    let mut counts = IdentityBasisCounts::new();
+    if !structurally_complete {
+        counts.mark_incomplete();
+    }
     let mut complete = true;
+    for node in nodes.iter() {
+        let (addressable, _) = addressability(&node.evidence);
+        if !addressable {
+            continue;
+        }
+        if !identity_fields_readable(&node.evidence) {
+            counts.mark_incomplete();
+        }
+        counts.record(&ref_entry(node, source, query).identity);
+    }
     let indices = selected
         .map(|indices| indices.to_vec())
         .unwrap_or_else(|| (0..nodes.len()).collect());
@@ -25,13 +41,24 @@ pub(crate) fn materialize_refmap(
         if !addressable {
             continue;
         }
-        let entry = ref_entry(node, source, query);
+        let mut entry = ref_entry(node, source, query);
+        entry.identity.basis = Some(counts.basis(&entry.identity));
         let ref_id = refmap.try_allocate(entry).map_err(|error| {
             crate::AdapterError::new(crate::ErrorCode::InvalidArgs, error.to_string())
         })?;
         nodes[index].ref_id = Some(ref_id);
     }
     Ok((refmap, complete))
+}
+
+/// Whether every field that decides this entry's identity was read. A candidate
+/// whose name, description or identifier list is unknown could be a look-alike
+/// the survey never saw, so uniqueness stays unproven for the whole tree.
+fn identity_fields_readable(evidence: &LocatorEvidence) -> bool {
+    !evidence.name.is_unknown()
+        && !evidence.description.is_unknown()
+        && !evidence.value.is_unknown()
+        && evidence.identifiers.is_complete()
 }
 
 pub(crate) fn addressability(evidence: &LocatorEvidence) -> (bool, bool) {
@@ -117,6 +144,7 @@ pub(crate) fn ref_entry(
             path: node.path.clone(),
         },
     };
+    entry.identity.basis = Some(unproven_basis(&entry.identity));
     apply_source(&mut entry, source, &node.path);
     entry
 }

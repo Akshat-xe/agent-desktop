@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use agent_desktop_core::{AdapterError, Deadline, LocatorEvidence, RefEntry};
+use agent_desktop_core::{AdapterError, Deadline, IdentityBasis, LocatorEvidence, RefEntry};
 
 use super::path_descent::level_of;
 use super::resolve_search::evaluate;
@@ -71,6 +71,34 @@ pub(in crate::tree) fn node(role: u32, name: &str, width: i32, height: i32) -> O
 
 pub(in crate::tree) fn deadline() -> Deadline {
     Deadline::after(5_000).expect("a five second deadline builds")
+}
+
+fn non_blank(text: Option<&str>) -> Option<&str> {
+    text.filter(|value| !value.trim().is_empty())
+}
+
+/// The basis the stored fields support: the identifier when there is one,
+/// otherwise the name, otherwise the description, otherwise positional. A test
+/// about look-alikes sets the basis it means, since only the snapshot can know
+/// whether a field was unique in its scope.
+fn recorded_basis(identity: &agent_desktop_core::RefEntryIdentity) -> IdentityBasis {
+    if non_blank(
+        identity
+            .native_id
+            .as_ref()
+            .map(|identifier| identifier.value.as_str()),
+    )
+    .is_some()
+    {
+        return IdentityBasis::NativeId;
+    }
+    if non_blank(identity.name.as_deref()).is_some() {
+        return IdentityBasis::Name;
+    }
+    if non_blank(identity.description.as_deref()).is_some() {
+        return IdentityBasis::Description;
+    }
+    IdentityBasis::Positional
 }
 
 impl Fake {
@@ -200,6 +228,7 @@ impl Fake {
         let mut entry = ref_entry(evidence.role.known().expect("a role was read"));
         entry.identity.name = evidence.name.known().filter(|n| !n.is_empty()).cloned();
         entry.identity.native_id = evidence.identifiers.preferred_identifier().cloned();
+        entry.identity.basis = Some(recorded_basis(&entry.identity));
         if keep_rect {
             let window = evidence.ref_evidence.window_bounds.known().copied();
             entry.geometry.bounds =

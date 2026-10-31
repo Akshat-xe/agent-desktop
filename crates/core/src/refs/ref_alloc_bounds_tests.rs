@@ -28,6 +28,7 @@ fn a_nameless_positive_area_ref_allocated_with_bounds_hidden_keeps_its_only_iden
             root_ref_id: None,
             path_prefix: &[],
         },
+        complete: true,
     };
 
     let out = allocate_refs(root, &mut refmap, &config).unwrap();
@@ -74,6 +75,7 @@ fn a_ref_with_its_own_identity_still_has_its_rect_stripped() {
             root_ref_id: None,
             path_prefix: &[],
         },
+        complete: true,
     };
 
     let out = allocate_refs(root, &mut refmap, &config).unwrap();

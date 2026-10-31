@@ -70,3 +70,7 @@ pub(crate) fn validate_ref_entry(entry: &RefEntry) -> Result<(), AppError> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "refs_validate_tests.rs"]
+mod tests;

@@ -18,6 +18,7 @@ fn entry_for(fixture: &HostedFixture, token: String, window_handle: isize) -> Re
         process_instance: Some(token),
     };
     entry.identity.name = Some("OK".into());
+    entry.identity.basis = Some(agent_desktop_core::IdentityBasis::Name);
     entry.source.source_app = Some("fixture.exe".into());
     entry.source.source_window_id = Some(format!("w-{window_handle}"));
     entry

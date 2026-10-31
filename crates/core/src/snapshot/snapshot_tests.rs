@@ -33,6 +33,7 @@ fn run_config(compact: bool, interactive_only: bool) -> RefAllocConfig<'static> 
             root_ref_id: None,
             path_prefix: &[],
         },
+        complete: true,
     }
 }
 
@@ -230,6 +231,7 @@ fn test_skeleton_anchor_suppressed_in_drilldown() {
             root_ref_id: Some("@e3"),
             path_prefix: &[],
         },
+        complete: true,
     };
     let result = ref_alloc::allocate_refs(root, &mut refmap, &config).unwrap();
 
@@ -315,6 +317,7 @@ fn test_skeleton_fixture_matches_golden() {
             root_ref_id: None,
             path_prefix: &[],
         },
+        complete: true,
     };
     let result = ref_alloc::allocate_refs(root, &mut refmap, &config).unwrap();
 

@@ -87,6 +87,7 @@ fn a_headed_type_on_a_session_that_cannot_activate_skips_window_focus() {
     let adapter = KeyboardAdapter::default();
     let entry: RefEntry = serde_json::from_value(serde_json::json!({
         "pid": 1, "process_instance": "test-instance", "role": "textfield", "name": "Field",
+        "basis": "name",
         "source_window_id": "w-test", "source_surface": "window", "path": [0],
         "available_actions": ["TypeText"], "states": []
     }))

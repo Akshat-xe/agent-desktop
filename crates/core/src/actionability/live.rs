@@ -79,6 +79,7 @@ pub(crate) fn check_live_with_stability_or_gap(
 }
 
 fn observe(target: &LiveCheckTarget<'_>) -> Result<ActionabilityEvidence, AdapterError> {
+    crate::refs::identity_basis_gate::basis_gate(&target.entry.identity)?;
     let live = match target
         .adapter
         .get_live_element(target.handle, target.deadline)

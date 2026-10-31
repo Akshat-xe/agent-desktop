@@ -1,5 +1,6 @@
 use super::*;
 use crate::tree::fixture::ensure_test_apartment;
+use crate::tree::resolve::resolve_match::should_stop_collecting;
 use agent_desktop_core::{
     ElementIdentifier, IdentifierEvidence, IdentifierKind, LocatorField, NodeDescriptor,
 };
