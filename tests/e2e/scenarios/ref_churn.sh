@@ -64,10 +64,12 @@ churn_expect_defaults() {
 
 churn_live_fields() {
     local native_id="${1:-}" label="${2:-}" output
-    if [ -n "$label" ]; then
+    if [ -n "$native_id" ] && [ -n "$label" ]; then
         output="$("$bin" find --app "$app" --role textfield --limit 50 --native-id "$native_id" --name "$label" 2>/dev/null)"
     elif [ -n "$native_id" ]; then
         output="$("$bin" find --app "$app" --role textfield --limit 50 --native-id "$native_id" 2>/dev/null)"
+    elif [ -n "$label" ]; then
+        output="$("$bin" find --app "$app" --role textfield --limit 50 --name "$label" 2>/dev/null)"
     else
         output="$("$bin" find --app "$app" --role textfield --limit 50 2>/dev/null)"
     fi
@@ -102,6 +104,94 @@ churn_expect_live_value() {
     assert "$label" \
         "$([ "$(json_field "$waited" data.found)" = "True" ] && [ "$observed" = "$expected" ] && echo 1 || echo 0)" \
         "expected='$expected' observed='$observed' matched=$(json_field "$waited" data.observed.matched) ok=$(json_field "$output" ok) code=$(json_field "$output" error.code)"
+}
+
+churn_expect_values() {
+    local label="$1" native_id="$2" name="$3" expected="$4" observed
+    observed="$(churn_live_fields "$native_id" "$name")" || observed=""
+    assert "$label" "$([ "$observed" = "$expected" ] && echo 1 || echo 0)" \
+        "expected=$expected observed=$observed"
+}
+
+churn_field_geometry() {
+    local native_id="$1" output
+    output="$("$bin" snapshot --app "$app" --include-bounds --max-depth 30 2>/dev/null)"
+    printf '%s' "$output" | python3 -c '
+import json, sys
+data = json.loads(sys.stdin.read() or "{}")
+payload = data.get("data") or {}
+if data.get("ok") is not True or payload.get("complete") is not True:
+    raise SystemExit(2)
+found = []
+
+def walk(node, trail, index):
+    here = trail + [str(node.get("role") or "?") + ":" + str(index)]
+    identifier = node.get("native_id")
+    value = identifier.get("value") if isinstance(identifier, dict) else identifier
+    if value == sys.argv[1]:
+        found.append({"path": here, "bounds": node.get("bounds")})
+    for offset, child in enumerate(node.get("children") or []):
+        walk(child, here, offset)
+
+walk(payload.get("tree") or {}, [], 0)
+print(json.dumps(found, sort_keys=True, separators=(",", ":")))
+' "$native_id"
+}
+
+churn_geometry_kept() {
+    local before="$1" after="$2"
+    python3 -c '
+import json, sys
+before = json.loads(sys.argv[1] or "[]")
+after = json.loads(sys.argv[2] or "[]")
+if len(before) != 1 or len(after) != 2:
+    print(0)
+    raise SystemExit
+original = before[0]
+same = [row for row in after if row.get("path") == original.get("path")]
+moved = [row for row in after if row.get("path") != original.get("path")]
+ok = (
+    len(same) == 1
+    and same[0].get("bounds") is not None
+    and same[0].get("bounds") == original.get("bounds")
+    and len(moved) == 1
+    and moved[0].get("bounds") is not None
+    and moved[0].get("bounds") != original.get("bounds")
+)
+print(1 if ok else 0)
+' "$before" "$after"
+}
+
+churn_snapshot_ref() {
+    local name="$1" native="$2" output
+    output="$("$bin" snapshot --app "$app" --max-depth 30 2>/dev/null)"
+    printf '%s' "$output" | python3 -c '
+import json, sys
+data = json.loads(sys.stdin.read() or "{}")
+payload = data.get("data") or {}
+if data.get("ok") is not True or payload.get("complete") is not True:
+    raise SystemExit(2)
+snapshot_id = payload.get("snapshot_id")
+if not snapshot_id:
+    raise SystemExit(3)
+found = []
+
+def walk(node):
+    identifier = node.get("native_id")
+    value = identifier.get("value") if isinstance(identifier, dict) else identifier
+    if node.get("name") == sys.argv[1] and node.get("ref_id"):
+        found.append((node["ref_id"], bool(value)))
+    for child in node.get("children") or []:
+        walk(child)
+
+walk(payload.get("tree") or {})
+wanted = [ref for ref, has_id in found if has_id == (sys.argv[2] == "1")]
+if len(wanted) != 1:
+    raise SystemExit(4)
+ref = wanted[0]
+qualified = ref if ":" in ref else "@" + snapshot_id + ":" + ref.lstrip("@")
+print(qualified, snapshot_id, sep="\t")
+' "$name" "$native"
 }
 
 churn_assert_no_field_changed() {
@@ -246,6 +336,49 @@ churn_assert_no_field_changed "duplicate batch" "$fields_before" "$fields_after"
 churn_expect_defaults "duplicate batch"
 churn_stop
 
+note "Bounded duplicate: a unique identifier is refused even when bounds still select the original"
+churn_launch
+require_target_by_id bounded_add button add-bounded-duplicate
+require_target_by_id bounded_editor textfield bounded-editor
+first_write="$("$bin" set-value "$(target_ref "$bounded_editor")" bounded-ok 2>/dev/null)"
+churn_expect_live_value "the unique bounded editor accepts its first write" \
+    "$bounded_editor" bounded-editor "" bounded-ok "$first_write"
+bounded_before="$(churn_field_geometry bounded-editor)" || abort_suite "the bounded editor geometry could not be read"
+assert "the captured ref starts as the only bounded-editor field" \
+    "$(python3 -c 'import json,sys; print(1 if len(json.loads(sys.argv[1] or "[]")) == 1 else 0)' "$bounded_before")" \
+    "before=$bounded_before"
+act_target "$bounded_add" click >/dev/null 2>&1
+assert "bounded duplicate applied before the refusal" "$(churn_has_text "Bounded layout: duplicated")" ""
+bounded_count="$("$bin" find --app "$app" --role textfield --native-id bounded-editor --count 2>/dev/null)"
+assert "two live fields now share the bounded-editor identifier" \
+    "$([ "$(json_field "$bounded_count" data.count)" = "2" ] && echo 1 || echo 0)" \
+    "count=$(json_field "$bounded_count" data.count)"
+bounded_after="$(churn_field_geometry bounded-editor)" || abort_suite "the duplicated bounded editor geometry could not be read"
+assert "the duplicate leaves the captured field's tree path and bounds exact while its own bounds differ" \
+    "$(churn_geometry_kept "$bounded_before" "$bounded_after")" \
+    "before=$bounded_before after=$bounded_after"
+churn_expect_values "both bounded editors keep their own values before the refusal" \
+    bounded-editor "" '["Bounded duplicate","bounded-ok"]'
+churn_capture_fields fields_before
+output="$("$bin" set-value "$(target_ref "$bounded_editor")" bounded-poison 2>/dev/null)"
+churn_capture_fields fields_after
+churn_assert_refused "the bounded-editor ref is AMBIGUOUS_TARGET without delivery" "$output" error AMBIGUOUS_TARGET
+assert "the refusal names both live candidates instead of choosing by bounds" \
+    "$([ "$(json_field "$output" error.details.candidate_count)" = "2" ] && echo 1 || echo 0)" \
+    "candidate_count=$(json_field "$output" error.details.candidate_count) kind=$(json_field "$output" error.details.kind)"
+churn_assert_no_field_changed "bounded duplicate direct" "$fields_before" "$fields_after" "bounded-poison"
+churn_expect_values "the direct refusal changed neither bounded editor" \
+    bounded-editor "" '["Bounded duplicate","bounded-ok"]'
+churn_capture_fields fields_before
+batch_output="$(churn_batch_set_value "$(target_ref "$bounded_editor")" bounded-batch-poison)"
+churn_capture_fields fields_after
+churn_assert_refused "batch also reports AMBIGUOUS_TARGET without delivery" \
+    "$batch_output" data.results.0.error AMBIGUOUS_TARGET
+churn_assert_no_field_changed "bounded duplicate batch" "$fields_before" "$fields_after" "bounded-batch-poison"
+churn_expect_values "the batch refusal changed neither bounded editor" \
+    bounded-editor "" '["Bounded duplicate","bounded-ok"]'
+churn_stop
+
 note "Equal values under one identifier: every capture is refused after one field disappears"
 churn_launch
 require_target_nth equal_first equal-title 0
@@ -315,6 +448,40 @@ churn_assert_refused "batch also reports STALE_REF without delivery" \
     "$batch_output" data.results.0.error STALE_REF
 churn_assert_no_field_changed "labeled removal batch" "$fields_before" "$fields_after" "poisoned"
 churn_expect_defaults "labeled removal batch"
+churn_stop
+
+note "Identified and id-less twins: the id-less ref never lands in the identified field"
+churn_launch
+require_target_by_id twin_remove button remove-plain-twin
+twin_plain="$(churn_snapshot_ref "Twin label" 0)" || abort_suite "the id-less Twin label field is missing from the snapshot"
+churn_expect_values "the identified twin starts with its own value" twin-identified "" '["Twin identified"]'
+churn_expect_values "both twin fields are live before the removal" "" "Twin label" '["Twin identified","Twin plain"]'
+act_target "$twin_remove" click >/dev/null 2>&1
+assert "twin removal applied before the refusal" "$(churn_has_text "Twin layout: removed")" ""
+twin_count="$("$bin" find --app "$app" --role textfield --name "Twin label" --count 2>/dev/null)"
+assert "one labelled twin survives the removal" \
+    "$([ "$(json_field "$twin_count" data.count)" = "1" ] && echo 1 || echo 0)" \
+    "count=$(json_field "$twin_count" data.count)"
+churn_expect_values "the survivor is the identified twin" "" "Twin label" '["Twin identified"]'
+churn_capture_fields fields_before
+output="$("$bin" set-value "$(target_ref "$twin_plain")" twin-poison 2>/dev/null)"
+churn_capture_fields fields_after
+churn_assert_refused "the id-less twin ref is AMBIGUOUS_TARGET without delivery" "$output" error AMBIGUOUS_TARGET
+assert "the id-less capture was refused because its name was not unique across the role" \
+    "$([ "$(json_field "$output" error.details.kind)" = "identity_not_unique" ] && echo 1 || echo 0)" \
+    "kind=$(json_field "$output" error.details.kind) code=$(json_field "$output" error.code)"
+churn_assert_no_field_changed "id-less twin direct" "$fields_before" "$fields_after" "twin-poison"
+churn_expect_values "the identified twin kept its value after the direct refusal" twin-identified "" '["Twin identified"]'
+churn_capture_fields fields_before
+batch_output="$(churn_batch_set_value "$(target_ref "$twin_plain")" twin-batch-poison)"
+churn_capture_fields fields_after
+churn_assert_refused "batch also refuses the id-less twin ref" \
+    "$batch_output" data.results.0.error AMBIGUOUS_TARGET
+assert "the batch refusal reports the same identity_not_unique reason" \
+    "$([ "$(json_field "$batch_output" data.results.0.error.details.kind)" = "identity_not_unique" ] && echo 1 || echo 0)" \
+    "kind=$(json_field "$batch_output" data.results.0.error.details.kind)"
+churn_assert_no_field_changed "id-less twin batch" "$fields_before" "$fields_after" "twin-batch-poison"
+churn_expect_values "the identified twin kept its value after the batch refusal" twin-identified "" '["Twin identified"]'
 churn_stop
 
 note "Unlabeled look-alikes are refused before any change"
