@@ -3,12 +3,12 @@
 
 use crate::refs::identity_basis_counts::IdentityBasisCounts;
 use crate::refs::ref_alloc::{identity_from_node, is_ref_able};
-use crate::{AccessibilityNode, IdentityBasis};
-use std::collections::{HashMap, HashSet};
+use crate::{AccessibilityNode, IdentityBasis, RefEntryIdentity};
+use std::collections::HashSet;
 
 pub(crate) struct RefAllocPlan {
     skeleton_anchors: HashSet<Vec<usize>>,
-    bases: HashMap<Vec<usize>, IdentityBasis>,
+    counts: IdentityBasisCounts,
 }
 
 impl RefAllocPlan {
@@ -25,12 +25,9 @@ impl RefAllocPlan {
         }
         let mut path = path_prefix.to_vec();
         Self::count_look_alikes(root, &mut path, &skeleton_anchors, &mut counts);
-        let mut bases = HashMap::new();
-        let mut path = path_prefix.to_vec();
-        Self::record_bases(root, &mut path, &skeleton_anchors, &counts, &mut bases);
         Self {
             skeleton_anchors,
-            bases,
+            counts,
         }
     }
 
@@ -38,8 +35,8 @@ impl RefAllocPlan {
         self.skeleton_anchors.contains(path)
     }
 
-    pub(crate) fn basis(&self, path: &[usize]) -> Option<IdentityBasis> {
-        self.bases.get(path).copied()
+    pub(crate) fn basis(&self, identity: &RefEntryIdentity) -> IdentityBasis {
+        self.counts.basis(identity)
     }
 
     fn count_look_alikes(
@@ -57,24 +54,6 @@ impl RefAllocPlan {
         for (index, child) in node.children.iter().enumerate() {
             path.push(index);
             Self::count_look_alikes(child, path, anchors, counts);
-            path.pop();
-        }
-    }
-
-    fn record_bases(
-        node: &AccessibilityNode,
-        path: &mut Vec<usize>,
-        anchors: &HashSet<Vec<usize>>,
-        counts: &IdentityBasisCounts,
-        bases: &mut HashMap<Vec<usize>, IdentityBasis>,
-    ) {
-        if receives_ref(node, path, anchors) {
-            let identity = identity_from_node(node);
-            bases.insert(path.clone(), counts.basis(&identity));
-        }
-        for (index, child) in node.children.iter().enumerate() {
-            path.push(index);
-            Self::record_bases(child, path, anchors, counts, bases);
             path.pop();
         }
     }

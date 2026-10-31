@@ -82,7 +82,7 @@ pub(super) fn selected_matches(
             {
                 return Err(changed_during_hydration().into());
             }
-            match anchor_matches(&observed_anchor(&preliminary), node) {
+            match anchor_matches(&preliminary, node) {
                 IdentityMatch::Match => {}
                 IdentityMatch::NoMatch => return Err(changed_during_hydration().into()),
                 IdentityMatch::Unknown => {

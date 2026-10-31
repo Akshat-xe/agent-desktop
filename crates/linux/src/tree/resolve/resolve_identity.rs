@@ -2,7 +2,8 @@ use agent_desktop_core::{
     BoundsSpace, IdentityBasis, IdentityMatch, LocatorEvidence, LocatorField, Rect, RefEntry,
     RefGeometry,
     refs::ref_identity::{
-        has_meaningful_identity, has_stable_text_identity, identity_match, stable_text_match,
+        has_meaningful_identity, has_stable_text_identity, identifier_evidence_match,
+        identity_match, stable_text_match,
     },
 };
 
@@ -207,16 +208,7 @@ fn identifier_admits(entry: &RefEntry, evidence: &LocatorEvidence) -> Admission 
     if non_blank(Some(expected.value.as_str())).is_none() {
         return Admission::Collect;
     }
-    let matched = evidence
-        .identifiers
-        .identifiers()
-        .iter()
-        .any(|actual| actual.kind == expected.kind && actual.value == expected.value);
-    match (matched, evidence.identifiers.is_complete()) {
-        (true, _) => Admission::Collect,
-        (false, true) => Admission::Reject,
-        (false, false) => Admission::Unread,
-    }
+    verdict_admission(identifier_evidence_match(expected, &evidence.identifiers))
 }
 
 /// The description a ref recorded must be the live node's description. The

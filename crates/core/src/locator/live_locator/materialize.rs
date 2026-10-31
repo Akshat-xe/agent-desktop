@@ -1,5 +1,6 @@
 use super::{LocatorEvidence, LocatorField, ObservationSource, ObservedTree};
 use crate::{
+    RefEntryIdentity,
     adapter::SnapshotSurface,
     locator::LocatorQuery,
     refs::identity_basis_counts::{IdentityBasisCounts, unproven_basis},
@@ -20,7 +21,7 @@ pub(crate) fn survey_counts(tree: &ObservedTree, query: &LocatorQuery) -> Identi
             continue;
         }
         mark_unread_fields(&mut counts, &node.evidence);
-        counts.record(&ref_entry(node, &tree.source, query).identity);
+        counts.record(&ref_identity(&node.evidence, query));
     }
     counts
 }
@@ -101,38 +102,37 @@ pub(crate) fn screen_bounds(evidence: &LocatorEvidence) -> Option<crate::Rect> {
     evidence.ref_evidence.bounds.known().copied()
 }
 
+fn ref_identity(evidence: &LocatorEvidence, query: &LocatorQuery) -> RefEntryIdentity {
+    let mut identity = RefEntryIdentity {
+        basis: None,
+        retained_object: evidence.identifiers.retained_object().map(str::to_owned),
+        role: evidence
+            .role
+            .known()
+            .cloned()
+            .unwrap_or_else(|| "unknown".into()),
+        name: evidence.name.meaningful_string(),
+        value: evidence.value.meaningful_string(),
+        description: evidence.description.meaningful_string(),
+        native_id: selected_identifier(evidence, query.identity.native_id.as_deref()),
+    };
+    identity.basis = Some(unproven_basis(&identity));
+    identity
+}
+
 pub(crate) fn ref_entry(
     node: &super::ObservedNode,
     source: &ObservationSource,
     query: &LocatorQuery,
 ) -> RefEntry {
-    let role = node
-        .evidence
-        .role
-        .known()
-        .cloned()
-        .unwrap_or_else(|| "unknown".into());
     let window = node.evidence.ref_evidence.window_bounds.known().copied();
     let bounds = window.or_else(|| node.evidence.ref_evidence.bounds.known().copied());
-    let identifier = selected_identifier(&node.evidence, query.identity.native_id.as_deref());
     let mut entry = RefEntry {
         process: crate::RefProcess {
             pid: crate::ProcessId::new(0),
             process_instance: None,
         },
-        identity: crate::RefEntryIdentity {
-            basis: None,
-            retained_object: node
-                .evidence
-                .identifiers
-                .retained_object()
-                .map(str::to_owned),
-            role: role.clone(),
-            name: node.evidence.name.meaningful_string(),
-            value: node.evidence.value.meaningful_string(),
-            description: node.evidence.description.meaningful_string(),
-            native_id: identifier,
-        },
+        identity: ref_identity(&node.evidence, query),
         geometry: crate::RefGeometry {
             bounds,
             bounds_hash: bounds.as_ref().and_then(|value| value.bounds_hash()),
@@ -155,7 +155,6 @@ pub(crate) fn ref_entry(
             path: node.path.clone(),
         },
     };
-    entry.identity.basis = Some(unproven_basis(&entry.identity));
     apply_source(&mut entry, source, &node.path);
     entry
 }

@@ -3,15 +3,8 @@
 //! Every length is a caller-supplied count, so each read checks it against the
 //! published `AD_MAX_*` constant and against the pointer before touching memory.
 
-use crate::convert::string::optional_adapter_string;
+use crate::convert::string::required_adapter_string;
 use agent_desktop_core::{AdapterError, ErrorCode};
-
-pub(crate) unsafe fn optional_string(
-    ptr: *const std::os::raw::c_char,
-    field: &str,
-) -> Result<Option<String>, AdapterError> {
-    optional_adapter_string(ptr, field)
-}
 
 pub(crate) fn check_array_len(
     len: usize,
@@ -50,12 +43,7 @@ pub(crate) unsafe fn string_array(
     items
         .iter()
         .enumerate()
-        .map(|(index, item)| {
-            let element = format!("{field}[{index}]");
-            unsafe { optional_string(*item, &element) }?.ok_or_else(|| {
-                AdapterError::new(ErrorCode::InvalidArgs, format!("{element} is null"))
-            })
-        })
+        .map(|(index, item)| required_adapter_string(*item, &format!("{field}[{index}]")))
         .collect()
 }
 
