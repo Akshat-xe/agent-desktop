@@ -197,3 +197,7 @@ fn collect_unique_recursive(
 #[cfg(test)]
 #[path = "resolve_unique_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "resolve_unique_more_tests.rs"]
+mod tests_more;

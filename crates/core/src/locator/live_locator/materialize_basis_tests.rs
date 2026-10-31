@@ -167,3 +167,72 @@ fn an_unread_description_blocks_only_a_description_basis() {
         ]
     );
 }
+
+#[test]
+fn identical_text_in_different_roles_earns_the_name_basis_in_both() {
+    let bases = materialized_bases(
+        vec![
+            node(0, evidence("window", Some("Fixture")), vec![1, 2], &[]),
+            node(1, evidence("button", Some("Save")), vec![], &[0]),
+            node(2, evidence("link", Some("Save")), vec![], &[1]),
+        ],
+        true,
+    );
+
+    assert_eq!(
+        bases,
+        [Some(IdentityBasis::Name), Some(IdentityBasis::Name)],
+        "identical text in another role is not a look-alike"
+    );
+}
+
+#[test]
+fn identical_text_in_different_identifier_groups_is_not_ambiguous() {
+    let save = with_identifier(evidence("button", Some("Save")), "shared");
+    let cancel = with_identifier(evidence("button", Some("Cancel")), "shared");
+    let elsewhere = with_identifier(evidence("button", Some("Save")), "elsewhere");
+    let bases = materialized_bases(
+        vec![
+            node(0, evidence("window", Some("Fixture")), vec![1, 2, 3], &[]),
+            node(1, save, vec![], &[0]),
+            node(2, cancel, vec![], &[1]),
+            node(3, elsewhere, vec![], &[1]),
+        ],
+        true,
+    );
+
+    assert_eq!(
+        bases,
+        [
+            Some(IdentityBasis::Name),
+            Some(IdentityBasis::Name),
+            Some(IdentityBasis::NativeId)
+        ],
+        "identical text under another identifier is not a look-alike"
+    );
+}
+
+#[test]
+fn an_unread_name_on_another_element_leaves_a_unique_identifier_proven() {
+    let mut unreadable = evidence("button", Some("Cancel"));
+    unreadable.name = crate::LocatorField::Unknown;
+    let bases = materialized_bases(
+        vec![
+            node(0, evidence("window", Some("Fixture")), vec![1, 2], &[]),
+            node(
+                1,
+                with_identifier(evidence("button", Some("Save")), "save-button"),
+                vec![],
+                &[0],
+            ),
+            node(2, unreadable, vec![], &[1]),
+        ],
+        true,
+    );
+
+    assert_eq!(
+        bases[0],
+        Some(IdentityBasis::NativeId),
+        "a look-alike whose identifiers were read cannot share this identifier"
+    );
+}

@@ -6,13 +6,13 @@ use agent_desktop_core::{
     LocatorRefEvidence,
 };
 
-fn identity_entry(basis: IdentityBasis) -> RefEntry {
+pub(super) fn identity_entry(basis: IdentityBasis) -> RefEntry {
     let mut stored = entry(Some(42), Some("w-42"), None, None);
     stored.identity.basis = Some(basis);
     stored
 }
 
-fn evidence(
+pub(super) fn evidence(
     role: LocatorField<String>,
     name: LocatorField<String>,
     description: LocatorField<String>,
@@ -223,4 +223,93 @@ fn a_duplicate_is_never_reported_as_a_complete_single_match() {
     assert_eq!(classify_unique_matches(1, true), UniqueOutcome::Resolved);
     assert_eq!(classify_unique_matches(0, true), UniqueOutcome::Absent);
     assert_eq!(classify_unique_matches(0, false), UniqueOutcome::Incomplete);
+}
+
+fn budgeted_context(max_nodes: usize, deadline: std::time::Instant) -> ResolveReadContext {
+    let mut context = ResolveReadContext::new(deadline);
+    context.usage = crate::tree::observation_usage::ObservationUsage::new(
+        agent_desktop_core::ObservationBudget {
+            max_nodes,
+            ..agent_desktop_core::ObservationBudget::default()
+        },
+    );
+    context
+}
+
+#[test]
+fn one_match_then_a_depth_limit_cut_never_resolves() {
+    let stored = identity_entry(IdentityBasis::NativeId);
+    let mut tally = UniqueTally::default();
+    tally.record(AXElement(std::ptr::null_mut()));
+    tally.mark_incomplete(incomplete_traversal("depth_limit", 50));
+
+    let error = tally
+        .into_resolution(&stored)
+        .err()
+        .expect("a match found above a depth cut must never resolve");
+
+    assert_eq!(error.code, ErrorCode::AppUnresponsive);
+    let details = error.details.unwrap();
+    assert_eq!(details["kind"], "resolution_traversal_incomplete");
+    assert_eq!(details["phase"], "depth_limit");
+    assert_eq!(details["complete"], false);
+}
+
+#[test]
+fn one_match_then_a_deadline_cut_never_resolves() {
+    let stored = identity_entry(IdentityBasis::Name);
+    let mut tally = UniqueTally::default();
+    tally.record(AXElement(std::ptr::null_mut()));
+    tally.mark_incomplete(AdapterError::timeout(
+        "the live identity count exceeded its deadline",
+    ));
+
+    let error = tally
+        .into_resolution(&stored)
+        .err()
+        .expect("a timeout after one match must never resolve");
+
+    assert_eq!(error.code, ErrorCode::Timeout);
+}
+
+#[test]
+fn one_match_then_an_unreadable_subtree_never_resolves() {
+    let stored = identity_entry(IdentityBasis::Description);
+    let mut tally = UniqueTally::default();
+    tally.record(AXElement(std::ptr::null_mut()));
+    tally.mark_incomplete(incomplete_traversal("children", 4));
+
+    let error = tally
+        .into_resolution(&stored)
+        .err()
+        .expect("an unreadable subtree after one match must never resolve");
+
+    assert_eq!(error.code, ErrorCode::AppUnresponsive);
+    let details = error.details.unwrap();
+    assert_eq!(details["kind"], "resolution_traversal_incomplete");
+    assert_eq!(details["phase"], "children");
+}
+
+#[test]
+fn a_node_budget_cut_before_the_first_read_never_resolves() {
+    let stored = identity_entry(IdentityBasis::NativeId);
+    let mut context = budgeted_context(
+        1,
+        std::time::Instant::now() + std::time::Duration::from_secs(1),
+    );
+    assert!(context.usage.claim_node());
+
+    let error = find_unique_entry_in_roots(
+        &[AXElement(std::ptr::null_mut())],
+        &stored,
+        50,
+        &mut context,
+    )
+    .err()
+    .expect("a count cut short by the node budget must never resolve even with no match");
+
+    assert_eq!(error.code, ErrorCode::AppUnresponsive);
+    let details = error.details.unwrap();
+    assert_eq!(details["kind"], "resolution_traversal_incomplete");
+    assert_eq!(details["phase"], "node_budget");
 }

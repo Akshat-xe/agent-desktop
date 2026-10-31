@@ -131,3 +131,52 @@ fn a_hydrated_match_keeps_the_basis_its_survey_proved() {
         Some(crate::IdentityBasis::NativeId)
     );
 }
+
+#[test]
+fn a_name_anchor_is_refuted_by_a_look_alike_in_another_identifier_group() {
+    use crate::{ElementIdentifier, IdentifierEvidence, IdentifierKind, LocatorField};
+    let recorded = ElementIdentifier {
+        kind: IdentifierKind::AxIdentifier,
+        value: "row-1".into(),
+    };
+    let mut observed = node(0, evidence("cell", Some("Investors")), vec![], &[]);
+    observed.evidence.identifiers = IdentifierEvidence::typed([recorded], Some(0), true);
+    let tree = tree(vec![observed.clone()], vec![0], true);
+    let mut entry =
+        super::super::materialize::ref_entry(&observed, &tree.source, &LocatorQuery::default());
+    entry.identity.basis = Some(crate::IdentityBasis::Name);
+    assert_eq!(entry.identity.name.as_deref(), Some("Investors"));
+    assert_eq!(anchor_matches(&entry, &observed), IdentityMatch::Match);
+
+    let mut look_alike = observed.clone();
+    look_alike.evidence.identifiers = IdentifierEvidence::typed(
+        [ElementIdentifier {
+            kind: IdentifierKind::AxIdentifier,
+            value: "row-2".into(),
+        }],
+        Some(0),
+        true,
+    );
+    assert_eq!(
+        anchor_matches(&entry, &look_alike),
+        IdentityMatch::NoMatch,
+        "identical text under another identifier is not this anchor's element"
+    );
+
+    look_alike.evidence.identifiers = IdentifierEvidence::unknown();
+    assert_eq!(
+        anchor_matches(&entry, &look_alike),
+        IdentityMatch::Unknown,
+        "an unread identifier list can never resolve"
+    );
+
+    let mut unreadable = observed.clone();
+    unreadable.evidence.name = LocatorField::Unknown;
+    let mut named_query = LocatorQuery::default();
+    named_query.identity.name = Some("Investors".into());
+    assert!(!evidence_complete(
+        &named_query,
+        &unreadable,
+        crate::BoundsSpace::Screen
+    ));
+}

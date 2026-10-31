@@ -117,6 +117,39 @@ impl SystemOps for AmbiguousAdapter {
     crate::adapter::guarded_interaction_lease!();
 }
 
+struct BasisGatedAdapter {
+    executed: AtomicU32,
+}
+
+impl ObservationOps for BasisGatedAdapter {
+    fn resolve_element_strict(
+        &self,
+        entry: &RefEntry,
+        _deadline: crate::Deadline,
+    ) -> Result<NativeHandle, AdapterError> {
+        crate::refs::identity_basis_gate::basis_gate(&entry.identity)?;
+        Ok(NativeHandle::null())
+    }
+}
+
+impl ActionOps for BasisGatedAdapter {
+    fn execute_action(
+        &self,
+        _handle: &NativeHandle,
+        _request: ActionRequest,
+        _lease: &crate::InteractionLease,
+    ) -> Result<ActionResult, AdapterError> {
+        self.executed.fetch_add(1, Ordering::SeqCst);
+        Ok(ActionResult::delivered_unverified("unexpected"))
+    }
+}
+
+impl InputOps for BasisGatedAdapter {}
+
+impl SystemOps for BasisGatedAdapter {
+    crate::adapter::guarded_interaction_lease!();
+}
+
 #[test]
 fn execute_ref_action_preserves_action_and_policy() {
     let _guard = HomeGuard::new();
@@ -173,6 +206,52 @@ fn execute_ref_action_does_not_dispatch_ambiguous_target() {
 
     assert_eq!(err.code(), "AMBIGUOUS_TARGET");
     assert_eq!(adapter.executed.load(Ordering::SeqCst), 0);
+}
+
+#[test]
+fn a_ref_the_basis_gate_refuses_dispatches_nothing() {
+    use crate::IdentityBasis;
+    let _guard = HomeGuard::new();
+    for (basis, expected) in [
+        (None, "STALE_REF"),
+        (Some(IdentityBasis::Ambiguous), "AMBIGUOUS_TARGET"),
+    ] {
+        let mut target = entry();
+        target.identity.basis = basis;
+        let mut refmap = RefMap::new();
+        refmap.allocate(target);
+        let snapshot_id = RefStore::new().unwrap().save_new_snapshot(&refmap).unwrap();
+        let adapter = BasisGatedAdapter {
+            executed: AtomicU32::new(0),
+        };
+        let args = RefArgs {
+            ref_id: format!("@{}:e1", snapshot_id),
+            timeout_ms: None,
+        };
+
+        let err = execute_ref_action_with_context(
+            args,
+            &adapter,
+            ActionRequest::headless(Action::Click),
+            &CommandContext::default(),
+        )
+        .expect_err("a ref whose basis proves no identity fails before action dispatch");
+
+        assert_eq!(err.code(), expected);
+        assert_eq!(
+            adapter.executed.load(Ordering::SeqCst),
+            0,
+            "a refused ref must dispatch no effect"
+        );
+        let crate::AppError::Adapter(error) = &err else {
+            panic!("a basis refusal is an adapter error");
+        };
+        assert_eq!(
+            error.disposition,
+            crate::DeliverySemantics::not_delivered(),
+            "a refused ref must report that nothing was delivered"
+        );
+    }
 }
 
 #[test]

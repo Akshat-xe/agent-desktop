@@ -281,3 +281,54 @@ fn a_complete_absence_refusal_is_not_delivered() {
         agent_desktop_core::DeliverySemantics::not_delivered()
     );
 }
+
+#[test]
+fn an_ambiguous_capture_is_refused_even_when_its_identifier_looks_unique() {
+    let mut stored = current_process_entry(Some(agent_desktop_core::IdentityBasis::Ambiguous));
+    stored.identity.native_id = Some(agent_desktop_core::ElementIdentifier {
+        kind: agent_desktop_core::IdentifierKind::AxIdentifier,
+        value: "save-button".into(),
+    });
+    let deadline = agent_desktop_core::Deadline::after(1_000).unwrap();
+
+    let error = resolve_element_with_deadline(&stored, deadline)
+        .err()
+        .expect("an ambiguous capture must be refused before any live search");
+
+    assert_eq!(error.code, ErrorCode::AmbiguousTarget);
+    let details = error.details.unwrap();
+    assert_eq!(details["kind"], "identity_not_unique");
+    assert!(
+        details.get("resolution_phase").is_none(),
+        "the refusal must happen before any live search begins"
+    );
+}
+
+#[test]
+fn an_old_retained_object_token_is_stale_before_any_live_search() {
+    let mut stored = current_process_entry(Some(agent_desktop_core::IdentityBasis::Name));
+    stored.identity.retained_object = Some("9001:stale-owner:7".into());
+    let deadline = agent_desktop_core::Deadline::after(1_000).unwrap();
+
+    let error = resolve_element_with_deadline(&stored, deadline)
+        .err()
+        .expect("a retained object from an old refmap must be refused");
+
+    assert_eq!(error.code, ErrorCode::StaleRef);
+    assert_eq!(
+        error.message,
+        "The native object owner is no longer available"
+    );
+    assert_eq!(
+        error.disposition,
+        agent_desktop_core::DeliverySemantics::not_delivered()
+    );
+    assert!(
+        error
+            .details
+            .as_ref()
+            .and_then(|details| details.get("resolution_phase"))
+            .is_none(),
+        "the refusal must happen before any live search begins"
+    );
+}
