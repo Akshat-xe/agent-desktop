@@ -5,7 +5,7 @@ use std::mem::{MaybeUninit, size_of};
 const HOST_MARKER: &[u8] = b"AGENT_DESKTOP_INTERNAL_COMMAND_HOST=1";
 const PROC_UID_ONLY: u32 = 4;
 
-/// Sends SIGTERM to this user's processes whose environment carries the old command host marker.
+/// Sends SIGKILL to this user's processes whose environment carries the old command host marker.
 /// A process whose owner, start time or environment cannot be read is left alone.
 pub fn stop_legacy_command_hosts() {
     let uid = unsafe { libc::geteuid() };
@@ -20,7 +20,7 @@ pub fn stop_legacy_command_hosts() {
         if process_arguments(pid).is_some_and(|args| environment_has_marker(&args))
             && process_start_time(pid, uid) == Some(started_at)
         {
-            unsafe { libc::kill(pid, libc::SIGTERM) };
+            unsafe { libc::kill(pid, libc::SIGKILL) };
         }
     }
 }

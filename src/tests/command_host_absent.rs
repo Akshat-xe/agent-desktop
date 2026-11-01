@@ -9,7 +9,7 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 const MARKER: &str = "AGENT_DESKTOP_INTERNAL_COMMAND_HOST";
-const SIGTERM: i32 = 15;
+const SIGKILL: i32 = 9;
 
 static HOST_TEST_LOCK: Mutex<()> = Mutex::new(());
 
@@ -109,7 +109,7 @@ fn a_call_stops_marked_processes_under_any_name_and_leaves_others_running() {
     run(&["version"], &tmpdir);
 
     let status = exit_within(&mut marked, Duration::from_secs(3)).expect("marked copy survived");
-    assert_eq!(status.signal(), Some(SIGTERM), "{status}");
+    assert_eq!(status.signal(), Some(SIGKILL), "{status}");
     assert!(
         exit_within(&mut unmarked, Duration::from_secs(1)).is_none(),
         "a process without the marker was stopped"
