@@ -9,7 +9,7 @@ type IdentifierKey = (String, IdentifierKind, String);
 type TextKey = (String, Option<(IdentifierKind, String)>, String);
 type RoleTextKey = (String, String);
 
-/// Counts every identifier, stable name and description among a snapshot's entries, so
+/// Counts every identifier, nonblank name and description among a snapshot's entries, so
 /// each entry learns which of them is unique. A count proves nothing about an unread field.
 #[derive(Default)]
 pub(crate) struct IdentityBasisCounts {
@@ -52,7 +52,7 @@ impl IdentityBasisCounts {
                 .entry((identity.role.clone(), *kind, value.clone()))
                 .or_default() += 1;
         }
-        if let Some(name) = stable_name(identity) {
+        if let Some(name) = crate::tree::accname::non_blank(identity.name.as_deref()) {
             *self
                 .names_by_role
                 .entry((identity.role.clone(), name.to_string()))

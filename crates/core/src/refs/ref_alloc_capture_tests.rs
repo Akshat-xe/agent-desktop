@@ -251,3 +251,62 @@ fn an_unreadable_name_on_a_look_alike_withdraws_the_other_name_proof() {
         "an element with no readable identity is positional"
     );
 }
+
+#[test]
+fn value_mirroring_names_still_count_as_capture_time_look_alikes() {
+    for identifiers in [&[][..], &[("ax", "shared")][..]] {
+        for value in ["10", "10.0"] {
+            let mut target = identified("textfield", Some("10"), identifiers);
+            target.value = known(Some("20"));
+            let mut competitor = identified("textfield", Some("10"), identifiers);
+            competitor.value = known(Some(value));
+            let (tree, refmap) = capture(snapshot(vec![node(
+                "window",
+                "Fixture",
+                vec![leaf(target), leaf(competitor)],
+            )]));
+            let saved = refmap
+                .get(tree.children[0].ref_id.as_deref().unwrap())
+                .unwrap();
+
+            assert_eq!(saved.identity.basis, Some(IdentityBasis::Ambiguous));
+            assert_eq!(
+                basis_of(&tree, &refmap, &[1]),
+                Some(if identifiers.is_empty() {
+                    IdentityBasis::Positional
+                } else {
+                    IdentityBasis::Ambiguous
+                })
+            );
+            let error = crate::refs::identity_basis_gate::basis_gate(&saved.identity).unwrap_err();
+            assert_eq!(error.code, crate::ErrorCode::AmbiguousTarget);
+            assert_eq!(error.details.unwrap()["kind"], "identity_not_unique");
+            assert!(!crate::refs::ref_identity::identity_matches(
+                saved,
+                Some("10"),
+                Some("30"),
+                None,
+                identifiers.first().map(|(_, value)| *value),
+            ));
+        }
+    }
+}
+
+#[test]
+fn only_a_targets_stable_name_qualifies_for_a_name_basis() {
+    for (value, expected) in [
+        ("10", IdentityBasis::Positional),
+        ("10.0", IdentityBasis::Positional),
+        ("20", IdentityBasis::Name),
+    ] {
+        let mut target = evidence("textfield", Some("10"));
+        target.value = known(Some(value));
+        let (tree, refmap) = capture(snapshot(vec![node(
+            "window",
+            "Fixture",
+            vec![leaf(target)],
+        )]));
+
+        assert_eq!(basis_of(&tree, &refmap, &[0]), Some(expected));
+    }
+}
