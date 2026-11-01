@@ -201,3 +201,29 @@ fn cyclic_or_missing_roots_are_stale() {
         assert!(adapter.actions.lock().unwrap().is_empty());
     }
 }
+
+#[test]
+fn drilling_a_root_that_moved_is_stale_and_allocates_no_refs() {
+    let _home = HomeGuard::new();
+    let (id, map) = save_map();
+    let adapter = DrillAdapter::new();
+    adapter
+        .tree
+        .lock()
+        .unwrap()
+        .children
+        .insert(0, node("group", "Other"));
+    let error = run_from_ref(&adapter, &TreeOptions::default(), "@e1", Some(&id))
+        .err()
+        .expect("a moved root must not be drilled");
+    assert_eq!(error.code(), "STALE_REF");
+    assert_eq!(
+        error.suggestion(),
+        Some("Take a new snapshot, then drill again.")
+    );
+    let stored = crate::refs::refs_store::RefStore::new()
+        .unwrap()
+        .load_snapshot(&id)
+        .unwrap();
+    assert_eq!(stored.len(), map.len());
+}

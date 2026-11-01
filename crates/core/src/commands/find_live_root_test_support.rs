@@ -8,6 +8,15 @@ use crate::{
     refs::RefEntry,
 };
 
+thread_local! {
+    static MOVED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Makes the fixture shift "Panel" from index 0 to 1 behind an "Other" group.
+pub(crate) fn move_panel() {
+    MOVED.with(|moved| moved.set(true));
+}
+
 struct Spec {
     role: &'static str,
     name: Option<&'static str>,
@@ -25,6 +34,24 @@ fn spec(role: &'static str, name: Option<&'static str>, children: Vec<Spec>) -> 
 /// A window holding a "Panel" group. The panel owns a unique "Save" button, an unnamed field and
 /// two "Dup" buttons. A second "Save" button sits outside the panel.
 fn ui() -> Spec {
+    if MOVED.with(std::cell::Cell::get) {
+        return spec(
+            "window",
+            Some("Fixture"),
+            vec![
+                spec(
+                    "group",
+                    Some("Other"),
+                    vec![spec("textfield", Some("Address"), vec![])],
+                ),
+                spec(
+                    "group",
+                    Some("Panel"),
+                    vec![spec("textfield", Some("Address"), vec![])],
+                ),
+            ],
+        );
+    }
     spec(
         "window",
         Some("Fixture"),

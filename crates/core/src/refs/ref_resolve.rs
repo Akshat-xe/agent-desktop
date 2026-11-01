@@ -41,7 +41,7 @@ pub(crate) fn resolve_drill_root(
 }
 
 /// Points a stale scoped ref at re-drilling its root, since a moved root is never followed.
-fn redrill(error: AdapterError) -> AdapterError {
+pub(crate) fn redrill(error: AdapterError) -> AdapterError {
     if error.code == crate::ErrorCode::StaleRef {
         return error.with_suggestion("Drill the root ref again (or re-run the find), then retry.");
     }

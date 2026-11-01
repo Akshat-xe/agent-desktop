@@ -42,7 +42,8 @@ pub(super) fn execute(
             let entry = crate::commands::helpers::load_ref_entry(root_ref, context)?;
             let handle =
                 crate::refs::ref_resolve::resolve(adapter, &entry, root_ref, context, deadline)?;
-            resolve_query(
+            pin_root(adapter, &entry, deadline)?;
+            let resolution = resolve_query(
                 adapter,
                 query,
                 ObservationRoot::Element {
@@ -51,7 +52,9 @@ pub(super) fn execute(
                     root_ref: Some(&local_root_ref),
                 },
                 &request,
-            )?
+            )?;
+            pin_root(adapter, &entry, deadline)?;
+            resolution
         }
         None => {
             let windows = snapshot::surface_windows(
@@ -88,6 +91,16 @@ pub(super) fn execute(
     }
     emit_resolution(context, &resolution, snapshot_id.as_deref(), ref_count)?;
     format_response(args, query, resolution, snapshot_id.as_deref())
+}
+
+fn pin_root(
+    adapter: &dyn PlatformAdapter,
+    root: &crate::refs::RefEntry,
+    deadline: crate::Deadline,
+) -> Result<(), AppError> {
+    crate::locator::live_locator::ref_scope::pin_root(adapter, root, deadline)
+        .map_err(crate::refs::ref_resolve::redrill)
+        .map_err(AppError::from)
 }
 
 fn adopt_root(

@@ -112,10 +112,19 @@ impl ObservationOps for StubAdapter {
     fn observe_tree(
         &self,
         root: crate::locator::live_locator::ObservationRoot<'_>,
-        _request: &crate::locator::live_locator::ObservationRequest,
+        request: &crate::locator::live_locator::ObservationRequest,
     ) -> Result<crate::locator::live_locator::ObservedTree, AdapterError> {
         if let Some(error) = &self.subtree_error {
             return Err(error.clone());
+        }
+        if let crate::locator::live_locator::ObservationRoot::Element { entry, .. } = &root
+            && request.max_logical_depth == 0
+        {
+            let own = named(
+                &entry.identity.role,
+                entry.identity.name.as_deref().unwrap_or_default(),
+            );
+            return crate::adapter::observed_tree(&root, own);
         }
         crate::adapter::observed_tree(&root, self.subtree.clone())
     }
@@ -138,6 +147,14 @@ impl ObservationOps for StubAdapter {
     ) -> Result<NativeHandle, AdapterError> {
         self.resolve_calls.fetch_add(1, Ordering::SeqCst);
         Ok(NativeHandle::new(DropProbe(Arc::clone(&self.drops))))
+    }
+
+    fn resolve_locator_anchor(
+        &self,
+        _entry: &crate::refs::RefEntry,
+        _deadline: crate::Deadline,
+    ) -> Result<NativeHandle, AdapterError> {
+        Ok(NativeHandle::new(()))
     }
 }
 

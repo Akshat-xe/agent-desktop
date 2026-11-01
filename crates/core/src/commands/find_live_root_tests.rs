@@ -97,3 +97,18 @@ fn a_twin_inside_the_root_is_ambiguous() {
         assert_eq!(error.code, crate::ErrorCode::AmbiguousTarget);
     }
 }
+
+#[test]
+fn a_root_that_moved_is_stale_and_never_returns_another_roots_child() {
+    let _guard = HomeGuard::new();
+    let context = CommandContext::default();
+    let panel = panel_ref(&context);
+    super::test_support_root::move_panel();
+    let error = execute(
+        find(Some(&panel), Some("textfield"), None),
+        &RootFindAdapter,
+        &context,
+    )
+    .expect_err("a moved root must not be surveyed at its saved path");
+    assert_eq!(error.code(), "STALE_REF");
+}

@@ -55,6 +55,7 @@ pub fn run_from_ref_with_context(
     let deadline = crate::Deadline::after(timeout_ms)?;
     let window = resolve_result_window(&entry, adapter, deadline)?;
     let handle = crate::refs::ref_resolve::resolve_drill_root(adapter, &entry, &refmap, deadline)?;
+    pin_root(adapter, &entry, deadline)?;
 
     let observation_options = opts.with_ref_identity_bounds();
     let raw_tree = crate::tree::renderer_accessibility::observe_tree(
@@ -67,6 +68,7 @@ pub fn run_from_ref_with_context(
         &ObservationRequest::snapshot(&observation_options, deadline).validate()?,
     )?
     .into_accessibility_tree()?;
+    pin_root(adapter, &entry, deadline)?;
     let nodes_observed = count_nodes(&raw_tree);
 
     let source_app = entry.source.source_app.as_deref();
@@ -130,6 +132,21 @@ pub fn run_from_ref_with_context(
         complete: true,
         nodes_observed,
     })
+}
+
+fn pin_root(
+    adapter: &dyn PlatformAdapter,
+    root: &crate::refs::RefEntry,
+    deadline: crate::Deadline,
+) -> Result<(), AppError> {
+    crate::locator::live_locator::ref_scope::pin_root(adapter, root, deadline)
+        .map_err(|error| match error.code {
+            crate::ErrorCode::StaleRef => {
+                error.with_suggestion("Take a new snapshot, then drill again.")
+            }
+            _ => error,
+        })
+        .map_err(AppError::from)
 }
 
 /// The drill result reports the window the ref was captured from, so it must
