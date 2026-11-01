@@ -1106,6 +1106,11 @@ AdResult ad_execute_action_with_policy(const struct AdAdapter *adapter,
  * Executes a struct-based ref action with exact process-generation and typed
  * native-id evidence.
  *
+ * An exact entry carries no retained element token and no capture proof, so
+ * its saved ref cannot be re-identified safely: the action fails with
+ * `AMBIGUOUS_TARGET` (`identity_not_unique`) and callers act through a
+ * snapshot ref instead.
+ *
  * # Safety
  *
  * All pointers must be valid. `entry` must carry the current exact-entry
@@ -1142,7 +1147,9 @@ AdResult ad_execute_ref_action_exact_with_policy(const struct AdAdapter *adapter
 AdResult ad_free_handle(const struct AdAdapter *adapter, struct AdNativeHandle *handle);
 
 /**
- * Resolves an element using process-generation and typed native-id evidence.
+ * Resolves an exact entry, which carries no retained element token and no
+ * capture proof: it fails with `AMBIGUOUS_TARGET` (`identity_not_unique`), so
+ * callers act through a snapshot ref instead.
  *
  * # Safety
  *
