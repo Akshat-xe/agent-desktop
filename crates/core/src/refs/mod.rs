@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::collections::hash_map::RandomState;
 use std::hash::BuildHasher;
 use std::path::{Path, PathBuf};
@@ -103,14 +104,24 @@ impl RefMap {
             .filter_map(|entry| entry.identity.retained_object.as_deref())
     }
 
+    /// Removes the refs a drill-down replaces: the entries rooted at `root`, the
+    /// entries recorded below the root's own path in the capture that recorded
+    /// it, and - transitively - everything those entries rooted, so a re-drill
+    /// of an ancestor leaves no ref of a nested drill behind.
+    ///
+    /// Only the root's own capture shares its path coordinates. A drilled ref
+    /// carries the path of the node it was projected from, so it is found
+    /// through its root instead of being compared against another capture's
+    /// path.
     pub fn remove_by_root_ref(&mut self, root: &str) {
-        let root_entry = self.inner.get(root).cloned();
-        self.inner.retain(|ref_id, entry| {
+        let root_entry = self.inner.get(root);
+        let mut removed: HashSet<String> = HashSet::new();
+        for (ref_id, entry) in &self.inner {
             if ref_id == root {
-                return true;
+                continue;
             }
             let owned = entry.scope.root_ref.as_deref() == Some(root);
-            let descendant = root_entry.as_ref().is_some_and(|parent| {
+            let descendant = root_entry.is_some_and(|parent| {
                 entry.process == parent.process
                     && entry.source == parent.source
                     && (parent.scope.root_ref.is_none() || parent.scope.path_is_absolute)
@@ -119,8 +130,23 @@ impl RefMap {
                     && (entry.scope.path.len() > parent.scope.path.len()
                         || entry.scope.root_ref.is_some())
             });
-            !owned && !descendant
-        });
+            if owned || descendant {
+                removed.insert(ref_id.clone());
+            }
+        }
+        let mut pending: Vec<String> = removed.iter().cloned().collect();
+        while let Some(owner) = pending.pop() {
+            for (ref_id, entry) in &self.inner {
+                if removed.contains(ref_id)
+                    || entry.scope.root_ref.as_deref() != Some(owner.as_str())
+                {
+                    continue;
+                }
+                removed.insert(ref_id.clone());
+                pending.push(ref_id.clone());
+            }
+        }
+        self.inner.retain(|ref_id, _| !removed.contains(ref_id));
     }
 
     pub fn validate(&self) -> Result<(), AppError> {

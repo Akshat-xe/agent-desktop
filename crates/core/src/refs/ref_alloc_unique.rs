@@ -2,9 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{
     ElementIdentifier, IdentityMatch,
-    locator::live_locator::{
-        LocatorEvidence, LocatorField, ObservedNode, ObservedTree, addressability,
-    },
+    locator::live_locator::{LocatorEvidence, LocatorField, ObservedNode, ObservedTree},
     refs::ref_full_predicate::{DESCRIPTION, FullPredicate, LivePredicate, NAME, NATIVE_ID},
     refs::ref_identity::stable_name,
     tree::accname::non_blank,
@@ -14,19 +12,33 @@ const ROLE: u8 = 0b1000;
 
 /// The structural paths whose full predicate a complete observation found
 /// exactly one element for, counted over every observed node rather than over
-/// the ref-able ones. A tree with omitted descendants proves nothing.
+/// the ones a presentation happens to keep. A tree with omitted descendants
+/// proves nothing.
 ///
 /// The count is the comparison resolution runs: the predicate a ref will record,
 /// measured against the evidence every node reported, so an identifier carried
 /// secondhand or a field that went unread counts the way it will count later.
 pub(crate) fn unique_capture_paths(observed: &ObservedTree) -> HashSet<Vec<usize>> {
+    let Some(root) = observed.roots.first() else {
+        return HashSet::new();
+    };
+    unique_capture_paths_under(observed, *root, &[])
+}
+
+/// `unique_capture_paths` for a subtree: the paths are relative to `root`, so a
+/// drill-down that allocates from that node can look its own entries up, while
+/// the count still runs over every node of the observation.
+pub(crate) fn unique_capture_paths_under(
+    observed: &ObservedTree,
+    root: u32,
+    prefix: &[usize],
+) -> HashSet<Vec<usize>> {
     if !observed.is_complete() || observed.nodes.iter().any(ObservedNode::omits_descendants) {
         return HashSet::new();
     }
     let mut candidates = Vec::new();
-    if let Some(root) = observed.roots.first() {
-        collect_candidates(observed, *root, &mut Vec::new(), &mut candidates);
-    }
+    let mut path = prefix.to_vec();
+    collect_candidates(observed, root, &mut path, &mut candidates);
     if candidates.is_empty() {
         return HashSet::new();
     }
@@ -42,6 +54,8 @@ pub(crate) fn unique_capture_paths(observed: &ObservedTree) -> HashSet<Vec<usize
         .collect()
 }
 
+/// Every node a ref could name, which is any node whose role was read: the
+/// ref-able ones and the inert containers that anchor a skeleton alike.
 fn collect_candidates<'a>(
     observed: &'a ObservedTree,
     index: u32,
@@ -51,7 +65,7 @@ fn collect_candidates<'a>(
     let Some(node) = observed.nodes.get(index as usize) else {
         return;
     };
-    if addressability(&node.evidence).0 {
+    if node.evidence.role.known().is_some() {
         out.push((path.clone(), FullPredicate::of_evidence(&node.evidence)));
     }
     for (position, child) in node.children.iter().enumerate() {

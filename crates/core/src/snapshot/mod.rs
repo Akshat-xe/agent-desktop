@@ -2,7 +2,6 @@ use crate::{
     AccessibilityNode, AppError, WindowInfo,
     adapter::{PlatformAdapter, TreeOptions, WindowFilter},
     context::CommandContext,
-    locator::live_locator::{ObservationRequest, ObservationRoot},
     refs::RefMap,
     refs::ref_alloc::{self, RefAllocConfig},
     refs::ref_alloc_options::RefAllocOptions,
@@ -38,18 +37,11 @@ pub fn build(
     deadline: crate::Deadline,
 ) -> Result<SnapshotResult, AppError> {
     let windows = surface_windows(adapter, app_name, window_id, opts.surface, deadline)?;
-    let observation_options = opts.with_ref_identity_bounds();
-    let request = ObservationRequest::snapshot(&observation_options, deadline).validate()?;
-    let (window, observed) = first_surface_owner(windows, |window| {
-        crate::tree::renderer_accessibility::observe_tree(
-            adapter,
-            ObservationRoot::Window(window),
-            &request,
-            None,
-        )
+    let (window, capture) = first_surface_owner(windows, |window| {
+        window_capture::capture_window(adapter, opts, window, deadline)
     })?;
-    let unique = crate::refs::ref_alloc_unique::unique_capture_paths(&observed);
-    let (raw_tree, complete, nodes_observed) = observed.into_accessibility_tree_partial()?;
+    let unique = crate::refs::ref_alloc_unique::unique_capture_paths(&capture.observed);
+    let (raw_tree, complete, nodes_observed) = capture.into_tree()?;
 
     let mut refmap = RefMap::new();
     let config = RefAllocConfig {
@@ -352,6 +344,19 @@ pub mod snapshot_surface;
 #[cfg(test)]
 #[path = "snapshot_tests.rs"]
 mod tests;
+pub(crate) mod window_capture;
+
+#[cfg(test)]
+#[path = "tokenless_capture_support.rs"]
+mod tokenless_capture_support;
+
+#[cfg(test)]
+#[path = "tokenless_capture_tests.rs"]
+mod tokenless_capture_tests;
+
+#[cfg(test)]
+#[path = "tokenless_drill_tests.rs"]
+mod tokenless_drill_tests;
 
 #[cfg(test)]
 #[path = "snapshot_window_tests.rs"]

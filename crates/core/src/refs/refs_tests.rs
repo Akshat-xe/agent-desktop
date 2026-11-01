@@ -172,6 +172,31 @@ fn drill_replaces_full_snapshot_and_nested_descendants_only() {
 }
 
 #[test]
+fn a_nested_drill_is_pruned_through_ownership_after_its_root_moved() {
+    let mut map = RefMap::new();
+    let mut allocate = |path: &[usize], owner: Option<&str>| {
+        let mut value = entry("button", Some("Target"));
+        value.scope.path = path.iter().copied().collect();
+        value.scope.root_ref = owner.map(str::to_string);
+        value.scope.path_is_absolute = owner.is_some();
+        map.allocate(value)
+    };
+    let root = allocate(&[0, 0, 0], None);
+    let nested_root = allocate(&[9, 1, 4], Some(&root));
+    let nested_child = allocate(&[9, 1, 4, 0], Some(&nested_root));
+    let sibling = allocate(&[1], None);
+    map.remove_by_root_ref(&root);
+    assert!(map.get(&root).is_some());
+    assert!(map.get(&sibling).is_some());
+    for removed in [nested_root, nested_child] {
+        assert!(
+            map.get(&removed).is_none(),
+            "a nested drill written in another capture's paths was left behind: {removed}"
+        );
+    }
+}
+
+#[test]
 fn test_save_load_roundtrip_with_home_override() {
     let _guard = HomeGuard::new();
     let mut map = RefMap::new();

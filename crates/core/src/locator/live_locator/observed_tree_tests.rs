@@ -130,6 +130,52 @@ fn core_builder_owns_preorder_paths_and_child_indices() {
 }
 
 #[test]
+fn a_shallow_presentation_cuts_at_the_logical_depth_of_the_walks() {
+    let wrapper = subtree(
+        "group",
+        "",
+        vec![subtree(
+            "group",
+            "Content",
+            vec![subtree("button", "Save", Vec::new())],
+        )],
+    )
+    .with_wrapper(true);
+    let tree = ObservedTree::from_roots(
+        vec![subtree(
+            "window",
+            "Fixture",
+            vec![subtree("group", "Sidebar", vec![wrapper])],
+        )],
+        source(),
+        Default::default(),
+        true,
+    )
+    .unwrap();
+
+    let (shallow, complete, nodes_observed) =
+        tree.clone().into_accessibility_tree_shallow(3).unwrap();
+    assert!(complete);
+    assert_eq!(
+        nodes_observed, 5,
+        "the projection reports the whole observation"
+    );
+    let button = &shallow.children[0].children[0].children[0].children[0];
+    assert_eq!(
+        (button.role.as_str(), button.identity.name.as_deref()),
+        ("button", Some("Save")),
+        "a wrapper costs no logical depth, so the walk reaches past its path depth"
+    );
+
+    let (cut, _, _) = tree.into_accessibility_tree_shallow(2).unwrap();
+    let content = &cut.children[0].children[0].children[0];
+    assert_eq!(content.identity.name.as_deref(), Some("Content"));
+    assert_eq!(content.children_count, Some(1), "a cut keeps its count");
+    assert!(content.children.is_empty());
+    assert!(!content.subtree_truncated);
+}
+
+#[test]
 fn source_child_indices_survive_omitted_siblings() {
     let target = subtree("scrollarea", "Nested", Vec::new()).with_source_child_index(0);
     let retained = subtree("group", "Wrapper", vec![target])

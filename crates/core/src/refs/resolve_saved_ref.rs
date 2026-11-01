@@ -12,10 +12,10 @@ use crate::{
     refs::resolve_errors::identity_unknown_error,
 };
 
-/// The depth cap of the search a saved ref gets: the same raw depth a snapshot
-/// walk uses, so a ref taken from the deepest snapshot node is still inside the
-/// scope it is resolved against.
-const SCOPE_MAX_DEPTH: u8 = 50;
+/// The depth a whole-window observation reaches: the limit a snapshot walk
+/// supports, so a ref taken from the deepest snapshot node is inside the scope
+/// it is captured from and resolved against.
+pub(crate) const WHOLE_WINDOW_DEPTH: u8 = 50;
 
 /// Resolves a saved ref under the reviewed identity rule.
 ///
@@ -33,12 +33,7 @@ pub fn resolve_saved_ref(
     if element_token(entry).is_some() {
         return adapter.resolve_element_strict(entry, deadline);
     }
-    if !entry.identity.unique_at_capture {
-        return Err(identity_not_unique(entry));
-    }
-    let window = recorded_window(adapter, entry, deadline)?;
-    let observed = observe_scope(adapter, entry, &window, deadline, lease)?;
-    let found = unique_live_match(entry, &observed)?;
+    let (_, observed, found) = observe_saved_ref(adapter, entry, deadline, lease)?;
     let anchor = positional_anchor(entry, &observed, found)?;
     let handle = adapter.resolve_locator_anchor(&anchor, deadline)?;
     let root = ObservationRoot::Element {
@@ -48,6 +43,34 @@ pub fn resolve_saved_ref(
     };
     confirm_landed(adapter, entry, root, deadline, lease)?;
     Ok(handle)
+}
+
+/// The window a tokenless ref is captured from, one complete observation of it,
+/// and the node in that observation matching the recorded predicate.
+pub(crate) type SavedRefMatch = (WindowInfo, ObservedTree, usize);
+
+/// The evidence every tokenless ref is judged by, shared by resolution and by a
+/// drill-down so a capture census and a later resolve measure one observation.
+/// An entry that was not unique at capture has no such evidence to gather.
+pub(crate) fn observe_saved_ref(
+    adapter: &dyn PlatformAdapter,
+    entry: &RefEntry,
+    deadline: Deadline,
+    lease: Option<&crate::InteractionLease>,
+) -> Result<SavedRefMatch, AdapterError> {
+    if !entry.identity.unique_at_capture {
+        return Err(identity_not_unique(entry));
+    }
+    let window = recorded_window(adapter, entry, deadline)?;
+    let observed = observe_whole_window(
+        adapter,
+        entry.source.source_surface,
+        &window,
+        deadline,
+        lease,
+    )?;
+    let index = unique_live_match(entry, &observed)?;
+    Ok((window, observed, index))
 }
 
 /// The anchor lands a stored path, which a different element can move into
@@ -141,16 +164,19 @@ fn belongs_to_entry(window: &WindowInfo, entry: &RefEntry) -> bool {
             .is_none_or(|(live, saved)| live == saved)
 }
 
-fn observe_scope(
+/// The one observation a tokenless ref is judged by, in the settings resolution
+/// uses: the whole window at the deepest limit a walk supports, so a capture
+/// census and a later resolution count the same evidence.
+pub(crate) fn observe_whole_window(
     adapter: &dyn PlatformAdapter,
-    entry: &RefEntry,
+    surface: crate::SnapshotSurface,
     window: &WindowInfo,
     deadline: Deadline,
     lease: Option<&crate::InteractionLease>,
 ) -> Result<ObservedTree, AdapterError> {
     let options = TreeOptions {
-        max_depth: SCOPE_MAX_DEPTH,
-        surface: entry.source.source_surface,
+        max_depth: WHOLE_WINDOW_DEPTH,
+        surface,
         ..TreeOptions::default()
     }
     .with_ref_identity_bounds();

@@ -138,6 +138,8 @@ The tree above is trimmed to the display and two of the 31 buttons and fields th
 3. Reads the element's subtree to `--max-depth` (default 10). `--app` and `--window-id` are not used, because the ref already names its window, and `--skeleton` has no effect.
 4. Allocates refs for the subtree and writes them into the same snapshot, so `snapshot_id` does not change.
 
+Off macOS the drill re-identifies its root over a complete read of the window and counts its new refs against that same read, so a drill's refs resolve by exactly the rules the skeleton's do.
+
 The result's root is the drilled element, and `ref_count` is the whole snapshot's count: 2 skeleton refs plus 31 drill refs. New refs continue the snapshot's counter, which is why this drill starts at `e3`. The ref you drilled stays valid.
 
 ## Re-drill after a change

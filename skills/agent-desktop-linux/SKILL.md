@@ -82,8 +82,11 @@ Observation and semantic actions need no helper tool.
   budget ends. A `--timeout` shorter than the first read returns `TIMEOUT`,
   never a partial tree.
 - **A ref must have been unique.** Linux stores no element address, so a ref
-  resolves only when it was the only element in its snapshot with its role,
-  native id, name and description, and exactly one live element still matches.
+  resolves only when it was the only element in the window its snapshot
+  captured with its role, native id, name and description, and exactly one live
+  element still matches. Uniqueness is counted over the whole window, not over
+  the shallow tree a `--skeleton` or `--max-depth` snapshot presents, so a twin
+  the shallow tree never showed still refuses the ref.
   Position, size and value never count as identity, so a layout change does not
   by itself stale a ref, but a twin does: identical buttons, or views that share
   a role and carry no other field, refuse with `AMBIGUOUS_TARGET`,

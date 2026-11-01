@@ -15,7 +15,13 @@ pub fn element_token(entry: &RefEntry) -> Option<&str> {
         .identity
         .retained_object
         .as_deref()
-        .filter(|token| token.starts_with(ELEMENT_TOKEN_PREFIX))
+        .filter(|token| is_element_token(token))
+}
+
+/// Whether a retained object value is a genuine element token rather than a
+/// retained location.
+pub fn is_element_token(token: &str) -> bool {
+    token.starts_with(ELEMENT_TOKEN_PREFIX)
 }
 
 pub fn has_meaningful_identity(entry: &RefEntry) -> bool {

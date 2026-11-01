@@ -11,6 +11,7 @@ pub struct ObservedTree {
     pub(crate) source: ObservationSource,
     pub(crate) stats: LocatorStats,
     pub(crate) structurally_complete: bool,
+    pub(crate) logical_depths: Vec<u8>,
 }
 
 impl ObservedTree {
@@ -29,9 +30,10 @@ impl ObservedTree {
             source,
             stats,
             structurally_complete,
+            logical_depths: Vec::new(),
         };
         for root in roots {
-            let index = tree.append(root, RefPath::new())?;
+            let index = tree.append(root, RefPath::new(), 0)?;
             tree.roots.push(index);
         }
         tree.structurally_complete &= tree
@@ -86,7 +88,43 @@ impl ObservedTree {
         Ok((tree, complete, nodes_observed))
     }
 
-    fn append(&mut self, subtree: ObservedSubtree, path: RefPath) -> Result<u32, AdapterError> {
+    /// Projects the window cut at `max_logical_depth` the way a walk applies
+    /// its own limit: a container whose children would sit below the limit
+    /// keeps none, carries their count and stays complete, so it still anchors
+    /// a skeleton. Every presented node is the node this observation holds, so
+    /// a capture census taken over the whole observation describes it exactly.
+    pub(crate) fn into_accessibility_tree_shallow(
+        mut self,
+        max_logical_depth: u8,
+    ) -> Result<(AccessibilityNode, bool, usize), AdapterError> {
+        if self.roots.len() != 1 {
+            return Err(AdapterError::internal(
+                "accessibility projection requires exactly one root",
+            ));
+        }
+        let complete = self.structurally_complete;
+        let nodes_observed = self.nodes.len();
+        let depths = std::mem::take(&mut self.logical_depths);
+        let tree = self.project_shallow(self.roots[0] as usize, &depths, max_logical_depth)?;
+        Ok((tree, complete, nodes_observed))
+    }
+
+    /// Projects the subtree rooted at an observed node, cut the same way.
+    pub(crate) fn into_accessibility_subtree(
+        mut self,
+        index: usize,
+        max_logical_depth: u8,
+    ) -> Result<AccessibilityNode, AdapterError> {
+        let depths = std::mem::take(&mut self.logical_depths);
+        self.project_shallow(index, &depths, max_logical_depth)
+    }
+
+    fn append(
+        &mut self,
+        subtree: ObservedSubtree,
+        path: RefPath,
+        logical_depth: u8,
+    ) -> Result<u32, AdapterError> {
         let index = u32::try_from(self.nodes.len())
             .map_err(|_| AdapterError::internal("observed tree exceeds u32"))?;
         let document_order = index;
@@ -96,6 +134,7 @@ impl ObservedTree {
             completeness,
             children_count,
             source_child_index: _,
+            wrapper,
         } = subtree;
         self.nodes.push(ObservedNode {
             evidence,
@@ -106,6 +145,8 @@ impl ObservedTree {
             children_count,
             ref_id: None,
         });
+        self.logical_depths.push(logical_depth);
+        let child_logical_depth = logical_depth.saturating_add(u8::from(!wrapper));
         let mut child_indices = Vec::with_capacity(children.len());
         let mut complete = completeness.subtree_complete;
         let mut previous_native_index = None;
@@ -119,7 +160,7 @@ impl ObservedTree {
             previous_native_index = Some(native_index);
             let mut child_path = path.clone();
             child_path.push(native_index);
-            let child_index = self.append(child, child_path)?;
+            let child_index = self.append(child, child_path, child_logical_depth)?;
             complete &= self.nodes[child_index as usize]
                 .completeness
                 .subtree_complete;
@@ -135,6 +176,47 @@ impl ObservedTree {
     }
 
     fn project(&mut self, index: usize) -> Result<AccessibilityNode, AdapterError> {
+        let (mut projected, child_indices) = self.projected_node(index)?;
+        for child in child_indices {
+            projected.children.push(self.project(child as usize)?);
+        }
+        Ok(projected)
+    }
+
+    fn project_shallow(
+        &mut self,
+        index: usize,
+        depths: &[u8],
+        max_logical_depth: u8,
+    ) -> Result<AccessibilityNode, AdapterError> {
+        let (mut projected, child_indices) = self.projected_node(index)?;
+        let below_limit = child_indices
+            .first()
+            .and_then(|child| depths.get(*child as usize))
+            .is_some_and(|depth| *depth > max_logical_depth);
+        if below_limit {
+            projected.children_count =
+                projected
+                    .children_count
+                    .or(u32::try_from(child_indices.len())
+                        .ok()
+                        .filter(|count| *count > 0));
+            return Ok(projected);
+        }
+        for child in child_indices {
+            projected.children.push(self.project_shallow(
+                child as usize,
+                depths,
+                max_logical_depth,
+            )?);
+        }
+        Ok(projected)
+    }
+
+    fn projected_node(
+        &mut self,
+        index: usize,
+    ) -> Result<(AccessibilityNode, Vec<u32>), AdapterError> {
         let node = self
             .nodes
             .get_mut(index)
@@ -145,7 +227,7 @@ impl ObservedTree {
             .take_known()
             .unwrap_or_else(|| "unknown".into());
         let child_indices = std::mem::take(&mut node.children);
-        let mut projected = AccessibilityNode {
+        let projected = AccessibilityNode {
             ref_id: node.ref_id.take(),
             role,
             identity: crate::NodeIdentity {
@@ -188,9 +270,6 @@ impl ObservedTree {
             subtree_truncated: !node.completeness.subtree_complete,
             children: Vec::with_capacity(child_indices.len()),
         };
-        for child in child_indices {
-            projected.children.push(self.project(child as usize)?);
-        }
-        Ok(projected)
+        Ok((projected, child_indices))
     }
 }

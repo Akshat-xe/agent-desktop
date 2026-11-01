@@ -295,6 +295,7 @@ fn allocate_refs_at_path(
     if is_skeleton_anchor {
         let mut entry = ref_entry_from_node(&node, &config.source, None, path);
         entry.capabilities.available_actions = vec![];
+        entry.identity.unique_at_capture = plan.found_once(path);
         if !config.options.include_bounds && has_meaningful_identity(&entry) {
             entry.geometry.bounds = None;
         }
