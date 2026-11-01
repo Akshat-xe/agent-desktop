@@ -2,8 +2,7 @@ use agent_desktop_core::{
     BoundsSpace, IdentityBasis, IdentityMatch, LocatorEvidence, LocatorField, Rect, RefEntry,
     RefGeometry,
     refs::ref_identity::{
-        has_meaningful_identity, has_stable_text_identity, identifier_evidence_match,
-        identity_match, stable_text_match,
+        has_meaningful_identity, has_stable_text_identity, identity_match, stable_text_match,
     },
 };
 
@@ -197,45 +196,8 @@ fn has_identifier_evidence(entry: &RefEntry) -> bool {
     .is_some()
 }
 
-/// The identifier a ref recorded must be one of the live node's identifiers,
-/// and nothing else about the node is needed. An identifier read that could not
-/// be completed withholds the answer rather than refuting the node, and a node
-/// that carries the identifier is a candidate whatever its text now says.
-fn identifier_admits(entry: &RefEntry, evidence: &LocatorEvidence) -> Admission {
-    let Some(expected) = entry.identity.native_id.as_ref() else {
-        return Admission::Collect;
-    };
-    if non_blank(Some(expected.value.as_str())).is_none() {
-        return Admission::Collect;
-    }
-    verdict_admission(identifier_evidence_match(expected, &evidence.identifiers))
-}
-
-/// The description a ref recorded must be the live node's description. The
-/// stored description is the whole identity of such a ref, so an unreadable
-/// live description withholds the answer and a different one refutes the node.
-fn description_admits(entry: &RefEntry, evidence: &LocatorEvidence) -> Admission {
-    let Some(expected) = non_blank(entry.identity.description.as_deref()) else {
-        return Admission::Unread;
-    };
-    match identifier_admits(entry, evidence) {
-        Admission::Collect => {}
-        refusal => return refusal,
-    }
-    match &evidence.description {
-        LocatorField::Known(actual) if non_blank(Some(actual.as_str())) == Some(expected) => {
-            Admission::Collect
-        }
-        LocatorField::Known(_) | LocatorField::Absent => Admission::Reject,
-        LocatorField::Unknown => Admission::Unread,
-    }
-}
-
-/// A retained object is an address, not a description: the recorded token names
-/// one live object. A node carrying another token is a different object, so a
-/// ref whose object is gone is refused rather than re-matched on the role and
-/// rectangle it left behind. A node whose token nobody published withholds the
-/// answer, since nothing proves it is not the stored object.
+/// A retained object is an address, not a description: another token is a different object, so a
+/// ref whose object is gone is refused, and an unpublished token withholds the answer.
 fn retained_object_admits(entry: &RefEntry, evidence: &LocatorEvidence) -> Option<Admission> {
     let expected = entry.identity.retained_object.as_deref()?;
     Some(match evidence.identifiers.retained_object() {
@@ -245,54 +207,42 @@ fn retained_object_admits(entry: &RefEntry, evidence: &LocatorEvidence) -> Optio
     })
 }
 
-/// The identity evidence of one node, for a ref that resolves only on a unique
-/// live match.
+/// The identity evidence of one node for a ref that resolves only on a unique live match: every
+/// recorded field must still agree, and a field the read could not produce withholds the answer.
 fn recorded_identity(entry: &RefEntry, evidence: &LocatorEvidence) -> Admission {
     match entry.identity.basis {
         Some(IdentityBasis::NativeId) if !has_identifier_evidence(entry) => Admission::Unread,
-        Some(IdentityBasis::NativeId) => identifier_admits(entry, evidence),
-        Some(IdentityBasis::Name) => verdict_admission(identity_verdict(entry, evidence)),
-        Some(IdentityBasis::Description) => description_admits(entry, evidence),
+        Some(IdentityBasis::NativeId | IdentityBasis::Name | IdentityBasis::Description) => {
+            verdict_admission(identity_match(
+                entry,
+                &evidence.name,
+                &evidence.value,
+                &evidence.description,
+                &evidence.identifiers,
+            ))
+        }
         Some(IdentityBasis::Ambiguous | IdentityBasis::Positional) | None => Admission::Unread,
     }
 }
 
-/// Decides one node's admission for a ref that resolves only on a unique live
-/// match. The recorded identity and the recorded object path are evidence about
-/// the same element, so a node holding one of them and not the other still
-/// answers the ref: its identity agrees while the object path names another
-/// element, or the object path is the ref's while its identity has moved on.
-/// Both are answers that can never be resolved to, so a second one makes the
-/// ref ambiguous instead of letting the object path alone pick the element.
-/// Only a node both agree on is collected. The rectangle is never a reason to
-/// collect or refute a node here, and a field the read could not produce leaves
-/// the region unread.
+/// Decides one node's admission for a ref that resolves only on a unique live match: the count is
+/// of full identity matches, and the retained object address is held apart from it.
 pub(crate) fn identity_admission(entry: &RefEntry, evidence: &LocatorEvidence) -> Admission {
     if let Some(refusal) = role_gate(entry, evidence) {
         return refusal;
     }
-    let identity = recorded_identity(entry, evidence);
-    match retained_object_admits(entry, evidence) {
-        None => identity,
-        Some(Admission::Collect) => match identity {
-            Admission::Reject => Admission::Partial,
-            admission => admission,
+    match recorded_identity(entry, evidence) {
+        Admission::Collect => match retained_object_admits(entry, evidence) {
+            Some(Admission::Reject | Admission::Partial) => Admission::Partial,
+            Some(Admission::Unread) => Admission::Unread,
+            Some(Admission::Collect) | None => Admission::Collect,
         },
-        Some(Admission::Unread) => Admission::Unread,
-        Some(Admission::Reject | Admission::Partial) => match identity {
-            Admission::Collect => Admission::Partial,
-            _ => Admission::Reject,
-        },
+        admission => admission,
     }
 }
 
-/// The verdict for a ref that resolves only on a unique live match: a second
-/// node answering the record, even one that holds only part of it, is ambiguous
-/// whatever stayed unread, because nothing then proves which element the ref
-/// was taken from. A lone answer resolves only when it agrees with the whole
-/// record; one that agrees with part of it is stale, since the element the ref
-/// names is not proved live. A lone match beside an unread region is withheld,
-/// because the count is incomplete and could still hide a second match.
+/// The verdict for a ref that resolves only on a unique live match: a second node answering any
+/// part of the record is ambiguous, and a lone match beside an unread region is withheld.
 pub(crate) fn classify_identity(answers: usize, candidates: usize, unread_region: bool) -> Verdict {
     if answers > 1 {
         return Verdict::Ambiguous;
@@ -369,6 +319,10 @@ pub(crate) fn classify(
             .map_or(Verdict::Ambiguous, Verdict::Resolved),
     }
 }
+
+#[cfg(test)]
+#[path = "resolve_identity_tests.rs"]
+mod identity_tests;
 
 #[cfg(test)]
 #[path = "resolve_match_tests.rs"]

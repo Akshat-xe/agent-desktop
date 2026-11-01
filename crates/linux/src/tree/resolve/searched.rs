@@ -12,9 +12,8 @@ pub(crate) struct Searched {
 }
 
 impl Searched {
-    /// Every live node that answered the stored evidence, whether or not it can
-    /// be resolved to. A ref that cannot select one element among them is
-    /// refused.
+    /// Every live node that answered the stored evidence, resolvable or not. A ref that cannot
+    /// select one element among them is refused.
     pub(crate) fn answers(&self) -> usize {
         self.candidates.len() + self.partial
     }

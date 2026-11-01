@@ -274,9 +274,31 @@ fn an_unread_name_on_another_element_leaves_a_unique_identifier_proven() {
     );
 }
 
-/// A survey rooted at one row proves uniqueness only inside that row, while a
-/// saved ref is resolved against the whole source window. Row Beta may hold a
-/// second Delete button the survey never saw, so every entry keeps no proof.
+/// The survey counts every element a saved ref can still match, since live resolution
+/// ignores eligibility: an inert group named Row is a look-alike of the addressable one.
+#[test]
+fn an_inert_look_alike_of_the_same_role_and_name_is_counted_by_the_survey() {
+    let mut actionable = evidence("group", Some("Row"));
+    actionable.ref_evidence.available_actions =
+        crate::LocatorField::Known(vec![crate::actions::capability::CLICK.to_string()]);
+    let bases = materialized_bases(
+        vec![
+            node(0, evidence("window", Some("Fixture")), vec![1, 2], &[]),
+            node(1, actionable, vec![], &[0]),
+            node(2, evidence("group", Some("Row")), vec![], &[1]),
+        ],
+        true,
+    );
+
+    assert_eq!(
+        bases,
+        [Some(IdentityBasis::Ambiguous)],
+        "the inert twin shares the addressable group's role and name, and gets no ref"
+    );
+}
+
+/// A survey rooted at one row proves uniqueness only inside that row, while a saved ref
+/// is resolved against the whole window, so every entry keeps no proof.
 #[test]
 fn a_survey_rooted_at_an_element_cannot_prove_window_wide_uniqueness() {
     let delete = evidence("button", Some("Delete"));
@@ -309,9 +331,8 @@ fn a_survey_rooted_at_an_element_cannot_prove_window_wide_uniqueness() {
     assert_eq!(bases, [Some(IdentityBasis::Ambiguous)]);
 }
 
-/// A node whose role could not be read may be a look-alike of any role, so it
-/// withdraws the proofs of every role, including a readable Save button that
-/// precedes it.
+/// A node whose role could not be read may be a look-alike of any role, so it withdraws
+/// the proofs of every role, including that of a readable Save button.
 #[test]
 fn a_node_with_an_unread_role_withdraws_the_uniqueness_of_its_look_alikes() {
     let mut unreadable = evidence("button", Some("Save"));

@@ -138,6 +138,47 @@ fn an_anchor_that_shared_its_identifier_is_refuted_by_the_name_it_recorded() {
 }
 
 #[test]
+fn a_reordered_row_that_shares_its_name_and_identifier_is_refuted_by_its_description() {
+    use crate::{ElementIdentifier, IdentifierEvidence, IdentifierKind, LocatorField};
+    let shared = ElementIdentifier {
+        kind: IdentifierKind::AxIdentifier,
+        value: "row".into(),
+    };
+    let mut stored = evidence("cell", Some("Alpha"));
+    stored.description = LocatorField::Known("first row".into());
+    stored.identifiers = IdentifierEvidence::typed([shared], Some(0), true);
+    let observed = node(0, stored, vec![], &[]);
+    let tree = tree(vec![observed.clone()], vec![0], true);
+    let mut entry =
+        super::super::materialize::ref_entry(&observed, &tree.source, &LocatorQuery::default());
+    assert_eq!(entry.identity.description.as_deref(), Some("first row"));
+
+    let mut reordered = observed.clone();
+    reordered.evidence.description = LocatorField::Known("second row".into());
+    for basis in [
+        crate::IdentityBasis::NativeId,
+        crate::IdentityBasis::Name,
+        crate::IdentityBasis::Description,
+        crate::IdentityBasis::Positional,
+    ] {
+        entry.identity.basis = Some(basis);
+        assert_eq!(anchor_matches(&entry, &observed), IdentityMatch::Match);
+        assert_eq!(
+            anchor_matches(&entry, &reordered),
+            IdentityMatch::NoMatch,
+            "{basis:?}: the shared name and identifier cannot stand in for the description the anchor recorded"
+        );
+        reordered.evidence.description = LocatorField::Unknown;
+        assert_eq!(
+            anchor_matches(&entry, &reordered),
+            IdentityMatch::Unknown,
+            "{basis:?}: an unread live description can never resolve the anchor"
+        );
+        reordered.evidence.description = LocatorField::Known("second row".into());
+    }
+}
+
+#[test]
 fn a_hydrated_match_keeps_the_basis_its_survey_proved() {
     let observed = node(0, evidence("button", Some("Send")), vec![], &[]);
     let tree = tree(vec![observed.clone()], vec![0], true);

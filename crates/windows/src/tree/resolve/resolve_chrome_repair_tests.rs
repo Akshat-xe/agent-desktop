@@ -40,11 +40,11 @@ fn grown_outline(second_root_name: &str) -> FakeTree {
     tree_item(tree, CURRENT_USER, second_root_name)
 }
 
-/// The ref the snapshot stored before the expand: `[outline, Computer,
-/// HKEY_CLASSES_ROOT]` with the outline's content counted from index 0, and a
-/// bounds hash the scrolled view no longer reproduces.
+/// The ref the snapshot stored before the expand: a positional one at `[outline, Computer,
+/// HKEY_CLASSES_ROOT]`, whose bounds hash the scrolled view no longer reproduces.
 fn classes_root_entry() -> RefEntry {
     let mut entry = ref_entry("treeitem");
+    entry.identity.basis = Some(agent_desktop_core::IdentityBasis::Positional);
     entry.identity.name = Some("HKEY_CLASSES_ROOT".into());
     entry.geometry.bounds_hash = Some(7);
     entry.scope.path = vec![0, 0, 0].into();

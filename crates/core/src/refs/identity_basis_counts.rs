@@ -9,21 +9,8 @@ type IdentifierKey = (String, IdentifierKind, String);
 type TextKey = (String, Option<(IdentifierKind, String)>, String);
 type RoleTextKey = (String, String);
 
-/// Counts every identifier, stable name and description among the entries a
-/// snapshot allocated, so each entry can learn which of them is unique.
-///
-/// An element counts under every typed identifier it carries, not only the one
-/// it prefers, because a live native-id match accepts any of them. Text is
-/// counted per identifier for an entry that records one, and across the whole
-/// role for an entry that does not: a live name match then ignores the
-/// identifiers of the elements it compares, so a name unique only among
-/// identifier-free elements would still land on an identified look-alike.
-///
-/// A count proves uniqueness only where the survey read that field on every
-/// element of the entry's role: `mark_incomplete` withdraws every proof and
-/// `mark_unread` the proofs that rest on the fields it names for one role. With
-/// identifiers unread, a name or description unique across the whole role still
-/// proves itself, because the live predicate is never broader than the role.
+/// Counts every identifier, stable name and description among a snapshot's entries, so
+/// each entry learns which of them is unique. A count proves nothing about an unread field.
 #[derive(Default)]
 pub(crate) struct IdentityBasisCounts {
     identifiers: HashMap<IdentifierKey, usize>,
@@ -138,9 +125,8 @@ impl IdentityBasisCounts {
     }
 }
 
-/// The basis an entry gets when nothing has proved its evidence unique: text
-/// or an identifier that could match a look-alike is ambiguous, and an entry
-/// with none of them can only be found by position.
+/// The basis for evidence nothing proved unique: text or an identifier that could match
+/// a look-alike is ambiguous, and an entry with none of them can only be found by position.
 pub(crate) fn unproven_basis(identity: &RefEntryIdentity) -> IdentityBasis {
     if native_identifier(identity).is_some()
         || stable_name(identity).is_some()
@@ -159,10 +145,8 @@ fn native_identifier(identity: &RefEntryIdentity) -> Option<&ElementIdentifier> 
         .filter(|identifier| !identifier.value.trim().is_empty())
 }
 
-/// Every typed identifier a look-alike could be matched by. A live native-id
-/// match accepts any identifier the candidate carries, not only the one it
-/// prefers, so each of them counts, and the recorded one counts even when the
-/// survey saw no others on this element.
+/// Every typed identifier a look-alike could be matched by: a live native-id match accepts
+/// any identifier the element carries, so the recorded one counts even when no others were seen.
 fn identifier_keys(
     identity: &RefEntryIdentity,
     identifiers: &[ElementIdentifier],

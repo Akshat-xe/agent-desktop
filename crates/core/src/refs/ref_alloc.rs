@@ -192,7 +192,6 @@ pub(crate) fn allocate_refs(
     let plan = RefAllocPlan::new(
         &node,
         skeleton_anchors,
-        config.scope.path_prefix,
         config.scope.root_ref_id.is_some(),
         config.complete,
     );
@@ -251,7 +250,7 @@ fn is_resolvable_skeleton_anchor(node: &AccessibilityNode) -> bool {
                 .is_some())
 }
 
-fn can_receive_observed_ref(node: &AccessibilityNode) -> bool {
+pub(crate) fn can_receive_observed_ref(node: &AccessibilityNode) -> bool {
     crate::Role::is_canonical(&node.role) && node.role != "unknown"
 }
 

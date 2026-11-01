@@ -223,8 +223,8 @@ pub(crate) fn entry_is_unverifiable(entry: &RefEntry) -> bool {
 /// recursive descent - the tree source, the stored ref being resolved
 /// against, and the walk budget - so the recursive signature threads one
 /// reference instead of carrying each individually at every call.
-pub(crate) struct SearchContext<'a> {
-    pub(crate) source: &'a UiaTreeSource,
+pub(crate) struct SearchContext<'a, S: TreeSource = UiaTreeSource> {
+    pub(crate) source: &'a S,
     pub(crate) entry: &'a RefEntry,
     pub(crate) budget: &'a WalkBudget,
 }
@@ -320,12 +320,12 @@ pub(crate) fn search_under(
 
 /// Enumerates one element's children for the search, honouring the sibling cap
 /// as a hard bound on pathological lists.
-pub(crate) fn enumerate_children(
-    source: &UiaTreeSource,
-    element: &UIAElement,
+pub(crate) fn enumerate_children<S: TreeSource>(
+    source: &S,
+    element: &S::Node,
     budget: &WalkBudget,
     unread_region: &mut bool,
-) -> Result<Vec<UIAElement>, AdapterError> {
+) -> Result<Vec<S::Node>, AdapterError> {
     let read = descent::read_children(source, element, budget, &SEARCH_DESCENT, None)?;
     *unread_region |= !read.complete;
     Ok(read.elements)

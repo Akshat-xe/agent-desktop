@@ -79,10 +79,8 @@ fn non_blank(text: Option<&str>) -> Option<&str> {
     text.filter(|value| !value.trim().is_empty())
 }
 
-/// The basis the stored fields support: the identifier when there is one,
-/// otherwise the name, otherwise the description, otherwise positional. A test
-/// about look-alikes sets the basis it means, since only the snapshot can know
-/// whether a field was unique in its scope.
+/// The basis the stored fields support: identifier, then name, then description, then positional.
+/// A test about look-alikes sets the basis it means, since only a snapshot knows what was unique.
 fn recorded_basis(identity: &agent_desktop_core::RefEntryIdentity) -> IdentityBasis {
     if non_blank(
         identity

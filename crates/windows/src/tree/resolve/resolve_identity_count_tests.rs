@@ -1,12 +1,5 @@
-//! What the live uniqueness count counts, and every region that leaves it
-//! incomplete.
-//!
-//! The count resolves on exactly one element and nothing left unread, so a
-//! second look-alike that the walk never reached - past the sibling cap, past
-//! the depth cap, behind a timed-out read, behind an unreadable region - must
-//! withhold the answer rather than become a silent single match. The same
-//! count must also refuse to treat an element outside the entry's identifier
-//! group as a second candidate, or as the stored element itself.
+//! What the live uniqueness count counts, and every region that leaves it incomplete: a second
+//! look-alike the walk never reached must withhold the answer, never become a single match.
 
 use std::time::Duration;
 
@@ -46,9 +39,8 @@ fn identified_button(tree: FakeTree, node: i32, name: &str, automation_id: &str)
     )
 }
 
-/// A control whose provider answered that it has no identifier at all. The
-/// absent outcome is what separates this from an unreadable one: a read that
-/// never answered is `Unknown`, and the count cannot exclude it.
+/// A control whose provider answered that it has no identifier at all, which the count can
+/// exclude; a read that never answered is `Unknown` and cannot be excluded.
 fn button_without_an_identifier(tree: FakeTree, node: i32, name: &str) -> FakeTree {
     tree.reading(
         node,
@@ -71,9 +63,8 @@ fn name_entry(role: &str) -> RefEntry {
     entry
 }
 
-/// The stored ref as a cap-free snapshot would have issued for `node`: its role
-/// read off the fixture rather than assumed, so the role gate is never what
-/// decides these cases.
+/// The stored ref a cap-free snapshot would issue for `node`, its role read off the fixture so
+/// the role gate never decides these cases.
 fn matching_entry(tree: &FakeTree, node: &i32) -> RefEntry {
     let role = evidence_at(tree, node)
         .role
@@ -83,11 +74,8 @@ fn matching_entry(tree: &FakeTree, node: &i32) -> RefEntry {
     name_entry(&role)
 }
 
-/// The sibling cap is the node limit the count walks under. A cap-hit list is
-/// reported whole, so one sibling probe past the last returned element is the
-/// only signal that a second match was never returned - and both controls
-/// answer to the stored identity, so resolving on the one found would pick one
-/// of two look-alikes.
+/// The sibling cap is the node limit the count walks under, so a second match the enumeration never
+/// returned is visible only to a probe past the last element.
 #[test]
 fn a_second_match_past_the_sibling_cap_withholds_the_count() {
     let tree = FakeTree::default().with_children(1, &[2, 3, 4]);
@@ -125,14 +113,8 @@ fn a_second_match_past_the_sibling_cap_withholds_the_count() {
     );
 }
 
-/// The depth cap is the other node limit. The search evaluates the deepest level
-/// the snapshot walker emits and stops below it, and one child probe is the only
-/// signal that the subtree past that level holds anything at all, so a match
-/// down there is never counted and the sole match above the cap is withheld.
-///
-/// The fixture root is depth 0, so the node at the deepest searched level is
-/// index `MAX_RESOLVE_DEPTH + 1` and the look-alike one level past it is the
-/// child the walk never reaches.
+/// The depth cap is the other node limit: a match below the deepest searched level is never
+/// counted, so a sole match above it is withheld. The fixture root is depth 0.
 #[test]
 fn a_second_match_beyond_the_depth_cap_withholds_the_count() {
     let last = i32::from(MAX_RESOLVE_DEPTH) + 1;
@@ -161,9 +143,8 @@ fn a_second_match_beyond_the_depth_cap_withholds_the_count() {
     );
 }
 
-/// A read cut by the deadline is an unfinished count, not a count of one: the
-/// sibling list is left unread, and whatever the rest of that list held was
-/// never examined even though the first match was already found.
+/// A read cut by the deadline is an unfinished count, not a count of one, even with a first
+/// match already found.
 #[test]
 fn a_read_that_times_out_after_the_first_match_withholds_the_count() {
     let tree = FakeTree::default()
@@ -198,9 +179,8 @@ fn a_read_that_times_out_after_the_first_match_withholds_the_count() {
     );
 }
 
-/// A region whose needed fields cannot be read is unread, not empty: the count
-/// already holds one match, and the element after it answers nothing, so the
-/// search cannot tell a look-alike from a node it merely failed to read.
+/// A region whose needed fields cannot be read is unread, not empty: the search cannot tell a
+/// look-alike from a node it merely failed to read.
 #[test]
 fn an_unreadable_region_after_the_first_match_withholds_the_count() {
     let tree = FakeTree::default().with_children(1, &[2, 3]);
@@ -235,11 +215,8 @@ fn an_unreadable_region_after_the_first_match_withholds_the_count() {
     );
 }
 
-/// A name-basis ref recorded with an identifier was proven unique inside that
-/// identifier group only. An element with the same role and text but another
-/// identifier, or no identifier, is neither counted - which would turn a
-/// resolvable ref into `AMBIGUOUS_TARGET` - nor matched, which would resolve
-/// onto it.
+/// A name-basis ref recorded with an identifier was proven unique only inside that identifier
+/// group, so an element outside it is neither counted nor matched.
 #[test]
 fn a_name_basis_ref_neither_counts_nor_matches_a_look_alike_outside_its_identifier_group() {
     let tree = FakeTree::default().with_children(1, &[2, 3, 4]);
@@ -292,10 +269,8 @@ fn a_name_basis_ref_neither_counts_nor_matches_a_look_alike_outside_its_identifi
     );
 }
 
-/// A ref the snapshot itself could not prove unique is refused even when its
-/// stored rectangle would let the geometry tier pick a candidate: bounds never
-/// stand in for an identity the snapshot could not establish, and the refusal
-/// costs one attempt with nothing sent to the application.
+/// A ref the snapshot could not prove unique is refused even when its rectangle would let the
+/// geometry tier pick a candidate. Nothing is sent to the application.
 #[test]
 fn an_ambiguous_entry_is_refused_before_the_bounds_tier_can_pick_a_candidate() {
     let bounds = Rect {

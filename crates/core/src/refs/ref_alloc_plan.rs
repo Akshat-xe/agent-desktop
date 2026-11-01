@@ -1,8 +1,8 @@
-//! The plan snapshot allocation follows: which nodes receive a ref, and the
-//! identity basis each of those refs records.
+//! The plan snapshot allocation follows: which nodes receive a ref, and the identity basis each
+//! ref records. The census counts every element a live search could match.
 
 use crate::refs::identity_basis_counts::IdentityBasisCounts;
-use crate::refs::ref_alloc::{identity_from_node, is_ref_able};
+use crate::refs::ref_alloc::{can_receive_observed_ref, identity_from_node};
 use crate::{AccessibilityNode, IdentityBasis, RefEntryIdentity};
 use std::collections::HashSet;
 
@@ -15,7 +15,6 @@ impl RefAllocPlan {
     pub(crate) fn new(
         root: &AccessibilityNode,
         skeleton_anchors: HashSet<Vec<usize>>,
-        path_prefix: &[usize],
         drill_down: bool,
         complete: bool,
     ) -> Self {
@@ -23,8 +22,7 @@ impl RefAllocPlan {
         if drill_down || !complete {
             counts.mark_incomplete();
         }
-        let mut path = path_prefix.to_vec();
-        Self::count_look_alikes(root, &mut path, &skeleton_anchors, &mut counts);
+        Self::count_look_alikes(root, &mut counts);
         Self {
             skeleton_anchors,
             counts,
@@ -39,12 +37,7 @@ impl RefAllocPlan {
         self.counts.basis(identity)
     }
 
-    fn count_look_alikes(
-        node: &AccessibilityNode,
-        path: &mut Vec<usize>,
-        anchors: &HashSet<Vec<usize>>,
-        counts: &mut IdentityBasisCounts,
-    ) {
+    fn count_look_alikes(node: &AccessibilityNode, counts: &mut IdentityBasisCounts) {
         if node.subtree_truncated || node.children_count.is_some_and(|count| count > 0) {
             counts.mark_incomplete();
         }
@@ -52,20 +45,17 @@ impl RefAllocPlan {
             counts.mark_incomplete();
         }
         mark_unread(counts, node);
-        if receives_ref(node, path, anchors) {
+        if can_receive_observed_ref(node) {
             counts.record(&identity_from_node(node), &node.identity.native_ids);
         }
-        for (index, child) in node.children.iter().enumerate() {
-            path.push(index);
-            Self::count_look_alikes(child, path, anchors, counts);
-            path.pop();
+        for child in &node.children {
+            Self::count_look_alikes(child, counts);
         }
     }
 }
 
-/// Withdraws the proofs a node's unread fields could hide a look-alike from. A
-/// mutable-value role's stable name rests on its value, so an unread value is
-/// an unread name there too.
+/// Withdraws the proofs a node's unread fields could hide a look-alike from. For a
+/// mutable-value role, an unread value is an unread name too.
 fn mark_unread(counts: &mut IdentityBasisCounts, node: &AccessibilityNode) {
     let unread = node.identity.unread;
     counts.mark_unread(
@@ -74,13 +64,4 @@ fn mark_unread(counts: &mut IdentityBasisCounts, node: &AccessibilityNode) {
         unread.names || (unread.values && crate::tree::roles::is_mutable_value_role(&node.role)),
         unread.descriptions,
     );
-}
-
-/// Mirrors the allocation itself: a node is an entry when it is ref-able or a
-/// planned skeleton anchor, and allocation drops one whose role cannot be
-/// addressed, so it is not a look-alike either.
-fn receives_ref(node: &AccessibilityNode, path: &[usize], anchors: &HashSet<Vec<usize>>) -> bool {
-    (is_ref_able(node) || anchors.contains(path))
-        && crate::Role::is_canonical(&node.role)
-        && node.role != "unknown"
 }

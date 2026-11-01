@@ -383,7 +383,7 @@ fn window_not_found(id: &str) -> AdapterError {
     .with_suggestion("Run 'list-windows' to see available windows and their IDs.")
 }
 
-fn window_identity_mismatch(id: &str) -> AdapterError {
+pub(crate) fn window_identity_mismatch(id: &str) -> AdapterError {
     AdapterError::new(
         ErrorCode::WindowNotFound,
         format!("Window '{id}' identity mismatch"),

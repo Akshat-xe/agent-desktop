@@ -66,15 +66,8 @@ pub(crate) fn resolve_element_strict(
     retry_incomplete_until(deadline, || resolve_attempt(entry, deadline))
 }
 
-/// One resolution attempt: the recorded basis decides the tier, and only a
-/// bounds-decidable one reaches the path tier and broad search below.
-///
-/// Those tiers report what they left unread separately and keep it separate
-/// all the way to [`attempt_verdict`], because a landing and a region are
-/// different claims. The path tier's landing is decided by
-/// [`accept_path_landing`], which is handed the landed element alone; the
-/// region each tier left unread only ever bears on the *negative* verdict, and
-/// is composed once, at the end, by the function that settles it.
+/// One resolution attempt: the recorded basis decides the tier, and only a bounds-decidable one
+/// reaches the path tier and broad search. Each tier keeps what it left unread for the verdict.
 #[cfg(target_os = "windows")]
 fn resolve_attempt(entry: &RefEntry, deadline: Deadline) -> Result<NativeHandle, AdapterError> {
     basis_gate(&entry.identity)?;

@@ -62,9 +62,8 @@ fn stored(
     entry
 }
 
-/// The positive half of the count: one match and nothing left unread is the
-/// only shape that resolves. The index is asserted so an arm that resolved a
-/// different candidate would fail rather than pass by `Resolved` alone.
+/// The positive half of the count: one match and nothing left unread resolves, and the index is
+/// asserted so resolving a different candidate fails.
 #[test]
 fn a_single_match_in_a_fully_read_scope_resolves() {
     assert!(matches!(
@@ -73,10 +72,8 @@ fn a_single_match_in_a_fully_read_scope_resolves() {
     ));
 }
 
-/// A sole match found while any part of the scope stayed unread never resolves:
-/// the second live element the identity would also match could be sitting in
-/// the region the walk could not read, and resolving is exactly the
-/// silent-wrong-target shape this tier exists to refuse.
+/// A sole match found while any part of the scope stayed unread never resolves, since the second
+/// look-alike could be sitting in the region the walk could not read.
 #[test]
 fn a_single_match_with_an_unread_region_is_incomplete_not_resolved() {
     assert!(matches!(
@@ -85,9 +82,8 @@ fn a_single_match_with_an_unread_region_is_incomplete_not_resolved() {
     ));
 }
 
-/// An empty count only settles when every region was read. Otherwise the
-/// element may still be there, and `STALE_REF` - "the element is gone" - would
-/// be a verdict off a walk that never finished.
+/// An empty count only settles when every region was read; otherwise `STALE_REF` would be a
+/// verdict off a walk that never finished.
 #[test]
 fn an_empty_count_with_an_unread_region_is_incomplete_not_stale() {
     assert!(matches!(
@@ -100,9 +96,8 @@ fn an_empty_count_with_an_unread_region_is_incomplete_not_stale() {
     ));
 }
 
-/// Two promises cannot both be the answer, and nothing left unread could make
-/// them fewer, so ambiguity is conclusive even on a partial walk - the same
-/// ordering the positional classification applies.
+/// Ambiguity is conclusive even on a partial walk, because nothing left unread could make two
+/// promises fewer.
 #[test]
 fn two_or_more_matches_are_ambiguous_even_on_a_partial_walk() {
     assert!(matches!(
@@ -115,10 +110,8 @@ fn two_or_more_matches_are_ambiguous_even_on_a_partial_walk() {
     ));
 }
 
-/// The identity rule keeps the AutomationId-first corroboration: an identifier
-/// that still matches while the stored stable text drifted is refuted, never
-/// counted. Dropping the corroboration would count the look-alike and turn a
-/// resolvable ref into `AMBIGUOUS_TARGET` - or, worse, resolve onto it.
+/// The identity rule keeps the AutomationId-first corroboration: an identifier that still
+/// matches while the stored stable text drifted is refuted, never counted.
 #[test]
 fn a_matching_identifier_with_a_drifted_name_is_refuted_not_counted() {
     let entry = stored(
@@ -144,9 +137,8 @@ fn a_matching_identifier_with_a_drifted_name_is_refuted_not_counted() {
     );
 }
 
-/// The role gate, both directions, plus the unreadable case: a role that read
-/// back as something else is a refusal, while a role that could not be read at
-/// all leaves the region unread rather than settling the count.
+/// The role gate in both directions plus the unreadable case: a different role is a refusal,
+/// while a role that could not be read leaves the region unread.
 #[test]
 fn the_role_gate_rejects_a_different_role_and_withholds_an_unreadable_one() {
     let entry = stored("button", IdentityBasis::Name, Some("Save"), None);
@@ -165,9 +157,8 @@ fn the_role_gate_rejects_a_different_role_and_withholds_an_unreadable_one() {
     );
 }
 
-/// A candidate whose decisive field could not be read is unread, never a
-/// refusal: collapsing `Unknown` into `NoMatch` would let a one-candidate count
-/// settle off a provider that merely failed to answer.
+/// A candidate whose decisive field could not be read is unread, never a refusal, so a
+/// one-candidate count cannot settle off a provider that failed to answer.
 #[test]
 fn an_unreadable_identifier_is_unread_not_refuted() {
     let entry = stored("row", IdentityBasis::NativeId, None, Some("row-77"));
@@ -182,11 +173,8 @@ fn an_unreadable_identifier_is_unread_not_refuted() {
     );
 }
 
-/// Bounds never confirm an identity ref. The one candidate below is the shape
-/// the positional search's geometry promotion exists for - an unsettleable
-/// identity plus an agreeing positive-area rectangle - and that search does
-/// collect it. The identity tier counts nothing there, so a stored rectangle
-/// can never stand in for the identity it did not record.
+/// Bounds never confirm an identity ref: the candidate below is the shape the positional search's
+/// geometry promotion collects, and the identity tier counts nothing there.
 #[test]
 fn geometry_that_promotes_a_positional_candidate_confirms_nothing_here() {
     let bounds = Rect {
@@ -228,10 +216,8 @@ fn geometry_that_promotes_a_positional_candidate_confirms_nothing_here() {
     );
 }
 
-/// A ref recorded before identity evidence was kept is refused from its own
-/// record, before any window resolution or search. Fails if the gate is moved
-/// behind either: the refusal would then carry the search's own diagnosis, and
-/// a legacy ref would pay for a full walk on every attempt.
+/// A ref recorded before identity evidence was kept is refused from its own record, before any
+/// window resolution or search.
 #[test]
 fn a_legacy_entry_is_refused_before_any_live_work() {
     let mut entry = crate::tree::walk::walker_fake::ref_entry("button");
@@ -253,10 +239,8 @@ fn a_legacy_entry_is_refused_before_any_live_work() {
     );
 }
 
-/// A ref the snapshot could not prove unique is refused the same way, with the
-/// identity-not-unique diagnosis and a not-delivered disposition: nothing was
-/// sent to the application, and one look-alike's action must never be run
-/// against the other.
+/// A ref the snapshot could not prove unique is refused the same way, with the identity-not-unique
+/// diagnosis and a not-delivered disposition.
 #[test]
 fn an_ambiguous_entry_is_refused_with_the_identity_not_unique_diagnosis() {
     let mut entry = crate::tree::walk::walker_fake::ref_entry("row");
@@ -287,10 +271,8 @@ fn children_budget(max_siblings: usize) -> WalkBudget {
     crate::tree::walk::walker_fake::budget(10).with_max_siblings(max_siblings)
 }
 
-/// A list that reached the sibling cap with more siblings behind it is a cut,
-/// not an end: a look-alike can sit in the part the enumeration never returned.
-/// The probe is the only signal that separates this from a list that genuinely
-/// ends at the cap.
+/// A list that reached the sibling cap with more siblings behind it is a cut, not an end: the
+/// probe is what separates it from a list that genuinely ends at the cap.
 #[test]
 fn a_sibling_list_that_reached_the_cap_with_more_behind_it_is_cut() {
     let tree = FakeTree::default().with_children(1, &[2, 3, 4]);

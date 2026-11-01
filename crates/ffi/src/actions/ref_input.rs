@@ -1,7 +1,5 @@
-//! Bounded reads of the C strings and arrays an exact ref entry carries.
-//!
-//! Every length is a caller-supplied count, so each read checks it against the
-//! published `AD_MAX_*` constant and against the pointer before touching memory.
+//! Bounded reads of the C strings and arrays a caller-supplied ref entry carries. Each length
+//! is checked against the published `AD_MAX_*` constant and the pointer before memory is touched.
 
 use crate::convert::string::required_adapter_string;
 use agent_desktop_core::{AdapterError, ErrorCode};

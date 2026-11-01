@@ -1,11 +1,5 @@
-//! Which live scope an identity count may search.
-//!
-//! A ref captured from the focused surface belongs to the window that held focus
-//! at capture time. Its live count searches that recorded window and never the
-//! surface that holds focus now: focusing a second window of the same process
-//! that carries an identical field must not turn the ref into a read of that
-//! other window. A focused ref that recorded no window cannot be pinned at all,
-//! so it is refused instead of following the focus change.
+//! Which live scope an identity count may search: the window recorded at capture, never the
+//! surface that holds focus now, and a refusal when no window was recorded.
 
 use agent_desktop_core::{AdapterError, RefEntry, SnapshotSurface};
 

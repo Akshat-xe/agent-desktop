@@ -119,9 +119,8 @@ fn capture(observed: ObservedTree) -> (AccessibilityNode, RefMap) {
     (tree, refmap)
 }
 
-/// Textfield A carries no identifier and textfield B carries one, so a count
-/// keyed by identifier group sees A alone. A live name match ignores
-/// identifiers it was not told about, so B replaces A's ref once A is gone.
+/// A count keyed by identifier group would see the identifier-free textfield alone, so a
+/// live name match would let the identified twin replace its ref.
 #[test]
 fn an_identifier_free_text_identity_counts_every_element_of_its_role() {
     let observed = snapshot(vec![node(
@@ -151,10 +150,8 @@ fn an_identifier_free_text_identity_counts_every_element_of_its_role() {
     );
 }
 
-/// Save button A exposes `shared`, and B exposes it beside a preferred DOM
-/// identifier. A live native-id match accepts either of B's identifiers, so
-/// B is a look-alike of A even though the projection keeps only B's preferred
-/// one.
+/// A live native-id match accepts any identifier a button exposes, so the one exposing
+/// `shared` beside its preferred identifier is a look-alike even though the projection drops it.
 #[test]
 fn an_identifier_exposed_beside_the_preferred_one_counts_as_a_look_alike() {
     let observed = snapshot(vec![node(
@@ -184,10 +181,8 @@ fn an_identifier_exposed_beside_the_preferred_one_counts_as_a_look_alike() {
     );
 }
 
-/// The observation stopped at the requested depth and reported itself
-/// complete, so the duplicate Save under the unread row never entered the
-/// census. A proof that counts only what was walked lets the hidden twin
-/// replace the visible target.
+/// A subtree cut at the requested depth never entered the census, so a proof counting only
+/// what was walked lets the hidden twin replace the visible target.
 #[test]
 fn an_omitted_subtree_withdraws_the_identity_proof_of_a_visible_look_alike() {
     let visible = || {
@@ -231,9 +226,8 @@ fn an_omitted_subtree_withdraws_the_identity_proof_of_a_visible_look_alike() {
     );
 }
 
-/// The second Save's name read failed, which the projection erases to an
-/// absent name. Counting the first as unique lets it resolve onto the second
-/// once that one is readable.
+/// The second Save's name read failed, so counting the first as unique would let it resolve
+/// onto the second once that one is readable.
 #[test]
 fn an_unreadable_name_on_a_look_alike_withdraws_the_other_name_proof() {
     let mut unreadable = evidence("button", None);

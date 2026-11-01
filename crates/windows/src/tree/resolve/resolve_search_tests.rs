@@ -5,6 +5,8 @@ use agent_desktop_core::{
     ElementIdentifier, IdentifierEvidence, IdentifierKind, LocatorField, NodeDescriptor,
 };
 
+/// A stored entry as a capture issues one: a ref always records the basis its snapshot could
+/// prove, and a basis-less one is refused before any of these predicates run.
 fn entry(
     bounds: Option<agent_desktop_core::Rect>,
     hash: Option<u64>,
@@ -12,6 +14,11 @@ fn entry(
     native: Option<&str>,
 ) -> RefEntry {
     let mut entry = crate::tree::walk::walker_fake::ref_entry("button");
+    entry.identity.basis = Some(match (native, name) {
+        (Some(_), _) => agent_desktop_core::IdentityBasis::NativeId,
+        (None, Some(_)) => agent_desktop_core::IdentityBasis::Name,
+        (None, None) => agent_desktop_core::IdentityBasis::Positional,
+    });
     entry.identity.name = name.map(str::to_string);
     entry.identity.native_id = native.map(|value| ElementIdentifier {
         kind: IdentifierKind::AutomationId,

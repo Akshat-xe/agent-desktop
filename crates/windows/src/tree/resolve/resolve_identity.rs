@@ -1,44 +1,22 @@
-//! Resolution for a ref that carries a recorded identity basis.
-//!
-//! A ref whose basis is `NativeId`, `Name` or `Description` promises a unique
-//! current match, not object continuity: it resolves only when a complete walk
-//! of its source scope finds exactly one live element whose role and recorded
-//! identity fields agree with it. The stored child-index path and the stored
-//! rectangle have no say in that verdict, so this tier runs no path fast path
-//! and no geometry promotion, and a walk that could not read part of the scope
-//! never resolves - not even when it has already found one match.
-//!
-//! Split from `resolve_search.rs`, which is at the file-size cap. The search
-//! there keeps the path and bounds tiers, which apply only to refs whose basis
-//! lets bounds decide.
-//!
-//! A second match ends the walk: no region it never read could turn two
-//! matches into one, so `AMBIGUOUS_TARGET` is already settled and the count
-//! this tier reports is the count the walk stopped at.
+//! Resolution for a ref whose recorded identity must find one live match: a complete walk of the
+//! source scope, no path or bounds shortcuts, and nothing resolved past an unread region.
 
 use agent_desktop_core::{AdapterError, Deadline, LocatorEvidence, NativeHandle, RefEntry};
 
 use super::resolve_match::{
-    Candidate, admitted_outcome, ambiguous_target_error, candidate_outcome, role_admission,
-    stale_ref_error,
+    admitted_outcome, ambiguous_target_error, candidate_outcome, role_admission, stale_ref_error,
 };
 use super::resolve_search::{
-    MAX_RESOLVE_DEPTH, NodeAdmission, SearchContext, build_candidate, enumerate_children,
-    identity_unknown_error, resolve_walk_budget,
+    MAX_RESOLVE_DEPTH, NodeAdmission, SearchContext, enumerate_children, identity_unknown_error,
+    resolve_walk_budget,
 };
 use super::{SearchVerdict, into_verified_handle, resolve_window_root};
 use crate::tree::element::UIAElement;
 use crate::tree::walk::walker::{TreeSource, WalkBudget};
 use crate::tree::walk::walker_source::UiaTreeSource;
 
-/// Resolves a ref that must find one live element: its recorded identity, read
-/// completely, or nothing.
-///
-/// The window gate runs first and is unchanged - a ref never searches a window
-/// another process now owns - and every other tier is deliberately absent. A
-/// sole candidate found while any part of the scope stayed unread is answered
-/// with the incomplete-traversal error, which the caller's retry loop replays
-/// until the scope is read or the deadline expires.
+/// Resolves a ref that must find one live element by its recorded identity. The window gate runs
+/// first, and a sole candidate beside an unread region is retried rather than resolved.
 pub(crate) fn resolve_unique_identity(
     entry: &RefEntry,
     deadline: Deadline,
@@ -47,7 +25,7 @@ pub(crate) fn resolve_unique_identity(
     let source = UiaTreeSource::for_root(&root)?;
     let prepared = source.prepare_root(&root)?;
     let budget = resolve_walk_budget(deadline);
-    let mut found = Vec::new();
+    let mut found: Vec<UIAElement> = Vec::new();
     let mut unread_region = false;
     let ctx = SearchContext {
         source: &source,
@@ -61,20 +39,14 @@ pub(crate) fn resolve_unique_identity(
         SearchVerdict::Resolved(index) => found
             .into_iter()
             .nth(index)
-            .map(|candidate| into_verified_handle(candidate.element, entry))
+            .map(|candidate| into_verified_handle(candidate, entry))
             .ok_or_else(|| stale_ref_error(entry)),
         SearchVerdict::Ambiguous => Err(ambiguous_target_error(entry, found.len())),
     }
 }
 
-/// What a live count decides.
-///
-/// Two matching live elements are conclusive on their own - one more candidate
-/// cannot make them fewer - so an unread region elsewhere cannot turn that
-/// answer into anything but ambiguous, the same rule the positional search's
-/// own classification applies. Zero and one are the counts a match in the
-/// unread region could still change, so both are withheld while anything is
-/// left unread.
+/// What a live count decides: two matches are ambiguous whatever stays unread, while zero and one
+/// are withheld until the whole scope has been read.
 pub(super) fn classify_identity_search(count: usize, unread_region: bool) -> SearchVerdict {
     match count {
         0 if unread_region => SearchVerdict::Incomplete,
@@ -85,16 +57,8 @@ pub(super) fn classify_identity_search(count: usize, unread_region: bool) -> Sea
     }
 }
 
-/// Whether the identity search counts this live candidate, refutes it, or could
-/// not decide.
-///
-/// The role gate is [`role_admission`] and the identity rule is
-/// [`candidate_outcome`], both shared with the positional search, so the
-/// AutomationId-first stable-text corroboration that refutes a candidate whose
-/// identifier matches but whose text drifted (A7-3) is applied here unchanged.
-/// The one arm this tier does not inherit from `admit_node` is geometry
-/// promotion: a ref with a recorded identity basis carries meaningful identity,
-/// and its bounds must never confirm it.
+/// Whether the identity search counts this live candidate, refutes it, or could not decide. The
+/// role and identity rules are shared with the positional search; bounds never confirm here.
 pub(crate) fn admit_identity_candidate(
     entry: &RefEntry,
     evidence: &LocatorEvidence,
@@ -105,16 +69,13 @@ pub(crate) fn admit_identity_candidate(
     }
 }
 
-/// Walks the source scope counting every candidate the recorded identity
-/// admits, and records every part of the scope it could not read.
-///
-/// The walk ends as soon as the count settles the verdict, so a second match
-/// stops both the recursion that found it and the sibling traversal around it.
-fn search_source_scope(
-    ctx: &SearchContext<'_>,
-    element: &UIAElement,
+/// Counts every candidate the recorded identity admits and records every region it could not read.
+/// A second match ends the walk, so the settled `AMBIGUOUS_TARGET` verdict is never overwritten.
+fn search_source_scope<S: TreeSource>(
+    ctx: &SearchContext<'_, S>,
+    element: &S::Node,
     depth: u8,
-    found: &mut Vec<Candidate>,
+    found: &mut Vec<S::Node>,
     unread_region: &mut bool,
 ) -> Result<(), AdapterError> {
     if match_count_is_conclusive(found.len()) {
@@ -126,9 +87,12 @@ fn search_source_scope(
     }
     let (_, evidence, _) = ctx.source.evidence(element);
     match admit_identity_candidate(ctx.entry, &evidence) {
-        NodeAdmission::Collect => found.push(build_candidate(element, &evidence)),
+        NodeAdmission::Collect => found.push(element.clone()),
         NodeAdmission::Unread => *unread_region = true,
         NodeAdmission::Reject => {}
+    }
+    if match_count_is_conclusive(found.len()) {
+        return Ok(());
     }
     if at_deepest_searched_level(depth) {
         *unread_region |= boundary_hides_descendants(ctx.source, element);
@@ -145,49 +109,26 @@ fn search_source_scope(
     Ok(())
 }
 
-/// Whether a node at `depth` is the deepest one this search evaluates.
-///
-/// The snapshot walker visits the node at its own raw-depth ceiling and cuts
-/// only the children below it (`walker_enumerate`'s `truncated_by_raw_depth`),
-/// and `resolve_walk_budget` sets that ceiling to `MAX_RESOLVE_DEPTH`. A ref
-/// can therefore name an element at exactly `MAX_RESOLVE_DEPTH`, so the count
-/// must evaluate such a node and stop one level below it. Stopping a level
-/// earlier leaves every ref the snapshot issued at the boundary unsearchable:
-/// its sole match sits one level up while the boundary node's child flags the
-/// scope unread, so the attempt never resolves.
+/// Whether a node at `depth` is the deepest one this search evaluates. A ref can name an element
+/// at exactly `MAX_RESOLVE_DEPTH`, so that node is counted and the search stops one level below it.
 fn at_deepest_searched_level(depth: u8) -> bool {
     depth >= MAX_RESOLVE_DEPTH
 }
 
-/// Whether the collected count already decides the verdict.
-///
-/// Two live elements that both answer to the recorded identity are
-/// `AMBIGUOUS_TARGET` on their own - [`classify_identity_search`] answers that
-/// for any count above one, whatever stays unread - and this tier has no
-/// bounds tie-break to separate them. A third candidate, and every read that
-/// would find it, can only cost time, so the walk stops at the second match.
+/// Whether the collected count already settles the verdict: two matches are ambiguous whatever is
+/// unread, and this tier has no bounds tie-break, so a third candidate can only cost time.
 fn match_count_is_conclusive(match_count: usize) -> bool {
     match_count > 1
 }
 
-/// Whether a node at the depth cap has children the search never read.
-///
-/// One child probe answers it, and it is the only way to tell a subtree the
-/// depth budget cut from one that ends there: the search deliberately stops
-/// above this level rather than enumerate children it would discard, so no
-/// enumeration ever reports the cut. A probe that fails is not emptiness - an
-/// unreadable subtree is exactly what a uniqueness count must not resolve past.
+/// Whether a node at the depth cap has children the search never read. One child probe is the only
+/// way to tell a cut subtree from a real end, and a failed probe is unreadable, not empty.
 fn boundary_hides_descendants<S: TreeSource>(source: &S, element: &S::Node) -> bool {
     !matches!(source.first_child(element), Err(failure) if failure.is_exhaustion())
 }
 
-/// Whether the sibling cap cut the child list short.
-///
-/// The shared enumeration reports a cap-hit as a whole list, because no stored
-/// ref names an element past that point. A look-alike can still sit there, so
-/// for a uniqueness count the cap is one more unread region. The probe costs a
-/// single sibling call and runs only when the list reached the cap; a failing
-/// probe is unreadable rather than empty.
+/// Whether the sibling cap cut the child list short: the shared enumeration reports a cap-hit as a
+/// whole list, and a failing probe is unreadable rather than empty.
 fn sibling_list_was_cut<S: TreeSource>(
     source: &S,
     children: &[S::Node],

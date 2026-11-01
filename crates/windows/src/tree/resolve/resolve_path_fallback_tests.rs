@@ -130,15 +130,8 @@ fn the_path_tier_settles_on_the_element_the_stored_path_names_and_on_no_other() 
     );
 }
 
-/// The stored path's refutation does not settle the resolution.
-///
-/// The stored child-index path still lands on a live element - so this is
-/// not the path-missed case - but the element now occupying that index is a
-/// different one of the same role, which the identity evidence refutes. A
-/// refutation at the stored index is evidence about that element only, never
-/// about the stored one, so resolution must keep looking and find the real
-/// target elsewhere in the tree. Settling `STALE_REF` there instead would
-/// strand every ref whose siblings were reordered.
+/// A refutation at the stored path is evidence about that element only, never about the stored one,
+/// so resolution must keep looking rather than settle `STALE_REF`.
 #[test]
 fn a_refuted_element_at_the_stored_path_falls_through_to_the_broad_search() {
     crate::tree::fixture::ensure_test_apartment();

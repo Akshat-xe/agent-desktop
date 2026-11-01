@@ -1,5 +1,6 @@
 use agent_desktop_core::{
     AdapterError, LocatorEvidence, LocatorField, RefEntry,
+    refs::identity_basis_gate::requires_live_uniqueness,
     refs::ref_identity::{has_stable_text_identity, identity_match, stable_text_match},
 };
 use serde_json::json;
@@ -28,23 +29,8 @@ pub(crate) enum CandidateOutcome {
     Incomplete,
 }
 
-/// The composed rule over core's verdicts.
-///
-/// `identity_match` settles the id tier for an id-bearing ref, and by itself
-/// would settle on an id hit without consulting text - the exact behaviour
-/// A7-3 measured as silently wrong on Windows (Explorer re-resolving 5 of 29
-/// index-keyed refs onto a different element). The corroboration tier runs
-/// only when the stored ref carries a stable text identity
-/// (`has_stable_text_identity`): an id `Match` + stable-text `NoMatch` is
-/// refuted, and a `NoMatch` never collapses an `Unknown`. The tier keys the
-/// incomplete flag on the verdict itself: an `IdentityMatch::Unknown`, which
-/// core produces when a decisive field reads `LocatorField::Unknown` (a read
-/// that failed), becomes `Incomplete`. A structurally absent field is not
-/// `Unknown` and settles `NoMatch` instead, because `match_primary_identity`
-/// returns `NoMatch` when both the primary and fallback fields are `Absent`. An
-/// id `Match` on a ref with no stored text identity (an icon-only button)
-/// resolves without corroboration, preserving the previous behaviour. An id-less ref
-/// is routed through `identity_match`, which performs the text match itself.
+/// The composed rule over core's verdicts: a positional ref that hits on its identifier is
+/// corroborated by stable text, and a ref with a unique basis is left to its own identity rule.
 pub(crate) fn candidate_outcome(entry: &RefEntry, evidence: &LocatorEvidence) -> CandidateOutcome {
     let id_tier = identity_match(
         entry,
@@ -55,6 +41,7 @@ pub(crate) fn candidate_outcome(entry: &RefEntry, evidence: &LocatorEvidence) ->
     );
     if entry.identity.native_id.is_some()
         && id_tier == agent_desktop_core::IdentityMatch::Match
+        && !requires_live_uniqueness(&entry.identity)
         && has_stable_text_identity(entry)
     {
         return outcome_of(stable_text_match(
@@ -123,14 +110,8 @@ pub(crate) fn select_by_bounds_hash(
     }
 }
 
-/// The role gate every admission rule shares: `None` when the candidate's role
-/// matches the stored one, so the identity rule decides, and otherwise the
-/// gate's own answer. A role that could not be read leaves the region unread,
-/// while a role that read back as something else is a real refusal.
-///
-/// One copy rather than one per admission rule, so the positional search and
-/// the identity-uniqueness search can never accept different elements on the
-/// strength of the role alone.
+/// The role gate every admission rule shares: `None` when the role matches the stored one, so the
+/// identity rule decides. An unread role leaves the region unread; any other role is a refusal.
 pub(crate) fn role_admission(
     entry: &RefEntry,
     evidence: &LocatorEvidence,
@@ -148,9 +129,8 @@ pub(crate) fn role_admission(
     Some(NodeAdmission::Reject)
 }
 
-/// The one mapping from a core verdict to the resolver's admission. Written
-/// once so no admission rule can drift apart from another: an unreadable field
-/// is always `Unread`, never a refutation.
+/// The one mapping from a core verdict to the resolver's admission, so no admission rule drifts:
+/// an unreadable field is always `Unread`, never a refutation.
 pub(crate) fn admitted_outcome(outcome: CandidateOutcome) -> NodeAdmission {
     match outcome {
         CandidateOutcome::Matched => NodeAdmission::Collect,
@@ -159,20 +139,8 @@ pub(crate) fn admitted_outcome(outcome: CandidateOutcome) -> NodeAdmission {
     }
 }
 
-/// Whether an already-collected match count settles `AMBIGUOUS_TARGET` on
-/// its own, with nothing left to read that could change the answer.
-///
-/// Despite the name, nothing here stops `search_under`'s own walk early -
-/// Windows's search always collects the whole depth-bounded subtree, and
-/// this predicate is consulted only after collection finishes, inside
-/// `classify_search`. Two or more matches with no stored hash to
-/// disambiguate is conclusively ambiguous already: nothing left unread could
-/// turn it into anything other than `AMBIGUOUS_TARGET`, so an incomplete
-/// region elsewhere in the tree must not withhold that verdict. Mirrors
-/// macOS's `should_stop_collecting`
-/// (`crates/macos/src/tree/resolve/resolve_search.rs:374-376`), which does stop its
-/// walk early on this signal - Windows only reuses its name and its
-/// classification rule, not its early exit.
+/// Whether an already-collected match count settles `AMBIGUOUS_TARGET` on its own. Two matches
+/// with no stored hash to disambiguate cannot be fewer, so an unread region must not withhold it.
 pub(crate) fn should_stop_collecting(match_count: usize, entry: &RefEntry) -> bool {
     match_count > 1 && entry.geometry.bounds_hash.is_none()
 }

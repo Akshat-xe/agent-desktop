@@ -299,6 +299,34 @@ fn identical_text_across_identifier_groups_never_becomes_ambiguous() {
     assert_eq!(basis_of(&tree, &refmap, &[3]), Some(IdentityBasis::Name));
 }
 
+/// An inert group named Row is a look-alike of the actionable one, so counting only ref-able
+/// elements would let the surviving ref resolve onto the inert twin.
+#[test]
+fn an_inert_look_alike_of_the_same_role_and_name_withdraws_the_name_proof() {
+    let mut actionable = node("group", Some("Row"));
+    actionable.presentation.available_actions = vec![crate::actions::capability::CLICK.to_string()];
+    let inert = node("group", Some("Row"));
+    let root = window_with(vec![actionable, inert]);
+
+    let (tree, refmap) = run(root, &allocation(None));
+
+    assert_eq!(
+        basis_of(&tree, &refmap, &[0]),
+        Some(IdentityBasis::Ambiguous),
+        "the inert twin shares the actionable group's role and name"
+    );
+    assert!(
+        tree.children[1].ref_id.is_none(),
+        "eligibility still controls which elements receive a ref"
+    );
+    let captured = refmap
+        .get(tree.children[0].ref_id.as_deref().unwrap())
+        .unwrap();
+    let error = crate::refs::identity_basis_gate::basis_gate(&captured.identity).unwrap_err();
+    assert_eq!(error.code, crate::ErrorCode::AmbiguousTarget);
+    assert_eq!(error.details.unwrap()["kind"], "identity_not_unique");
+}
+
 #[test]
 fn an_incomplete_capture_is_refused_with_ambiguous_target_before_any_live_search() {
     let root = window_with(vec![entry(

@@ -84,13 +84,8 @@ fn unlabeled_bounded_boundary_gets_drill_ref() {
     assert!(entry.geometry.bounds_hash.is_some());
 }
 
-/// Finding: a boundary whose children were not walked can hide a look-alike,
-/// so its own name proves nothing about it. The previous shape of this test
-/// asserted that such an anchor is resolved by that name and may therefore
-/// lose its rect, which is exactly what the omitted descendants disprove.
-/// Both directions are kept here: an anchor at an omitted boundary records an
-/// ambiguous basis and keeps its geometry, while a fully walked element with
-/// meaningful identity still has its rect stripped.
+/// A boundary whose children were not walked can hide a look-alike, so it records an
+/// ambiguous basis and keeps its rect; a fully walked element still has its rect stripped.
 #[test]
 fn a_named_boundary_with_omitted_children_keeps_its_rect() {
     let mut boundary = node("group");

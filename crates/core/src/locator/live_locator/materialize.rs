@@ -8,13 +8,8 @@ use crate::{
     refs::{RefEntry, RefMap, RefPath},
 };
 
-/// Counts the look-alikes among every addressable element the locator
-/// observed, so each match can learn which of its fields is unique. A survey
-/// that did not cover the whole source scope proves nothing about it: a ref
-/// from an element-rooted survey is resolved against the whole source window,
-/// which may hold a look-alike the survey never saw. Every observed node is
-/// asked what it left unread before addressability filtering, because a node
-/// with no readable role could be a look-alike of any role.
+/// Counts look-alikes among every role-readable observed element, addressable or not,
+/// so each match learns which of its fields is unique. A partial survey proves nothing.
 pub(crate) fn survey_counts(tree: &ObservedTree, query: &LocatorQuery) -> IdentityBasisCounts {
     let mut counts = IdentityBasisCounts::new();
     if !tree.structurally_complete || !matches!(tree.source, ObservationSource::Window { .. }) {
@@ -22,8 +17,7 @@ pub(crate) fn survey_counts(tree: &ObservedTree, query: &LocatorQuery) -> Identi
     }
     for node in &tree.nodes {
         mark_unread_fields(&mut counts, &node.evidence);
-        let (addressable, _) = addressability(&node.evidence);
-        if !addressable {
+        if node.evidence.role.known().is_none() {
             continue;
         }
         counts.record(
@@ -64,8 +58,7 @@ pub(crate) fn materialize_refmap(
     Ok((refmap, complete))
 }
 
-/// Withdraws the uniqueness proofs that rest on a field this element left
-/// unread, since it could be a look-alike the survey could not compare. A value
+/// Withdraws the proofs that rest on a field this element left unread. A value
 /// matters only where a mutable-value role's stable name depends on it.
 fn mark_unread_fields(counts: &mut IdentityBasisCounts, evidence: &LocatorEvidence) {
     let Some(role) = evidence.role.known() else {

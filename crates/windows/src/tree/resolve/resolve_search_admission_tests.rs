@@ -20,8 +20,15 @@ fn rect(width: f64, height: f64) -> Rect {
     }
 }
 
+/// A stored entry as a capture issues one: a named button records the name a unique count proved,
+/// and a control with no recorded identity is positional.
 fn stored(role: &str, name: Option<&str>, bounds: Option<Rect>) -> RefEntry {
     let mut entry = crate::tree::walk::walker_fake::ref_entry(role);
+    entry.identity.basis = Some(if name.is_some() {
+        agent_desktop_core::IdentityBasis::Name
+    } else {
+        agent_desktop_core::IdentityBasis::Positional
+    });
     entry.identity.name = name.map(str::to_string);
     entry.geometry = agent_desktop_core::RefGeometry {
         bounds_space: None,

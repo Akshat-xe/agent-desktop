@@ -5,12 +5,8 @@ use crate::{
     tree::roles::is_mutable_value_role,
 };
 
-/// Whether the entry records evidence that singled it out from its look-alikes
-/// when it was captured. A positional entry, an entry whose evidence was not
-/// unique, and an entry written before bases were recorded carry none.
-/// Whether the entry carries identity a resolver can verify. A positional
-/// entry is judged by its own fields, which a snapshot's positional ref never
-/// has and a locator anchor observed in the same call may.
+/// Whether the entry carries identity a resolver can verify: a unique basis, or a positional
+/// entry whose own fields are meaningful.
 pub fn has_meaningful_identity(entry: &RefEntry) -> bool {
     match entry.identity.basis {
         Some(IdentityBasis::NativeId | IdentityBasis::Name | IdentityBasis::Description) => true,
@@ -62,18 +58,8 @@ pub fn identity_fields_are_meaningful(
         || crate::tree::accname::non_blank(description).is_some()
 }
 
-/// Whether a live element still carries the evidence the entry recorded.
-///
-/// A unique basis resolves only on everything capture recorded: the entry's
-/// identifier, its stable name and its description must all still agree with
-/// the candidate, each compared with the same field it was read from. The
-/// basis field itself must be present; the corroborating fields count only
-/// when capture recorded them. Control values never decide a match, and a
-/// live field the read could not produce is `Unknown`, never a match. A
-/// positional entry keeps the text rules it had before bases existed, and its
-/// bounds are judged by the resolver. An entry without a basis, and an
-/// ambiguous one, never matches: only the basis gate may decide how they
-/// resolve. Roles are checked by the resolver.
+/// Whether a live element still carries the evidence the entry recorded. Every recorded field
+/// must agree, an unread field is `Unknown`, and a basis-less or ambiguous entry never matches.
 pub fn identity_match(
     entry: &RefEntry,
     actual_name: &LocatorField<String>,
@@ -140,7 +126,7 @@ fn recorded_text_match(
     }
 }
 
-fn same_field_match(expected: &str, actual: LocatorField<&str>) -> IdentityMatch {
+pub(super) fn same_field_match(expected: &str, actual: LocatorField<&str>) -> IdentityMatch {
     match actual {
         LocatorField::Known(actual) => equality_match(expected, actual),
         LocatorField::Unknown => IdentityMatch::Unknown,
@@ -212,15 +198,8 @@ pub(crate) fn identity_matches(
     ) == IdentityMatch::Match
 }
 
-/// Whether one element's stable text carves a live identity that can refute
-/// or corroborate the stored one.
-///
-/// Public because the Windows resolver composes it with `identity_match` to
-/// keep its AutomationId-first corroboration rule: an id that still resolves
-/// onto a candidate whose stable text drifted must be refuted, the A7-3
-/// wrong-target shape. It reads the entry's stable text only, never the
-/// recorded basis, so a caller that gates on the basis can still ask whether
-/// the live text corroborates a candidate.
+/// Whether one element's stable text still corroborates or refutes the stored text. Reads the
+/// stable text only, never the recorded basis, so a caller that gates on the basis can still ask.
 pub fn stable_text_match(
     entry: &RefEntry,
     actual_name: &LocatorField<String>,
@@ -303,7 +282,7 @@ fn option_field(value: Option<&str>) -> LocatorField<String> {
         .unwrap_or(LocatorField::Absent)
 }
 
-fn meaningful_field(field: &LocatorField<String>) -> LocatorField<&str> {
+pub(super) fn meaningful_field(field: &LocatorField<String>) -> LocatorField<&str> {
     match field {
         LocatorField::Known(value) => crate::tree::accname::non_blank(Some(value.as_str()))
             .map(LocatorField::Known)
@@ -313,7 +292,7 @@ fn meaningful_field(field: &LocatorField<String>) -> LocatorField<&str> {
     }
 }
 
-fn stable_name_field<'a>(
+pub(super) fn stable_name_field<'a>(
     role: &str,
     name: &'a LocatorField<String>,
     value: &LocatorField<String>,
@@ -332,7 +311,10 @@ fn stable_name_field<'a>(
     }
 }
 
-fn stable_value_field<'a>(role: &str, value: &'a LocatorField<String>) -> LocatorField<&'a str> {
+pub(super) fn stable_value_field<'a>(
+    role: &str,
+    value: &'a LocatorField<String>,
+) -> LocatorField<&'a str> {
     if is_mutable_value_role(role) {
         LocatorField::Absent
     } else {
@@ -355,7 +337,7 @@ pub(crate) fn stable_name<'a>(
     }
 }
 
-fn stable_value<'a>(role: &str, value: Option<&'a str>) -> Option<&'a str> {
+pub(super) fn stable_value<'a>(role: &str, value: Option<&'a str>) -> Option<&'a str> {
     (!is_mutable_value_role(role))
         .then(|| crate::tree::accname::non_blank(value))
         .flatten()

@@ -343,6 +343,7 @@ pub(crate) mod ref_entry_identity;
 pub(crate) mod ref_geometry;
 pub mod ref_identity;
 pub(crate) mod ref_identity_match;
+pub(crate) mod ref_identity_observed;
 pub(crate) mod ref_process;
 pub(crate) mod ref_resolve_deadline;
 pub(crate) mod ref_scope;

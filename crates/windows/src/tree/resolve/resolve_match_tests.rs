@@ -40,6 +40,8 @@ fn evidence(
     }
 }
 
+/// A stored entry as the snapshot issues one: every shipped ref carries a basis, and a basis-less
+/// entry is refused before any match runs. These fixtures record an identifier.
 fn entry(
     native: Option<&str>,
     role: &str,
@@ -48,6 +50,11 @@ fn entry(
     description: Option<&str>,
 ) -> RefEntry {
     let mut entry = crate::tree::walk::walker_fake::ref_entry(role);
+    entry.identity.basis = Some(if native.is_some() {
+        agent_desktop_core::IdentityBasis::NativeId
+    } else {
+        agent_desktop_core::IdentityBasis::Positional
+    });
     entry.identity.name = name.map(str::to_string);
     entry.identity.value = value.map(str::to_string);
     entry.identity.description = description.map(str::to_string);
@@ -92,6 +99,42 @@ fn an_unreadable_name_is_incomplete_not_a_mismatch() {
     assert_eq!(
         candidate_outcome(&stored, &unreadable),
         CandidateOutcome::Incomplete
+    );
+}
+
+/// Control values are not identity, so a uniquely identified ref's live count keeps every element
+/// that shares its role and identifier, whatever value it carries.
+#[test]
+fn a_recorded_value_never_narrows_a_unique_basis_live_count() {
+    let stored = entry(Some("toggle-1"), "button", None, Some("On"), None);
+    let on = evidence(None, Some("On"), None, Some("toggle-1"));
+    let off = evidence(None, Some("Off"), None, Some("toggle-1"));
+
+    assert_eq!(candidate_outcome(&stored, &on), CandidateOutcome::Matched);
+    assert_eq!(
+        candidate_outcome(&stored, &off),
+        CandidateOutcome::Matched,
+        "the Off twin shares the recorded role and identifier, so the live count is two"
+    );
+}
+
+/// The other direction, and the tier's reason to exist: a positional ref's core rule reads only its
+/// identifier, so this resolver still corroborates it with the recorded stable text.
+#[test]
+fn a_positional_ref_still_refutes_an_identifier_hit_whose_text_drifted() {
+    let mut stored = entry(Some("row-77"), "row", Some("Alpha"), None, None);
+    stored.identity.basis = Some(agent_desktop_core::IdentityBasis::Positional);
+
+    assert_eq!(
+        candidate_outcome(&stored, &evidence(Some("Beta"), None, None, Some("row-77"))),
+        CandidateOutcome::Refuted
+    );
+    assert_eq!(
+        candidate_outcome(
+            &stored,
+            &evidence(Some("Alpha"), None, None, Some("row-77"))
+        ),
+        CandidateOutcome::Matched
     );
 }
 

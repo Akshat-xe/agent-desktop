@@ -190,10 +190,10 @@ fn an_identifier_basis_ref_resolves_on_its_unique_identifier() {
 }
 
 #[test]
-fn two_nodes_that_share_the_identifier_are_ambiguous() {
+fn two_nodes_that_share_the_identifier_and_its_recorded_name_are_ambiguous() {
     let mut fake = Fake::new();
     for path in ["/one", "/two"] {
-        let mut read = node(PUSH_BUTTON, path, 40, 20);
+        let mut read = node(PUSH_BUTTON, "Save", 40, 20);
         read.node.properties.accessible_id = Field::Present("row".to_owned());
         fake.add(FRAME_PATH, path, read);
     }
@@ -203,6 +203,15 @@ fn two_nodes_that_share_the_identifier_are_ambiguous() {
     let error = refusal(&mut fake, &entry);
     assert_eq!(error.code, ErrorCode::AmbiguousTarget);
     assert_eq!(candidate_count(&error), 2);
+
+    fake.nodes
+        .get_mut("/two")
+        .expect("two")
+        .read
+        .node
+        .properties
+        .name = Field::Present("Delete".to_owned());
+    assert_eq!(resolved(&mut fake, &entry), "/one");
 }
 
 #[test]
@@ -276,9 +285,8 @@ fn set_description(fake: &mut Fake, path: &str, description: &str) {
         .description = Field::Present(description.to_owned());
 }
 
-/// The ref a menu snapshot stores for the item at `path`: the description alone
-/// singled it out there, and the menu context keeps the object path it was
-/// captured at.
+/// The ref a menu snapshot stores for the item at `path`, singled out there by its
+/// description and keeping the object path it was captured at.
 fn open_item_ref(fake: &Fake, path: &str, description: &str) -> RefEntry {
     let mut entry = fake.entry_of(path, true);
     entry.identity.description = Some(description.to_owned());
@@ -306,21 +314,20 @@ fn a_menu_ref_whose_description_now_names_a_twin_is_ambiguous_not_resolved() {
 }
 
 #[test]
-fn a_menu_ref_whose_description_moved_to_its_twin_is_ambiguous_not_stale() {
+fn a_menu_ref_whose_description_moved_to_its_twin_is_stale_not_ambiguous() {
     let mut fake = open_menu();
     let entry = open_item_ref(&fake, "/left", "left");
     set_description(&mut fake, "/left", "right");
     set_description(&mut fake, "/right", "left");
 
     let error = refusal(&mut fake, &entry);
-    assert_eq!(error.code, ErrorCode::AmbiguousTarget);
-    assert_eq!(candidate_count(&error), 2);
-
-    set_description(&mut fake, "/right", "other");
-    let error = refusal(&mut fake, &entry);
     assert_eq!(error.code, ErrorCode::StaleRef);
     assert_eq!(kind(&error), "resolve_no_candidate");
     assert_eq!(error.disposition, DeliverySemantics::not_delivered());
+
+    set_description(&mut fake, "/left", "left");
+    set_description(&mut fake, "/right", "right");
+    assert_eq!(resolved(&mut fake, &entry), "/left");
 }
 
 #[test]

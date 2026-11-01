@@ -1,9 +1,5 @@
-//! Live uniqueness for refs whose recorded identity singles them out.
-//!
-//! A ref that carries identity resolves only when a complete search of its
-//! source scope finds exactly one element matching the recorded role and
-//! identity evidence. Bounds never choose between candidates, and a stored
-//! path is not evidence: it locates nothing on its own.
+//! Live uniqueness for refs whose recorded identity singles them out: one match in a complete
+//! search of the source scope. Bounds never choose between candidates, and a path is no evidence.
 
 use agent_desktop_core::{AdapterError, IdentityMatch, LocatorEvidence, NativeHandle, RefEntry};
 use rustc_hash::FxHashSet;
@@ -15,9 +11,8 @@ use super::resolve_search::{identity_requirements, match_native_or_text_identity
 use crate::tree::AXElement;
 use crate::tree::element_dedupe::push_unique;
 
-/// What a live match count means for a ref that carries identity. A proven
-/// duplicate never resolves, whether or not the search finished; an unfinished
-/// search never resolves, even with one match already in hand.
+/// What a live match count means for a ref that carries identity: a proven duplicate and an
+/// unfinished search never resolve, even with one match already in hand.
 #[derive(Debug, PartialEq, Eq)]
 pub(in crate::tree) enum UniqueOutcome {
     Resolved,
@@ -43,9 +38,8 @@ pub(in crate::tree) fn classify_unique_matches(
     }
 }
 
-/// The verdict one live element earns against a ref's recorded identity. The
-/// role must be equal before any identity evidence counts, and an unreadable
-/// role is an unfinished count rather than an absence.
+/// The verdict one live element earns against a ref's recorded identity. The role must be equal
+/// before any identity evidence counts, and an unreadable role is unfinished rather than absent.
 pub(in crate::tree) fn identity_candidate_verdict(
     entry: &RefEntry,
     evidence: &LocatorEvidence,
@@ -81,9 +75,8 @@ impl UniqueTally {
         self.matches.len() > 1
     }
 
-    /// Answers every count-only outcome first, so a proven duplicate stays a
-    /// duplicate without any candidate being inspected: no stored geometry, live
-    /// bounds read or element field may turn two matches into one.
+    /// Answers every count-only outcome first, so a proven duplicate never inspects a candidate:
+    /// no stored geometry, live bounds read or element field may turn two matches into one.
     pub(in crate::tree) fn into_resolution(
         self,
         entry: &RefEntry,

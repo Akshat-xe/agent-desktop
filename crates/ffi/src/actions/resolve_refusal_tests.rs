@@ -256,11 +256,8 @@ fn a_timed_out_live_count_never_yields_a_handle() {
     assert_eq!(registered.actions(), 0);
 }
 
-/// The C struct carries no basis field, so `identity_basis` derives one from
-/// the entry's own fields: native identifier, then name, then description, and
-/// positional when none is present. It can never derive `Ambiguous` or `None`,
-/// so a caller cannot claim a weaker basis than its evidence, and every derived
-/// basis other than positional sends the adapter into its live uniqueness count.
+/// The C struct carries no basis field, so `identity_basis` derives one: identifier, then
+/// name, then description, and positional when none is present. It never derives `Ambiguous`.
 #[test]
 fn a_derived_basis_always_requires_the_live_uniqueness_count() {
     let bounds = crate::types::AdRect {

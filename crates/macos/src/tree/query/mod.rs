@@ -188,8 +188,14 @@ fn resolve_window_surface(
                 window, deadline,
             )?
         }
-        SnapshotSurface::Focused => crate::tree::surfaces::focused_surface_for_pid(pid, deadline)?
-            .ok_or_else(|| AdapterError::element_not_found("No focused surface found"))?,
+        SnapshotSurface::Focused => {
+            let element = crate::tree::surfaces::focused_surface_for_pid(pid, deadline)?
+                .ok_or_else(|| AdapterError::element_not_found("No focused surface found"))?;
+            crate::system::window::window_ax_state::verify_focused_window(
+                window, &element, deadline,
+            )?;
+            element
+        }
         SnapshotSurface::Menu => crate::tree::surfaces::menu_element_for_pid(pid, deadline)?
             .ok_or_else(|| AdapterError::element_not_found("No open context menu"))?,
         SnapshotSurface::Menubar => crate::tree::surfaces::menubar_for_pid(pid, deadline)?

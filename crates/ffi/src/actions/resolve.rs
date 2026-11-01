@@ -313,9 +313,8 @@ unsafe fn decode_core_ref_entry(
     Ok(decoded)
 }
 
-/// The basis a caller-supplied entry can prove on its own: the strongest
-/// non-blank identity field it carries. Snapshot uniqueness cannot be proven
-/// here, so the live search that follows must find exactly one match.
+/// The basis a caller-supplied entry can prove on its own: the strongest non-blank identity
+/// field it carries. Snapshot uniqueness is unprovable here, so the live search must find one match.
 fn identity_basis(
     native_id: Option<&ElementIdentifier>,
     name: Option<&str>,

@@ -8,19 +8,8 @@ use crate::tree::resolve::resolve_search::{
     NodeAdmission, admit_node, enumerate_children, geometry_contradicts,
 };
 
-/// The bounds tie-break returns the stored candidate, not the first one it
-/// collected - and an identity ref never gets to ask it.
-///
-/// Two live controls share role, `Name` and `AutomationId`, so every identity
-/// tier matches both and the stored bounds hash is the only evidence that
-/// separates them. The stored ref carries the hash of the candidate the search
-/// collects **second**, so the pure classification resolves index one. An
-/// identity ref, though, promises a unique current match: two live elements
-/// answer to its recorded identity, and the stored rectangle is never allowed
-/// to choose between them - it would name the position of a row that may since
-/// have been replaced by a look-alike, the silent-wrong-target class A7-3
-/// measured. So resolution settles `AMBIGUOUS_TARGET` on the full count rather
-/// than resolving the hash-matching one.
+/// The bounds tie-break returns the stored candidate, not the first one collected, and an identity
+/// ref never reaches it: its stored rectangle cannot choose between two live matches.
 #[test]
 fn the_bounds_tie_break_selects_the_stored_candidate_but_an_identity_ref_stays_ambiguous() {
     crate::tree::fixture::ensure_test_apartment();
@@ -196,19 +185,8 @@ fn duplicate_entry(
     entry
 }
 
-/// The path tier's own refutation, and what an identity ref does instead.
-///
-/// A ref stored against one duplicate control lands, at its own stored path, on
-/// the *other* one - same role, name and `AutomationId` - because the index the
-/// ref names now holds a different sibling. Every identity tier agrees on the
-/// impostor, so only the stored bounds hash can refuse the landing, and
-/// `accept_path_landing` does refuse it. A landing whose live hash agrees is
-/// still accepted, so the refutation is not a rejection of every mismatch.
-///
-/// Resolution of the identity ref itself is decided over the whole scope and
-/// not at the landing: two live elements answer to its recorded identity, so
-/// it settles `AMBIGUOUS_TARGET` whether or not the stored rectangle happens to
-/// name one of them.
+/// The path tier's own refutation: a landing on a sibling the identity evidence refutes is refused
+/// by the bounds hash alone, while an identity ref settles ambiguity over the whole scope.
 #[test]
 fn the_fast_path_refuses_a_contradicting_hash_and_the_identity_ref_stays_ambiguous() {
     crate::tree::fixture::ensure_test_apartment();
@@ -308,6 +286,7 @@ fn the_fast_path_refuses_a_contradicting_hash_and_the_identity_ref_stays_ambiguo
 #[test]
 fn a_path_landing_with_an_unreadable_live_bounds_hash_is_still_accepted() {
     let mut entry = crate::tree::walk::walker_fake::ref_entry("button");
+    entry.identity.basis = Some(agent_desktop_core::IdentityBasis::Name);
     entry.identity.name = Some("Save".into());
     entry.geometry.bounds_hash = Some(0xdead_beef);
     entry.scope.path_is_absolute = true;

@@ -261,10 +261,8 @@ fn button_bounds() -> Rect {
     }
 }
 
-/// `find --role button --first` reads no text, so its survey can prove nothing
-/// about a name. Hydration then discovers Save, identity the survey never
-/// proved: two Save buttons that swap positions must not let the saved ref
-/// accept the other one.
+/// A tree whose text is never observed, so a survey proves nothing about a name and
+/// hydration discovers it afterwards.
 struct RoleOnlyTextAdapter;
 
 impl ObservationOps for RoleOnlyTextAdapter {

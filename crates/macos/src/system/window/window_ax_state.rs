@@ -13,7 +13,7 @@ pub(crate) struct WindowAxState {
 
 pub(crate) fn read_until(pid: i32, deadline: Instant) -> Result<WindowAxState, AdapterError> {
     let app = crate::tree::element_for_pid(pid);
-    let focused = focused_identity(&app, pid, deadline)?;
+    let focused = focused_identity(&app, deadline)?;
     let mut minimized_by_id = FxHashMap::default();
     let mut accessible_window_ids = FxHashSet::default();
     for_each_window(pid, deadline, |window, window_id| {
@@ -38,7 +38,7 @@ pub(crate) fn read_frontmost_until(
 ) -> Result<WindowAxState, AdapterError> {
     let app = crate::tree::element_for_pid(pid);
     Ok(WindowAxState {
-        focused: focused_identity(&app, pid, deadline)?,
+        focused: focused_identity(&app, deadline)?,
         minimized_by_id: FxHashMap::default(),
         accessible_window_ids: FxHashSet::default(),
     })
@@ -95,6 +95,61 @@ pub(crate) fn label_accessibility(
     }
 }
 
+/// The AX window a focused accessibility object belongs to: the object itself when it is a
+/// window, the window owning a sheet, dialog, alert or popover, and none otherwise.
+pub(crate) fn owning_window(
+    focused: &crate::tree::AXElement,
+    deadline: Instant,
+) -> Result<Option<crate::tree::AXElement>, AdapterError> {
+    let role = crate::tree::surface_read::string(focused, "AXRole", deadline)?;
+    match focused_role_kind(role.as_deref()) {
+        FocusedRoleKind::Window => Ok(Some(focused.clone())),
+        FocusedRoleKind::TransientSurface => {
+            let Some(window) = crate::tree::surface_read::element(focused, "AXWindow", deadline)?
+            else {
+                return Ok(None);
+            };
+            if crate::tree::surface_read::string(&window, "AXRole", deadline)?.as_deref()
+                != Some("AXWindow")
+            {
+                return Ok(None);
+            }
+            Ok(Some(window))
+        }
+        FocusedRoleKind::NotAWindow => {
+            tracing::debug!(?role, "focused accessibility object is not a window");
+            Ok(None)
+        }
+    }
+}
+
+/// Refuses a focused surface the recorded window does not own, since a snapshot pins every ref
+/// it allocates to that one window.
+pub(crate) fn verify_focused_window(
+    window: &WindowInfo,
+    focused: &crate::tree::AXElement,
+    deadline: Instant,
+) -> Result<(), AdapterError> {
+    let number = match owning_window(focused, deadline)? {
+        Some(owner) => {
+            crate::system::window::window_resolve::ax_window_id_with_deadline(&owner, deadline)?
+        }
+        None => None,
+    };
+    if observes_recorded_window(&window.id, number) {
+        return Ok(());
+    }
+    Err(crate::system::window::window_resolve::window_identity_mismatch(&window.id))
+}
+
+/// Whether a capture may record `recorded_id` for the observed surface: the window number
+/// must match, and a number the bridge could not read leaves the window unproven.
+fn observes_recorded_window(recorded_id: &str, observed_number: Option<i64>) -> bool {
+    crate::system::window::window_resolve::parse_window_number(recorded_id)
+        .zip(observed_number)
+        .is_some_and(|(recorded, observed)| recorded == observed)
+}
+
 /// Frontmost-ness only selects whether a focused window is reported, and a busy
 /// application answering "unknown" is not a reason to fail the command that
 /// asked. Permission and API failures still propagate, because those describe
@@ -109,7 +164,6 @@ fn is_frontmost(app: &crate::tree::AXElement, deadline: Instant) -> Result<bool,
 
 fn focused_identity(
     app: &crate::tree::AXElement,
-    pid: i32,
     deadline: Instant,
 ) -> Result<Option<AxWindowIdentity>, AdapterError> {
     if !is_frontmost(app, deadline)? {
@@ -119,25 +173,8 @@ fn focused_identity(
     else {
         return Ok(None);
     };
-    let role = crate::tree::surface_read::string(&focused, "AXRole", deadline)?;
-    let window = match focused_role_kind(role.as_deref()) {
-        FocusedRoleKind::Window => focused,
-        FocusedRoleKind::TransientSurface => {
-            let Some(window) = crate::tree::surface_read::element(&focused, "AXWindow", deadline)?
-            else {
-                return Ok(None);
-            };
-            if crate::tree::surface_read::string(&window, "AXRole", deadline)?.as_deref()
-                != Some("AXWindow")
-            {
-                return Ok(None);
-            }
-            window
-        }
-        FocusedRoleKind::NotAWindow => {
-            tracing::debug!(pid, ?role, "focused accessibility object is not a window");
-            return Ok(None);
-        }
+    let Some(window) = owning_window(&focused, deadline)? else {
+        return Ok(None);
     };
     let title = crate::tree::surface_read::string(&window, "AXTitle", deadline)?;
     let number = match crate::system::window::window_resolve::ax_window_id_with_deadline(
@@ -173,9 +210,34 @@ fn focused_role_kind(role: Option<&str>) -> FocusedRoleKind {
 mod tests {
     use super::{
         FocusedRoleKind, focused_role_kind, is_transient_surface_role, label_accessibility,
+        observes_recorded_window,
     };
     use agent_desktop_core::{ProcessId, WindowInfo, WindowState};
     use rustc_hash::FxHashSet;
+
+    #[test]
+    fn a_focused_surface_in_another_window_is_refused_for_the_recorded_window() {
+        assert!(
+            !observes_recorded_window("w-11", Some(12)),
+            "window w-12 holds focus, so capturing it as w-11 would pin every ref in \
+             w-12's tree to a window those elements were never read from"
+        );
+    }
+
+    #[test]
+    fn the_focused_surface_of_the_recorded_window_is_captured() {
+        assert!(observes_recorded_window("w-11", Some(11)));
+    }
+
+    #[test]
+    fn an_unproven_focused_window_is_refused() {
+        assert!(
+            !observes_recorded_window("w-11", None),
+            "a window number the bridge could not read cannot prove which window was observed"
+        );
+        assert!(!observes_recorded_window("", Some(11)));
+        assert!(!observes_recorded_window("desktop", Some(11)));
+    }
 
     #[test]
     fn modal_surfaces_can_temporarily_own_focused_window() {

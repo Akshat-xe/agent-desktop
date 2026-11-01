@@ -185,9 +185,7 @@ pub(super) fn geometry_complete(
     }
 }
 
-/// Whether a locator anchor carries anything of its own to re-verify. The
-/// locator entry's basis is decided from this same observation, so presence is
-/// asked of the fields rather than of a basis a stored ref would carry.
+/// Whether a locator anchor carries identity of its own to re-verify.
 fn anchor_has_evidence(entry: &RefEntry) -> bool {
     crate::refs::ref_identity::identity_fields_are_meaningful(
         entry.identity.role.as_str(),
@@ -202,32 +200,19 @@ fn anchor_has_evidence(entry: &RefEntry) -> bool {
     )
 }
 
-/// Confirms the hydrated root against every stable field the anchor recorded:
-/// its identifier and its stable text. A field that was not recorded cannot
-/// decide, and only an anchor with no identity at all is confirmed by geometry.
-/// An unread live field never resolves, because it could hide a look-alike.
+/// Confirms the hydrated root against every field the anchor observed in this same call. An
+/// anchor with no identity is confirmed by geometry, and an unread field never resolves.
 fn anchor_matches(preliminary: &RefEntry, node: &ObservedNode) -> IdentityMatch {
-    let identifier = preliminary.identity.native_id.as_ref().map(|expected| {
-        crate::refs::ref_identity::identifier_evidence_match(expected, &node.evidence.identifiers)
-    });
-    let stable_text = crate::refs::ref_identity::has_stable_text_identity(preliminary).then(|| {
-        crate::refs::ref_identity::stable_text_match(
-            preliminary,
-            &node.evidence.name,
-            &node.evidence.value,
-            &node.evidence.description,
-        )
-    });
-    match (identifier, stable_text) {
-        (Some(IdentityMatch::NoMatch), _) | (_, Some(IdentityMatch::NoMatch)) => {
-            IdentityMatch::NoMatch
-        }
-        (Some(IdentityMatch::Unknown), _) | (_, Some(IdentityMatch::Unknown)) => {
-            IdentityMatch::Unknown
-        }
-        (Some(IdentityMatch::Match), _) | (_, Some(IdentityMatch::Match)) => IdentityMatch::Match,
-        (None, None) => bounds_anchor_match(preliminary, node),
+    if !anchor_has_evidence(preliminary) {
+        return bounds_anchor_match(preliminary, node);
     }
+    crate::refs::ref_identity_observed::observed_identity_match(
+        preliminary,
+        &node.evidence.name,
+        &node.evidence.value,
+        &node.evidence.description,
+        &node.evidence.identifiers,
+    )
 }
 
 fn bounds_anchor_match(preliminary: &RefEntry, node: &ObservedNode) -> IdentityMatch {
@@ -247,10 +232,8 @@ fn bounds_anchor_match(preliminary: &RefEntry, node: &ObservedNode) -> IdentityM
     }
 }
 
-/// Keeps the basis the survey proved, unless hydration discovered identity the
-/// survey never read. A positional anchor carried no proof for that identity,
-/// so it records the unproven basis instead of letting the added field stand in
-/// for uniqueness the survey never established.
+/// Keeps the basis the survey proved, or records the unproven basis instead when
+/// hydration discovers identity the survey never read.
 fn preserve_verified_identity(preliminary: &RefEntry, node: &ObservedNode, entry: &mut RefEntry) {
     entry.identity.basis = match preliminary.identity.basis {
         Some(crate::IdentityBasis::Positional) => Some(
@@ -280,9 +263,8 @@ fn preserve_verified_identity(preliminary: &RefEntry, node: &ObservedNode, entry
     }
 }
 
-/// The anchor handed to the platform resolver. The locator observed this node
-/// in the same call, so it is found again by its observed fields and path, not
-/// by the uniqueness rule a stored ref must pass.
+/// The positional anchor handed to the platform resolver: the locator observed this
+/// node in the same call, so it is found by its observed fields and path.
 fn observed_anchor(preliminary: &RefEntry) -> RefEntry {
     let mut anchor = preliminary.clone();
     anchor.identity.basis = Some(crate::IdentityBasis::Positional);

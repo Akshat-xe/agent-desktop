@@ -102,12 +102,8 @@ fn path_tier<S: Source>(
     }
 }
 
-/// The position of the verified window frame among the candidates, when the
-/// ref stored an empty path and the frame answers to the stored evidence. The
-/// gate has proved the process and the window, and exactly one node sits at
-/// depth zero, so no twin can exist elsewhere in the tree and an unread region
-/// below it (a background tab's document lists no children) cannot change the
-/// answer. Bounds are what may decide a ref like this one.
+/// The position of the verified window frame, for a ref with an empty path whose frame answers
+/// the stored evidence. Only one node sits at depth zero, so bounds may decide.
 fn frame_candidate(candidates: &[Candidate], entry: &RefEntry) -> Option<usize> {
     if !window_rooted(entry) || !entry.scope.path.is_empty() {
         return None;
@@ -136,10 +132,8 @@ fn verdict_by_geometry(candidates: &[Candidate], entry: &RefEntry, unread: bool)
     )
 }
 
-/// An ambiguous basis is refused before the geometry check and before any read
-/// of the application: the identity the ref recorded was not unique when it was
-/// captured, so no live search can make it unique and no rectangle it stored
-/// can stand in for one.
+/// Refuses an ambiguous basis before the geometry check and before any read of the application:
+/// its identity was never unique, so no live search or stored rectangle can stand in for one.
 fn refuse_unresolvable_basis(identity: &RefEntryIdentity) -> Result<(), AdapterError> {
     match identity.basis {
         Some(IdentityBasis::Ambiguous) => basis_gate(identity),
@@ -147,12 +141,8 @@ fn refuse_unresolvable_basis(identity: &RefEntryIdentity) -> Result<(), AdapterE
     }
 }
 
-/// Resolves a stored ref under the identity contract. The basis gate runs
-/// before the geometry check, because an identity recorded as not unique can
-/// never resolve and a ref that also stored no usable rectangle would otherwise
-/// be reported as merely unverifiable. A ref written before bases existed still
-/// answers with the window gate first, since a replaced window is the stronger
-/// answer.
+/// Resolves a stored ref under the identity contract: the basis gate runs before the geometry
+/// check, while a ref written before bases existed still answers with the window gate first.
 fn attempt<S: Source>(
     source: &mut S,
     entry: &RefEntry,
@@ -196,16 +186,8 @@ fn attempt<S: Source>(
     }
 }
 
-/// Resolves a stored ref to the live element it was taken from, or refuses.
-/// A ref with no identity evidence is refused before any read: a child index
-/// cannot distinguish an unnamed node from a replacement or reordered sibling.
-/// The window gate proves the process and window are the stored ones, and the
-/// identity basis then decides what the search must prove: a ref whose basis is
-/// an identifier, name or description resolves only when a complete search of
-/// the window finds exactly one live node answering to it, and a ref whose basis
-/// is positional keeps the path-and-bounds behavior. An application that left, a
-/// destroyed object and a timeout are told apart at this boundary, and a timeout
-/// on a stopped process is `APP_UNRESPONSIVE`.
+/// Resolves a stored ref to the live element it was taken from, or refuses: a unique basis needs
+/// exactly one complete match in the window, a positional one keeps the path-and-bounds behavior.
 pub(crate) fn resolve<S: Source>(
     source: &mut S,
     entry: &RefEntry,

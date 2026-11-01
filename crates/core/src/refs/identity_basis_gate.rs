@@ -2,9 +2,8 @@
 
 use crate::{AdapterError, IdentityBasis, RefEntryIdentity};
 
-/// Refuses a ref before any live search when its basis cannot single out one
-/// element: an entry written before bases existed is stale, and an ambiguous
-/// one never resolves.
+/// Refuses a ref before any live search when its basis cannot single out one element: a
+/// basis-less entry is stale, and an ambiguous one never resolves.
 pub fn basis_gate(identity: &RefEntryIdentity) -> Result<(), AdapterError> {
     match identity.basis {
         None => Err(AdapterError::stale_ref_because(

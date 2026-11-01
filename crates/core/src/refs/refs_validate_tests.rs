@@ -13,9 +13,8 @@ fn legacy_ref_entry_json() -> String {
     .to_string()
 }
 
-/// A refmap written before identity bases existed carries no `basis` field.
-/// It must stay loadable, with `None` kept as `None`, so resolution can refuse
-/// it as stale instead of guessing that its position was its identity.
+/// A refmap written before identity bases existed carries no `basis` field and must stay
+/// loadable with `None`, so resolution refuses it as stale instead of guessing.
 #[test]
 fn a_ref_entry_without_a_basis_loads_with_basis_none() {
     let entry: RefEntry = serde_json::from_str(&legacy_ref_entry_json()).unwrap();
