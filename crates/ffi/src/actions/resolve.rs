@@ -270,7 +270,11 @@ unsafe fn decode_core_ref_entry(
         identity: RefEntryIdentity {
             basis: Some(identity_basis(
                 native_id.as_ref(),
-                name.as_deref(),
+                agent_desktop_core::refs::ref_identity::stable_name(
+                    role.as_str(),
+                    name.as_deref(),
+                    value.as_deref(),
+                ),
                 description.as_deref(),
             )),
             retained_object: None,
@@ -317,13 +321,13 @@ unsafe fn decode_core_ref_entry(
 /// field it carries. Snapshot uniqueness is unprovable here, so the live search must find one match.
 fn identity_basis(
     native_id: Option<&ElementIdentifier>,
-    name: Option<&str>,
+    stable_name: Option<&str>,
     description: Option<&str>,
 ) -> IdentityBasis {
     if native_id.is_some_and(|identifier| !identifier.value.trim().is_empty()) {
         return IdentityBasis::NativeId;
     }
-    if name.is_some_and(|value| !value.trim().is_empty()) {
+    if stable_name.is_some() {
         return IdentityBasis::Name;
     }
     if description.is_some_and(|value| !value.trim().is_empty()) {

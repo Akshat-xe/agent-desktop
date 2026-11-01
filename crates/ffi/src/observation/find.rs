@@ -53,7 +53,13 @@ unsafe fn find_in_window(
     out_handle: *mut AdNativeHandle,
 ) -> AdResult {
     let (locator, request) = match unsafe { decode_query(query) } {
-        Ok(decoded) => decoded,
+        Ok((locator, request)) => (
+            locator,
+            LocatorResolveRequest {
+                materialization: LocatorMaterialization::SelectedMatches,
+                ..request
+            },
+        ),
         Err(error) => {
             set_last_error(&error);
             return AdResult::ErrInvalidArgs;

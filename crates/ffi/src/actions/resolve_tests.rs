@@ -366,3 +366,17 @@ mod refusal_tests;
 
 #[path = "resolve_effect_tests.rs"]
 mod effect_tests;
+
+#[test]
+fn exact_ref_with_value_mirroring_name_derives_description_basis() {
+    let mut entry = test_ref_entry();
+    entry.identity.role = c"textfield".as_ptr();
+    entry.identity.name = c"hello".as_ptr();
+    entry.identity.value = c"hello".as_ptr();
+    entry.identity.description = c"Billing".as_ptr();
+    let decoded = decode(entry).unwrap();
+    assert_eq!(
+        decoded.identity.basis,
+        Some(agent_desktop_core::IdentityBasis::Description)
+    );
+}

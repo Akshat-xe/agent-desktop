@@ -322,11 +322,9 @@ pub(super) fn stable_value_field<'a>(
     }
 }
 
-pub(crate) fn stable_name<'a>(
-    role: &str,
-    name: Option<&'a str>,
-    value: Option<&str>,
-) -> Option<&'a str> {
+/// The name when it identifies the element on its own: blank names and a mutable-value role's
+/// name that mirrors its value are not stable.
+pub fn stable_name<'a>(role: &str, name: Option<&'a str>, value: Option<&str>) -> Option<&'a str> {
     let name = crate::tree::accname::non_blank(name)?;
     if is_mutable_value_role(role)
         && value_matches_name(crate::tree::accname::non_blank(value), name)

@@ -138,3 +138,125 @@ fn strict_incomplete_observation_times_out_at_the_c_boundary() {
         AdResult::ErrTimeout
     );
 }
+
+struct ValueOnRequestAdapter {
+    twins: usize,
+    seen_basis: std::sync::Arc<std::sync::Mutex<Option<agent_desktop_core::IdentityBasis>>>,
+}
+
+impl ActionOps for ValueOnRequestAdapter {}
+impl InputOps for ValueOnRequestAdapter {}
+impl SystemOps for ValueOnRequestAdapter {}
+
+impl ObservationOps for ValueOnRequestAdapter {
+    fn observe_tree(
+        &self,
+        root: ObservationRoot<'_>,
+        request: &ObservationRequest,
+    ) -> Result<ObservedTree, agent_desktop_core::AdapterError> {
+        let ObservationRoot::Window(window) = root else {
+            return Err(agent_desktop_core::AdapterError::internal(
+                "expected window root",
+            ));
+        };
+        let required = request.evidence_for_raw_depth(0);
+        let read = |wanted: bool, value: &str| {
+            if wanted {
+                LocatorField::Known(value.to_owned())
+            } else {
+                LocatorField::Unknown
+            }
+        };
+        let roots = (0..self.twins)
+            .map(|_| {
+                ObservedSubtree::new(
+                    LocatorEvidence {
+                        role: LocatorField::Known("textfield".into()),
+                        name: LocatorField::Known("Address".into()),
+                        description: LocatorField::Absent,
+                        value: read(required.value, "https://a.test"),
+                        identifiers: IdentifierEvidence::absent(),
+                        states: LocatorField::Known(Vec::new()),
+                        ref_evidence: LocatorRefEvidence {
+                            window_bounds: LocatorField::Absent,
+                            bounds: if required.ref_evidence.bounds {
+                                LocatorField::Known(agent_desktop_core::Rect {
+                                    x: 1.0,
+                                    y: 2.0,
+                                    width: 30.0,
+                                    height: 10.0,
+                                })
+                            } else {
+                                LocatorField::Unknown
+                            },
+                            available_actions: LocatorField::Known(vec!["SetValue".into()]),
+                            descriptors: Default::default(),
+                        },
+                    },
+                    Vec::new(),
+                    true,
+                    None,
+                )
+            })
+            .collect();
+        ObservedTree::from_roots(
+            roots,
+            ObservationSource::Window {
+                window: window.clone(),
+                surface: agent_desktop_core::SnapshotSurface::Window,
+            },
+            Default::default(),
+            true,
+        )
+    }
+
+    fn resolve_element_strict(
+        &self,
+        entry: &agent_desktop_core::RefEntry,
+        _deadline: agent_desktop_core::Deadline,
+    ) -> Result<agent_desktop_core::NativeHandle, agent_desktop_core::AdapterError> {
+        *self.seen_basis.lock().unwrap() = entry.identity.basis;
+        Err(agent_desktop_core::AdapterError::new(
+            agent_desktop_core::ErrorCode::ElementNotFound,
+            "stub stops after recording the basis",
+        ))
+    }
+}
+
+fn find_address(twins: usize) -> (AdResult, Option<agent_desktop_core::IdentityBasis>) {
+    let seen_basis = std::sync::Arc::default();
+    let handle = crate::adapter::register_adapter(AdAdapter {
+        inner: Box::new(ValueOnRequestAdapter {
+            twins,
+            seen_basis: std::sync::Arc::clone(&seen_basis),
+        }),
+        session_id: None,
+        _session_lease: None,
+    })
+    .unwrap();
+    let mut find = query();
+    find.filter.identity.name = c"Address".as_ptr();
+    let mut out = AdNativeHandle {
+        ptr: std::ptr::null(),
+    };
+    let result = unsafe { ad_find_exact(handle, &ffi_window(), &find, &mut out) };
+    unsafe { crate::adapter::ad_adapter_destroy(handle) };
+    let basis = *seen_basis.lock().unwrap();
+    (result, basis)
+}
+
+#[test]
+fn strict_find_of_a_unique_text_field_reaches_strict_resolution_by_name() {
+    assert_eq!(
+        find_address(1),
+        (
+            AdResult::ErrElementNotFound,
+            Some(agent_desktop_core::IdentityBasis::Name)
+        )
+    );
+}
+
+#[test]
+fn strict_find_of_twin_text_fields_stays_ambiguous() {
+    assert_eq!(find_address(2), (AdResult::ErrAmbiguousTarget, None));
+}
