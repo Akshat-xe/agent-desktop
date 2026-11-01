@@ -67,7 +67,7 @@ impl ObservationOps for DispatchGuardAdapter {
             return Err(AdapterError::timeout("strict resolution was uncertain")
                 .with_disposition(crate::DeliverySemantics::uncertain()));
         }
-        if self.mode == "ambiguous" && call == 1 {
+        if self.mode == "ambiguous" && call <= 2 {
             return Err(AdapterError::ambiguous_target("two live candidates")
                 .with_details(serde_json::json!({ "retryable": true })));
         }
@@ -224,6 +224,7 @@ fn entry() -> RefEntry {
             source_window_title: None,
             source_window_bounds_hash: None,
             source_surface: SnapshotSurface::Window,
+            renderer_accessibility_forced: false,
         },
         scope: crate::RefScope {
             root_ref: None,
@@ -242,7 +243,7 @@ fn execute(adapter: &DispatchGuardAdapter, timeout_ms: u64) -> Result<ActionResu
             context: &CommandContext::default(),
         },
         ActionRequest::headless(Action::Click).with_timeout_ms(Some(timeout_ms)),
-        crate::ref_action::dispatch_resolved,
+        crate::ref_action::ref_action_single::dispatch_resolved,
     )
 }
 

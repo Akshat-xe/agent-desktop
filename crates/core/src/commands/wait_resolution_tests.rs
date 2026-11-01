@@ -133,6 +133,7 @@ fn snapshot_with_one_ref() -> String {
             source_window_title: None,
             source_window_bounds_hash: None,
             source_surface: crate::adapter::SnapshotSurface::Window,
+            renderer_accessibility_forced: false,
         },
         scope: crate::RefScope {
             root_ref: None,

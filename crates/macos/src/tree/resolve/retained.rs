@@ -1,8 +1,5 @@
 use crate::tree::AXElement;
-use agent_desktop_core::{
-    AdapterError, DeliverySemantics, ErrorCode, IdentifierEvidence, IdentityMatch, LocatorEvidence,
-    RefEntry,
-};
+use agent_desktop_core::{AdapterError, IdentifierEvidence};
 use core_foundation::{
     base::TCFType,
     data::{CFData, CFDataRef},
@@ -77,43 +74,6 @@ pub(crate) fn evidence(element: &AXElement, identifiers: IdentifierEvidence) -> 
     }
 }
 
-/// Refuses a saved ref that carries a token this build cannot resolve at all.
-pub(crate) fn validate(token: Option<&str>) -> Result<(), AdapterError> {
-    match token {
-        Some(token) if !token.starts_with(TOKEN_PREFIX) => Err(unsupported_token()),
-        _ => Ok(()),
-    }
-}
-
-/// Compares the token a candidate carries in `evidence` with the entry's token.
-/// The candidate's own token is already in the evidence its read produced.
-pub(crate) fn candidate_match(
-    _element: &AXElement,
-    entry: &RefEntry,
-    evidence: &LocatorEvidence,
-) -> Result<IdentityMatch, AdapterError> {
-    let Some(token) = entry.identity.retained_object.as_deref() else {
-        return Ok(super::resolve_search::match_native_or_text_identity(
-            entry, evidence,
-        ));
-    };
-    validate(Some(token))?;
-    Ok(match evidence.identifiers.retained_object() {
-        Some(actual) if actual == token => IdentityMatch::Match,
-        Some(_) => IdentityMatch::NoMatch,
-        None => super::resolve_search::match_native_or_text_identity(entry, evidence),
-    })
-}
-
-fn unsupported_token() -> AdapterError {
-    AdapterError::new(
-        ErrorCode::StaleRef,
-        "The saved ref carries a native identity this build cannot resolve",
-    )
-    .with_suggestion("Run 'snapshot' to refresh, then retry with the updated ref.")
-    .with_disposition(DeliverySemantics::not_delivered())
-}
-
 fn symbols() -> Option<&'static Symbols> {
     static SYMBOLS: OnceLock<Option<Symbols>> = OnceLock::new();
     SYMBOLS.get_or_init(load_symbols).as_ref()
@@ -167,7 +127,3 @@ unsafe extern "C" {
     fn dlsym(handle: *mut c_void, symbol: *const std::ffi::c_char) -> *mut c_void;
     fn dlopen(path: *const std::ffi::c_char, mode: i32) -> *mut c_void;
 }
-
-#[cfg(all(test, target_os = "macos"))]
-#[path = "retained_tests.rs"]
-mod tests;

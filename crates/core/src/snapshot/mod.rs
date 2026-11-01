@@ -20,6 +20,9 @@ pub struct SnapshotResult {
     pub snapshot_id: Option<String>,
     pub complete: bool,
     pub nodes_observed: usize,
+    /// Set when the whole-window read that proves tokenless refs failed or was
+    /// cut short; it says why, and those refs are refused when used.
+    pub identity_unproven: Option<String>,
 }
 
 impl SnapshotResult {
@@ -40,6 +43,7 @@ pub fn build(
     let (window, capture) = first_surface_owner(windows, |window| {
         window_capture::capture_window(adapter, opts, window, deadline)
     })?;
+    let identity_unproven = capture.identity_unproven.clone();
     let (raw_tree, complete, nodes_observed, observed) = capture.into_parts()?;
     let capture_proof = crate::refs::ref_capture_proof::CaptureProof::new(&observed);
 
@@ -49,6 +53,7 @@ pub fn build(
             include_bounds: opts.include_bounds,
             interactive_only: opts.interactive_only,
             compact: opts.compact,
+            force_renderer_accessibility: opts.force_renderer_accessibility,
         },
         source: RefAllocSource {
             pid: window.pid,
@@ -76,6 +81,7 @@ pub fn build(
         snapshot_id: None,
         complete,
         nodes_observed,
+        identity_unproven,
     })
 }
 
@@ -333,6 +339,9 @@ pub(crate) fn emit_snapshot_saved(
         });
         if !result.window.app.is_empty() {
             fields["app"] = json!(result.window.app);
+        }
+        if let Some(reason) = &result.identity_unproven {
+            fields["identity_unproven"] = json!(reason);
         }
         fields
     })

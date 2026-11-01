@@ -49,6 +49,7 @@ fn snapshot_with_ref(role: &str, available_actions: &[&str]) -> String {
             source_window_title: Some("Fixture".into()),
             source_window_bounds_hash: None,
             source_surface: crate::adapter::SnapshotSurface::Window,
+            renderer_accessibility_forced: false,
         },
         scope: crate::RefScope {
             root_ref: None,

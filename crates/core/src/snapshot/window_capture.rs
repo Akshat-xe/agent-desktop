@@ -10,6 +10,9 @@ use crate::{
 pub(crate) struct WindowCapture {
     pub(crate) observed: ObservedTree,
     presentation_depth: Option<u8>,
+    /// Why the whole-window read that would prove this capture's tokenless
+    /// refs failed or came back cut short, so those refs stay unproven.
+    pub(crate) identity_unproven: Option<String>,
 }
 
 impl WindowCapture {
@@ -19,6 +22,7 @@ impl WindowCapture {
         let Self {
             mut observed,
             presentation_depth,
+            ..
         } = self;
         let (tree, complete, nodes_observed) = match presentation_depth {
             Some(depth) => observed.project_window(depth)?,
@@ -35,9 +39,10 @@ impl WindowCapture {
 /// A shallow walk never sees the nodes below its depth, so the census that
 /// proves a ref unique cannot run over it, and every ref it allocates is
 /// refused at resolution. A ref carrying an element token re-identifies itself,
-/// so a capture made of those keeps its single shallow walk. A window that
-/// cannot be observed completely keeps that shallow tree and proves nothing,
-/// rather than counting a narrower window.
+/// so a capture made of those keeps its single shallow walk. A whole-window
+/// read that fails or comes back incomplete keeps that shallow tree and proves
+/// nothing, rather than counting a narrower window or failing a capture whose
+/// shallow walk already succeeded.
 pub(crate) fn capture_window(
     adapter: &dyn PlatformAdapter,
     opts: &TreeOptions,
@@ -46,30 +51,32 @@ pub(crate) fn capture_window(
 ) -> Result<WindowCapture, AppError> {
     let observed = observe_window(adapter, opts, window, deadline)?;
     let depth = ObservationRequest::snapshot_logical_depth(opts);
-    if depth >= crate::refs::resolve_saved_ref::WHOLE_WINDOW_DEPTH || !needs_whole_window(&observed)
-    {
+    let unread = needs_whole_window(&observed);
+    if depth >= crate::refs::resolve_saved_ref::WHOLE_WINDOW_DEPTH || !unread {
         return Ok(WindowCapture {
             observed,
             presentation_depth: None,
+            identity_unproven: unread.then(|| "the window read was cut short".to_owned()),
         });
     }
-    match crate::refs::resolve_saved_ref::observe_whole_window(
-        adapter,
-        opts.surface,
-        window,
-        deadline,
-        None,
+    let unproven = match crate::refs::resolve_saved_ref::observe_whole_window(
+        adapter, opts, window, deadline, None,
     ) {
-        Ok(whole) => Ok(WindowCapture {
-            observed: whole,
-            presentation_depth: Some(depth),
-        }),
-        Err(error) if error.code == crate::ErrorCode::Timeout => Ok(WindowCapture {
-            observed,
-            presentation_depth: None,
-        }),
-        Err(error) => Err(AppError::Adapter(error)),
-    }
+        Ok(whole) if whole.is_exhaustive() => {
+            return Ok(WindowCapture {
+                observed: whole,
+                presentation_depth: Some(depth),
+                identity_unproven: None,
+            });
+        }
+        Ok(_) => "the whole-window read was cut short".to_owned(),
+        Err(error) => error.message,
+    };
+    Ok(WindowCapture {
+        observed,
+        presentation_depth: None,
+        identity_unproven: Some(unproven),
+    })
 }
 
 fn observe_window(
@@ -95,9 +102,11 @@ fn observe_window(
 /// re-observed. A presentation whose selected entries all carry a token resolves
 /// through the tokens and keeps its single shallow walk.
 fn needs_whole_window(observed: &ObservedTree) -> bool {
-    let cut = !observed.is_exhaustive();
+    if observed.is_exhaustive() {
+        return false;
+    }
     let mut presented = observed.clone();
-    cut && presented
+    presented
         .project_partial()
         .is_ok_and(|(presented, _, _)| crate::refs::ref_alloc::selects_tokenless_entry(&presented))
 }

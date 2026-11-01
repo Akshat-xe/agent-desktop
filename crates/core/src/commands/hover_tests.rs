@@ -15,6 +15,8 @@ use std::sync::{
     atomic::{AtomicU32, Ordering},
 };
 
+const CORE_RESOLVED: &str = "core-resolved";
+
 struct HoverCaptureAdapter {
     moved_to: Mutex<Option<MouseEvent>>,
     focused_pids: Mutex<Vec<crate::ProcessId>>,
@@ -51,7 +53,7 @@ impl ObservationOps for HoverCaptureAdapter {
         _entry: &RefEntry,
         _deadline: crate::Deadline,
     ) -> Result<NativeHandle, AdapterError> {
-        Ok(NativeHandle::null())
+        Ok(NativeHandle::new(CORE_RESOLVED))
     }
 
     fn get_element_bounds(
@@ -83,11 +85,16 @@ impl ObservationOps for HoverCaptureAdapter {
 
     fn confirm_pointer_receiver(
         &self,
-        _entry: &RefEntry,
+        handle: &NativeHandle,
         _point: crate::Point,
         _deadline: crate::Deadline,
     ) -> Result<(), AdapterError> {
         self.receiver_checks.fetch_add(1, Ordering::SeqCst);
+        if handle.downcast_ref::<&str>() != Some(&CORE_RESOLVED) {
+            return Err(AdapterError::internal(
+                "the receiver was confirmed on an element core did not resolve",
+            ));
+        }
         if self.refuses_receiver {
             return Err(AdapterError::new(
                 crate::ErrorCode::ActionFailed,
@@ -167,6 +174,7 @@ fn ref_snapshot(pid: u32) -> String {
             source_window_title: Some(format!("Window {pid}")),
             source_window_bounds_hash: None,
             source_surface: crate::adapter::SnapshotSurface::Window,
+            renderer_accessibility_forced: false,
         },
         scope: crate::RefScope {
             root_ref: None,

@@ -41,7 +41,7 @@ agent-desktop snapshot --root @s8f3k2p9:e3 -i --compact        # verify: re-read
 ```
 
 - A small app needs no skeleton. Take a full `snapshot -i`.
-- `-i` keeps interactive nodes only, so a row's static-text label is dropped. To tell which row a repeated button belongs to, drill that row's container with `--root` and leave out `-i`.
+- `-i` keeps interactive nodes only, so a row's static-text label is dropped. To tell which row a repeated button belongs to, drill that row's container with `--root` and leave out `-i`. On Windows and Linux that reads the row but does not make its button actionable: a button repeated in other rows is a twin in the window and its ref is refused (see Refs).
 - A `--root` drill adds its refs to the same snapshot id, so the skeleton and other regions keep their refs.
 - Never skeleton a surface (`--surface menu`, `sheet`, `alert`). A surface is already focused.
 - An action that opens a menu, sheet or alert lists it in `data.surfaces`. Target that overlay next.
@@ -52,9 +52,9 @@ agent-desktop snapshot --root @s8f3k2p9:e3 -i --compact        # verify: re-read
 - Output refs are qualified: `@<snapshot_id>:e<N>`, for example `@s8f3k2p9:e1`. Pass them to later commands as they are.
 - Refs are valid for one snapshot. After any UI change, re-drill the affected region or take a new snapshot.
 - Only addressable elements get refs. Static text and inert containers do not.
-- A command re-identifies the element before it acts. On macOS the ref carries the element's own address, so identical twins each keep their ref. On Windows and Linux a ref resolves only when it was the only element in the snapshot with its role, native id, name and description, and exactly one live element still matches; identical twins there have no ref path, so only `--headed mouse-click --xy X,Y` can choose one, and it takes the foreground.
+- A command re-identifies the element before it acts. On macOS the ref carries the element's own address, so identical twins each keep their ref. On Windows and Linux a ref resolves only when it was the only element in the window its snapshot captured with its role, native id, name and description, counted even below a skeleton or depth cut, and exactly one live element still matches. Identical twins there have no ref path: only `--headed mouse-click --xy X,Y` can choose one, it takes the foreground, and a Linux Wayland session refuses it.
 - `STALE_REF`: the element is gone or no longer matches. `details.kind` is `saved_ref_absent`, or `retained_object_stale` on macOS. Take a fresh snapshot and use the new ref.
-- `AMBIGUOUS_TARGET`: two live elements match (`saved_ref_ambiguous`), or the ref was never unique (`identity_not_unique`). Take a fresh snapshot.
+- `AMBIGUOUS_TARGET`: an identical element appeared (`saved_ref_ambiguous`), or the ref was not proven unique at capture (`identity_not_unique`). Repeating the ref or re-snapshotting identical twins gives the same refusal; act on a control that is unique in the window. `identity_not_unique` also follows a snapshot that could not read the whole window in time: retake it with a larger `--timeout-ms`.
 - `TIMEOUT` with `details.kind: resolution_identity_unknown`: a live read did not answer, so identity is unproven. Nothing was sent; retry.
 - `SNAPSHOT_NOT_FOUND`: the snapshot id expired. Snapshot again.
 

@@ -133,6 +133,7 @@ fn resolve_point_from_entry(
         focused: false,
         source_entry: Some(entry.clone()),
         bounds_hash: Some(observed_bounds_hash),
+        handle: Some(handle),
     })
 }
 

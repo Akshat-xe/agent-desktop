@@ -56,3 +56,6 @@ mod caret;
 
 #[path = "type_text_interval_identity_tests.rs"]
 mod identity;
+
+#[path = "type_text_interval_observation_tests.rs"]
+mod observation;

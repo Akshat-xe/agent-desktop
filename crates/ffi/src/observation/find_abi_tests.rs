@@ -49,6 +49,7 @@ impl ObservationOps for CardinalityAdapter {
             ObservationSource::Window {
                 window: window.clone(),
                 surface: agent_desktop_core::SnapshotSurface::Window,
+                renderer_accessibility_forced: false,
             },
             Default::default(),
             self.complete,

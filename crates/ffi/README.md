@@ -50,7 +50,7 @@ inside `AdExactRefEntry`: an `AD_BOUNDS_SPACE_*` constant naming the frame of
 
 ABI 7 makes the two exact-entry ref calls,
 `ad_execute_ref_action_exact_with_policy` and `ad_resolve_element_exact`, fail
-closed with `AD_RESULT_ERR_AMBIGUOUS_TARGET`: an exact entry carries no retained
+closed with `AD_RESULT_ERR_ACTION_NOT_SUPPORTED`: an exact entry carries no retained
 element token and no capture proof, so it cannot be re-identified. Act through
 a snapshot ref with `ad_execute_by_ref`, and get a handle with `ad_find_exact`.
 `ad_execute_by_ref` and `ad_wait` accept only snapshot-qualified refs

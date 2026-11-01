@@ -2,11 +2,10 @@ use super::*;
 use crate::tree::AXElement;
 use crate::tree::resolve::resolve_classify::classify_candidates;
 use crate::tree::resolve::resolve_roots::{
-    require_unique_window_number_match, source_scope_verified, source_window_number,
-    source_window_scope_required,
+    require_unique_window_number_match, source_window_number, source_window_scope_required,
 };
 use crate::tree::resolve::resolve_search::{
-    find_entry_by_path, incomplete_traversal_error, match_native_or_text_identity, walk_finite_path,
+    find_entry_by_path, incomplete_traversal_error, walk_finite_path,
 };
 use agent_desktop_core::{
     RefCapabilities, RefEntryIdentity, RefGeometry, RefProcess, RefScope, RefSource,
@@ -48,6 +47,7 @@ pub(super) fn entry(
             source_window_title: source_window_title.map(String::from),
             source_window_bounds_hash: None,
             source_surface: SnapshotSurface::Window,
+            renderer_accessibility_forced: false,
         },
         scope: RefScope {
             root_ref: root_ref.map(String::from),
@@ -58,7 +58,7 @@ pub(super) fn entry(
 }
 
 #[test]
-fn locator_anchor_path_requires_scope_and_identity_or_geometry() {
+fn locator_anchor_path_requires_scope_and_nothing_else() {
     let mut unscoped = entry(Some(42), None, None, None);
     assert!(!can_use_locator_anchor_path(&unscoped));
 
@@ -67,7 +67,7 @@ fn locator_anchor_path_requires_scope_and_identity_or_geometry() {
 
     unscoped.geometry.bounds_hash = None;
     unscoped.identity.name = None;
-    assert!(!can_use_locator_anchor_path(&unscoped));
+    assert!(can_use_locator_anchor_path(&unscoped));
 }
 
 #[test]
@@ -117,13 +117,6 @@ fn duplicate_ax_window_bridge_matches_are_ambiguous() {
 
     assert_eq!(error.code, ErrorCode::AmbiguousTarget);
     assert_eq!(error.details.unwrap()["candidate_count"], 2);
-}
-
-#[test]
-fn mutable_title_scope_never_claims_exact_verification() {
-    assert!(!source_scope_verified(None, true));
-    assert!(!source_scope_verified(Some("w-42"), false));
-    assert!(source_scope_verified(Some("w-42"), true));
 }
 
 #[test]
@@ -217,7 +210,6 @@ fn expired_deadline_fails_before_path_reads() {
     let error = find_entry_by_path(
         &[],
         &entry(Some(42), Some("w-42"), None, None),
-        true,
         &mut context,
     )
     .err()
@@ -259,14 +251,9 @@ fn preserved_native_path_replays_nested_target_in_one_read_per_level() {
 #[test]
 fn ambiguity_reports_bounded_candidate_summaries() {
     let candidates = (0..11).map(|_| AXElement(std::ptr::null_mut())).collect();
-    let error = classify_candidates(
-        candidates,
-        &entry(None, Some("w-42"), None, None),
-        true,
-        Instant::now() + Duration::from_secs(1),
-    )
-    .err()
-    .expect("duplicate candidates must be ambiguous");
+    let error = classify_candidates(candidates, &entry(None, Some("w-42"), None, None))
+        .err()
+        .expect("duplicate candidates must be ambiguous");
 
     assert_eq!(error.code, ErrorCode::AmbiguousTarget);
     let details = error.details.unwrap();
@@ -280,60 +267,19 @@ fn unique_scoped_candidate_resolves_even_after_bounds_move() {
     let handle = classify_candidates(
         vec![AXElement(std::ptr::null_mut())],
         &entry(Some(42), Some("w-42"), None, None),
-        true,
-        Instant::now() + Duration::from_secs(1),
     );
 
     assert!(handle.is_ok());
 }
 
 #[test]
-fn scoped_role_only_candidate_does_not_bypass_bounds_verification() {
+fn a_role_only_candidate_resolves_for_core_to_confirm() {
     let mut weak = entry(None, Some("w-42"), None, None);
     weak.identity.name = None;
 
-    let error = classify_candidates(
-        vec![AXElement(std::ptr::null_mut())],
-        &weak,
-        true,
-        Instant::now() + Duration::from_secs(1),
-    )
-    .err()
-    .expect("window scope alone must not identify a role-only candidate");
+    let handle = classify_candidates(vec![AXElement(std::ptr::null_mut())], &weak);
 
-    assert_eq!(error.code, ErrorCode::ElementNotFound);
-}
-
-#[test]
-fn authoritatively_absent_native_identifier_is_a_definitive_mismatch() {
-    use agent_desktop_core::{
-        IdentifierEvidence, LocatorEvidence, LocatorField, LocatorRefEvidence,
-    };
-
-    let mut stored = entry(Some(42), Some("w-42"), None, None);
-    stored.identity.native_id = Some(agent_desktop_core::ElementIdentifier {
-        kind: agent_desktop_core::IdentifierKind::AxIdentifier,
-        value: "stable-id".into(),
-    });
-    let live = LocatorEvidence {
-        role: LocatorField::Known(stored.identity.role.clone()),
-        name: LocatorField::Known("Investors".into()),
-        description: LocatorField::Absent,
-        value: LocatorField::Absent,
-        identifiers: IdentifierEvidence::absent(),
-        states: LocatorField::Absent,
-        ref_evidence: LocatorRefEvidence {
-            window_bounds: LocatorField::Absent,
-            bounds: LocatorField::Absent,
-            available_actions: LocatorField::Absent,
-            descriptors: Default::default(),
-        },
-    };
-
-    assert_eq!(
-        match_native_or_text_identity(&stored, &live),
-        agent_desktop_core::IdentityMatch::NoMatch
-    );
+    assert!(handle.is_ok());
 }
 
 #[test]

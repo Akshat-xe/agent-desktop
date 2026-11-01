@@ -100,13 +100,11 @@ fn exact_resolve_refuses_an_entry_with_no_capture_proof() {
             ptr: std::ptr::null(),
         };
         let rc = ad_resolve_element_exact(adapter, &exact, &mut out);
-        assert_eq!(rc, AdResult::ErrAmbiguousTarget);
+        assert_eq!(rc, AdResult::ErrActionNotSupported);
         assert!(out.ptr.is_null());
         let message = CStr::from_ptr(ad_last_error_message()).to_string_lossy();
-        assert!(
-            message.contains("not unique when it was captured"),
-            "message={message}"
-        );
+        assert!(message.contains("no capture proof"), "message={message}");
+        assert!(!message.contains("--headed"), "message={message}");
     });
 }
 

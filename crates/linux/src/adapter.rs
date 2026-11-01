@@ -193,14 +193,13 @@ impl ObservationOps for LinuxAdapter {
 
     fn confirm_pointer_receiver(
         &self,
-        entry: &RefEntry,
+        handle: &NativeHandle,
         point: Point,
         deadline: Deadline,
     ) -> Result<(), AdapterError> {
-        let handle = self.resolve_element_strict(entry, deadline)?;
         crate::input::physical::target_pointer::confirm_receiver(
             self.bus(),
-            &handle,
+            handle,
             &point,
             deadline,
         )

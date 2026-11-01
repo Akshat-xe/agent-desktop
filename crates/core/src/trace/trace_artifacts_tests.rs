@@ -60,6 +60,7 @@ pub(super) fn entry(pid: u32) -> RefEntry {
             source_window_title: Some("Fixture".into()),
             source_window_bounds_hash: None,
             source_surface: crate::adapter::SnapshotSurface::Window,
+            renderer_accessibility_forced: false,
         },
         scope: crate::RefScope {
             root_ref: None,

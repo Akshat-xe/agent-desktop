@@ -119,7 +119,7 @@ AdResult ad_trace_export(const struct AdAdapter *adapter,
 
 `ad_execute_by_ref` is the primary action entrypoint. `ad_execute_action` and `ad_execute_action_with_policy` act on a native handle and skip strict re-identification and the actionability checks.
 
-The two exact-entry calls, `ad_execute_ref_action_exact_with_policy` and `ad_resolve_element_exact`, fail closed with `AD_RESULT_ERR_AMBIGUOUS_TARGET` on every platform. An `AdExactRefEntry` carries no retained element token and no capture proof, so the element it names cannot be re-identified. Act through a snapshot ref with `ad_execute_by_ref`, and get a native handle with `ad_find_exact`.
+The two exact-entry calls, `ad_execute_ref_action_exact_with_policy` and `ad_resolve_element_exact`, fail closed with `AD_RESULT_ERR_ACTION_NOT_SUPPORTED` on every platform. An `AdExactRefEntry` carries no retained element token and no capture proof, so the element it names cannot be re-identified. Act through a snapshot ref with `ad_execute_by_ref`, and get a native handle with `ad_find_exact`.
 
 ```c
 typedef struct AdNativeHandle {
@@ -276,7 +276,7 @@ AdResult ad_execute_action_with_policy(const struct AdAdapter *adapter,
                                        int32_t policy,
                                        struct AdActionResult *out);
 
-// Always fails with AMBIGUOUS_TARGET: an exact ref entry carries no
+// Always fails with ACTION_NOT_SUPPORTED: an exact ref entry carries no
 // retained element token and no capture proof, so it cannot be
 // re-identified. Act through a snapshot ref with ad_execute_by_ref.
 AdResult ad_execute_ref_action_exact_with_policy(const struct AdAdapter *adapter,
@@ -285,7 +285,7 @@ AdResult ad_execute_ref_action_exact_with_policy(const struct AdAdapter *adapter
                                                  int32_t policy,
                                                  struct AdActionResult *out);
 
-// Always fails with AMBIGUOUS_TARGET for the same reason. To get a native
+// Always fails with ACTION_NOT_SUPPORTED for the same reason. To get a native
 // handle, use ad_find_exact.
 AdResult ad_resolve_element_exact(const struct AdAdapter *adapter,
                                   const struct AdExactRefEntry *entry,

@@ -1,6 +1,5 @@
 use agent_desktop_core::{
-    AdapterError, EvidenceRequirements, IdentityMatch, NativeHandle, RefEntry,
-    refs::ref_identity::{has_stable_text_identity, identity_match},
+    AdapterError, EvidenceRequirements, IdentityMatch, LocatorField, NativeHandle, RefEntry,
 };
 
 use super::resolve_classify::classify_candidates;
@@ -10,11 +9,13 @@ use super::resolve_read_context::ResolveReadContext;
 use crate::tree::AXElement;
 use crate::tree::element_dedupe::push_unique;
 
+/// Lands a tokenless anchor by its path inside the scoped roots. Only the role
+/// of the landed element is checked here; core confirms its identity against
+/// the full recorded predicate after the landing.
 #[cfg(target_os = "macos")]
 pub(in crate::tree) fn find_entry_by_path(
     roots: &[AXElement],
     entry: &RefEntry,
-    source_window_verified: bool,
     read_context: &mut ResolveReadContext,
 ) -> Result<NativeHandle, AdapterError> {
     crate::tree::locator_deadline::remaining(read_context.deadline)?;
@@ -25,8 +26,7 @@ pub(in crate::tree) fn find_entry_by_path(
         let Some(candidate) = element_at_path(root, &entry.scope.path, read_context)? else {
             continue;
         };
-        let identity = candidate_identity(&candidate, entry, read_context)?;
-        match identity {
+        match landed_role_match(&candidate, entry, read_context)? {
             IdentityMatch::Match => {
                 push_unique(&mut matches, candidate);
             }
@@ -35,27 +35,14 @@ pub(in crate::tree) fn find_entry_by_path(
             }
             IdentityMatch::NoMatch => {}
         }
-        if should_stop_collecting(matches.len(), entry) {
+        if matches.len() > 1 {
             break;
         }
     }
-    if should_stop_collecting(matches.len(), entry) {
-        return classify_candidates(
-            matches,
-            entry,
-            source_window_verified,
-            read_context.deadline,
-        );
+    match incomplete {
+        Some(error) if matches.len() < 2 => Err(error),
+        _ => classify_candidates(matches, entry),
     }
-    if let Some(error) = incomplete {
-        return Err(error);
-    }
-    classify_candidates(
-        matches,
-        entry,
-        source_window_verified,
-        read_context.deadline,
-    )
 }
 
 #[cfg(target_os = "macos")]
@@ -122,50 +109,29 @@ fn record_path_child_read(
 }
 
 #[cfg(target_os = "macos")]
-fn candidate_identity(
+fn landed_role_match(
     element: &AXElement,
     entry: &RefEntry,
     context: &mut ResolveReadContext,
 ) -> Result<IdentityMatch, AdapterError> {
-    let read = read_node(element, identity_requirements(entry), context)?;
+    let requirements = EvidenceRequirements {
+        role: true,
+        ..EvidenceRequirements::default()
+    };
+    let read = read_node(element, requirements, context)?;
     if read.invalid_element {
         return Ok(IdentityMatch::Unknown);
     }
-    let matched = match read.evidence.role.known() {
-        Some(role) if role == &entry.identity.role => {
-            let identity = super::retained::candidate_match(element, entry, &read.evidence)?;
-            if identity == IdentityMatch::Unknown && provisional_geometry_candidate(entry) {
-                IdentityMatch::Match
-            } else {
-                identity
-            }
-        }
+    Ok(role_match(&read.evidence.role, &entry.identity.role))
+}
+
+fn role_match(role: &LocatorField<String>, expected: &str) -> IdentityMatch {
+    match role.known() {
+        Some(actual) if actual == expected => IdentityMatch::Match,
         Some(_) => IdentityMatch::NoMatch,
-        None if read.evidence.role.is_unknown() => IdentityMatch::Unknown,
+        None if role.is_unknown() => IdentityMatch::Unknown,
         None => IdentityMatch::NoMatch,
-    };
-    Ok(matched)
-}
-
-pub(in crate::tree) fn match_native_or_text_identity(
-    entry: &RefEntry,
-    evidence: &agent_desktop_core::LocatorEvidence,
-) -> IdentityMatch {
-    identity_match(
-        entry,
-        &evidence.name,
-        &evidence.value,
-        &evidence.description,
-        &evidence.identifiers,
-    )
-}
-
-/// Whether bounds alone may stand in for an element whose identity is unknown.
-/// A ref that recorded a token never qualifies: only that token may match it,
-/// which `has_meaningful_identity` already enforces.
-fn provisional_geometry_candidate(entry: &RefEntry) -> bool {
-    entry.geometry.bounds_hash.is_some()
-        && !agent_desktop_core::refs::ref_identity::has_meaningful_identity(entry)
+    }
 }
 
 #[cfg(target_os = "macos")]
@@ -196,23 +162,6 @@ fn read_node(
         .note_child_demand(read.child_read.total_count, &mut context.stats);
     context.usage.claim_edges(read.child_read.elements.len());
     Ok(read)
-}
-
-fn identity_requirements(entry: &RefEntry) -> EvidenceRequirements {
-    let semantic_text = has_stable_text_identity(entry) || entry.identity.role == "cell";
-    EvidenceRequirements {
-        role: true,
-        name: semantic_text,
-        description: semantic_text,
-        value: semantic_text,
-        identifiers: entry.identity.native_id.is_some(),
-        states: false,
-        ref_evidence: Default::default(),
-    }
-}
-
-pub(in crate::tree) fn should_stop_collecting(match_count: usize, entry: &RefEntry) -> bool {
-    match_count > 1 && entry.geometry.bounds_hash.is_none()
 }
 
 #[cfg(all(test, target_os = "macos"))]

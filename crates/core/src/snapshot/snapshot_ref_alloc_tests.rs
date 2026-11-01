@@ -27,6 +27,7 @@ fn drill_config<'a>(
             include_bounds: false,
             interactive_only,
             compact,
+            force_renderer_accessibility: false,
         },
         source: crate::refs::ref_alloc_source::RefAllocSource {
             pid: crate::ProcessId::new(pid),

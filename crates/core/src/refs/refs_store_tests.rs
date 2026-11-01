@@ -41,6 +41,7 @@ fn entry(name: &str) -> RefEntry {
             source_window_title: Some("Test Window".into()),
             source_window_bounds_hash: None,
             source_surface: SnapshotSurface::Window,
+            renderer_accessibility_forced: false,
         },
         scope: crate::RefScope {
             root_ref: None,

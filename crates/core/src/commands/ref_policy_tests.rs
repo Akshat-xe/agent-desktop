@@ -170,7 +170,7 @@ fn snapshot_id() -> String {
             source_window_id: Some("w-1".into()),
             source_window_title: Some("Fixture".into()),
             source_window_bounds_hash: None,
-            source_surface: crate::adapter::SnapshotSurface::Window,
+            ..Default::default()
         },
         scope: crate::RefScope {
             root_ref: None,

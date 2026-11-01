@@ -43,6 +43,7 @@ fn entry() -> RefEntry {
             source_window_title: None,
             source_window_bounds_hash: None,
             source_surface: crate::snapshot::snapshot_surface::SnapshotSurface::Window,
+            renderer_accessibility_forced: false,
         },
         scope: crate::RefScope {
             root_ref: None,
@@ -124,7 +125,7 @@ fn terminal_stale_ref_against_unresponsive_process_surfaces_app_unresponsive() {
             context: &CommandContext::default(),
         },
         ActionRequest::headless(Action::Click),
-        crate::ref_action::dispatch_resolved,
+        crate::ref_action::ref_action_single::dispatch_resolved,
     )
     .unwrap_err();
 
@@ -199,7 +200,7 @@ fn recycled_pid_never_upgrades_stale_ref_to_app_unresponsive() {
             context: &CommandContext::default(),
         },
         ActionRequest::headless(Action::Click),
-        crate::ref_action::dispatch_resolved,
+        crate::ref_action::ref_action_single::dispatch_resolved,
     )
     .unwrap_err();
 
@@ -282,7 +283,7 @@ fn terminal_stale_ref_preserves_exited_and_crashed_process_details() {
                 context: &CommandContext::default(),
             },
             ActionRequest::headless(Action::Click),
-            crate::ref_action::dispatch_resolved,
+            crate::ref_action::ref_action_single::dispatch_resolved,
         )
         .unwrap_err();
 

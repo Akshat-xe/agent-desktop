@@ -18,6 +18,7 @@ enum Mode {
     ProvenIdentity,
     RequiredNameUnknown,
     RequiredDescriptionUnknown,
+    HydrationAddsName,
 }
 
 struct HydrationContractAdapter {
@@ -153,14 +154,48 @@ fn a_hydrated_entry_keeps_the_capture_proof_and_its_ref_resolves() {
         "hydration must keep the proof the whole-window read gave the match"
     );
 
-    let handle = crate::refs::resolve_saved_ref::resolve_saved_ref(
+    let anchored = adapter.strict_resolutions.load(Ordering::SeqCst);
+    crate::refs::resolve_saved_ref::resolve_saved_ref(
         &adapter,
         &entry,
         crate::Deadline::standard().unwrap(),
         None,
     )
     .expect("the published ref re-identifies the element it was proven from");
-    assert!(handle.downcast_ref::<()>().is_none());
+    assert_eq!(
+        adapter.strict_resolutions.load(Ordering::SeqCst),
+        anchored + 1,
+        "the ref lands through one positional anchor"
+    );
+}
+
+/// Hydration can read a name the window read did not. The match shows it, but
+/// the saved ref keeps the predicate the whole-window read proved unique, so
+/// the published ref resolves instead of failing as an unproven enriched one.
+#[test]
+fn a_name_hydration_adds_is_shown_while_the_saved_ref_keeps_its_proof() {
+    let adapter = adapter(Mode::HydrationAddsName);
+
+    let resolution = resolve_query(
+        &adapter,
+        &role_query(),
+        ObservationRoot::Window(&window()),
+        &selected_request(),
+    )
+    .expect("a name only hydration read must not invalidate the match");
+    assert_eq!(adapter.hydration_observations.load(Ordering::SeqCst), 1);
+    assert_eq!(resolution.matches[0].data.name, "Save");
+
+    let entry = resolution.refmap.unwrap().get("@e1").unwrap().clone();
+    assert_eq!(entry.identity.name, None);
+    assert!(entry.identity.unique_at_capture);
+    crate::refs::resolve_saved_ref::resolve_saved_ref(
+        &adapter,
+        &entry,
+        crate::Deadline::standard().unwrap(),
+        None,
+    )
+    .expect("the published ref resolves under the predicate it was proven with");
 }
 
 #[test]
@@ -289,7 +324,9 @@ fn evidence(mode: Mode, hydrating: bool) -> super::LocatorEvidence {
     let mut evidence = super::test_support::evidence("button", None);
     evidence.name = match mode {
         Mode::RequiredNameUnknown if !hydrating => LocatorField::Known("Save".into()),
+        Mode::HydrationAddsName if hydrating => LocatorField::Known("Save".into()),
         Mode::RequiredNameUnknown
+        | Mode::HydrationAddsName
         | Mode::OptionalIdentityUnknown
         | Mode::MissingAnchor
         | Mode::UnprovenMissingAnchor => LocatorField::Unknown,
@@ -300,6 +337,7 @@ fn evidence(mode: Mode, hydrating: bool) -> super::LocatorEvidence {
     evidence.description = match mode {
         Mode::RequiredDescriptionUnknown if !hydrating => LocatorField::Known("Primary".into()),
         Mode::RequiredDescriptionUnknown
+        | Mode::HydrationAddsName
         | Mode::OptionalIdentityUnknown
         | Mode::MissingAnchor
         | Mode::UnprovenMissingAnchor => LocatorField::Unknown,

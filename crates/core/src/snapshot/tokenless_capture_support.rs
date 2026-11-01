@@ -12,6 +12,11 @@ use crate::{
 
 pub(super) const TOKEN: &str = "axtok1:run";
 
+/// Rewrites what the whole-window walk returns, so a test can make that one
+/// read come back cut short, fail, or depend on the request it was sent.
+pub(super) type WholeReadFault =
+    fn(&ObservationRequest, AccessibilityNode) -> Result<AccessibilityNode, AdapterError>;
+
 pub(super) struct CaptureAdapter {
     tree: Mutex<AccessibilityNode>,
     window: WindowInfo,
@@ -19,6 +24,7 @@ pub(super) struct CaptureAdapter {
     pub(super) subtrees: AtomicU32,
     pub(super) strict: AtomicU32,
     anchors: Mutex<Vec<RefEntry>>,
+    whole_read: Mutex<Option<WholeReadFault>>,
 }
 
 impl CaptureAdapter {
@@ -30,7 +36,12 @@ impl CaptureAdapter {
             subtrees: AtomicU32::new(0),
             strict: AtomicU32::new(0),
             anchors: Mutex::new(Vec::new()),
+            whole_read: Mutex::new(None),
         }
+    }
+
+    pub(super) fn fault_whole_read(&self, fault: WholeReadFault) {
+        *self.whole_read.lock().expect("the fault locks") = Some(fault);
     }
 
     pub(super) fn show(&self, tree: AccessibilityNode) {
@@ -64,11 +75,34 @@ impl ObservationOps for CaptureAdapter {
             ObservationRoot::Window(_) => {
                 self.captures.fetch_add(1, Ordering::SeqCst);
                 let tree = self.tree.lock().expect("the fixture tree locks").clone();
-                crate::adapter::observed_tree(&root, cut(tree, 0, request.max_logical_depth))
+                let tree = cut(tree, 0, request.max_logical_depth);
+                let fault = *self.whole_read.lock().expect("the fault locks");
+                let tree = match fault {
+                    Some(fault)
+                        if request.max_logical_depth
+                            >= crate::refs::resolve_saved_ref::WHOLE_WINDOW_DEPTH =>
+                    {
+                        fault(request, tree)?
+                    }
+                    _ => tree,
+                };
+                crate::adapter::observed_tree(&root, tree)
             }
-            ObservationRoot::Element { .. } => {
+            ObservationRoot::Element { entry, .. } => {
                 self.subtrees.fetch_add(1, Ordering::SeqCst);
-                crate::adapter::saved_ref_element_tree(root)
+                let tree = self.tree.lock().expect("the fixture tree locks").clone();
+                match entry
+                    .identity
+                    .retained_object
+                    .as_deref()
+                    .and_then(|token| find_token_subtree(tree, token))
+                {
+                    Some(subtree) => crate::adapter::observed_tree(
+                        &root,
+                        cut(subtree, 0, request.max_logical_depth),
+                    ),
+                    None => crate::adapter::saved_ref_element_tree(root),
+                }
             }
         }
     }
@@ -127,6 +161,16 @@ pub(super) fn window(children: Vec<AccessibilityNode>) -> AccessibilityNode {
     root
 }
 
+/// The subtree whose root carries `token`, as an element read of it returns.
+fn find_token_subtree(node: AccessibilityNode, token: &str) -> Option<AccessibilityNode> {
+    if node.identity.retained_object.as_deref() == Some(token) {
+        return Some(node);
+    }
+    node.children
+        .into_iter()
+        .find_map(|child| find_token_subtree(child, token))
+}
+
 /// The window as a walk limited to `max_logical_depth` returns it: a container
 /// whose children sit below the limit keeps none and carries their count.
 pub(super) fn cut(
@@ -156,6 +200,15 @@ pub(super) fn cut(
 /// skeleton cannot reach below it.
 pub(super) fn anchored_window() -> AccessibilityNode {
     let mut sidebar = node("group", "Sidebar");
+    sidebar.children = vec![group(vec![node("button", "Save")])];
+    window(vec![group(vec![group(vec![sidebar])])])
+}
+
+/// `anchored_window` whose anchor re-identifies itself by an element token, so
+/// the button below it is the one tokenless ref a drill from it must prove.
+pub(super) fn token_anchored_window() -> AccessibilityNode {
+    let mut sidebar = node("group", "Sidebar");
+    sidebar.identity.retained_object = Some(TOKEN.into());
     sidebar.children = vec![group(vec![node("button", "Save")])];
     window(vec![group(vec![group(vec![sidebar])])])
 }

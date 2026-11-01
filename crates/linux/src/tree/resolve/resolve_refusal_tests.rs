@@ -315,8 +315,11 @@ fn a_retained_object_ref_is_found_without_following_its_stored_path() {
     assert_eq!(fake.reads.searches, 1);
 }
 
+/// Identity is the element's role and stable fields, so the replacement is
+/// refused for its different name; a new object at the old rectangle alone is
+/// not.
 #[test]
-fn a_retained_object_ref_refuses_a_replacement_at_the_old_rectangle() {
+fn a_retained_object_ref_refuses_a_differently_named_replacement_at_the_old_rectangle() {
     let mut fake = Fake::new();
     let mut first = window_field(0, 38, 420, 34);
     first.node.properties.name = Field::Present("First".to_owned());

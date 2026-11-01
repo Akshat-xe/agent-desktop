@@ -56,7 +56,7 @@ Free it with `ad_free_string`. On an infrastructure error `*out` stays null
 | `ad_find_exact(adapter, win, query, &handle)`                                          | `ad_free_handle(adapter, &handle)`: zeroes `handle.ptr` so a follow-up call is a no-op |
 
 `ad_resolve_element_exact` allocates nothing: it always fails with
-`AD_RESULT_ERR_AMBIGUOUS_TARGET` and leaves `handle.ptr` null.
+`AD_RESULT_ERR_ACTION_NOT_SUPPORTED` and leaves `handle.ptr` null.
 
 ### Action results
 
@@ -67,7 +67,7 @@ Free it with `ad_free_string`. On an infrastructure error `*out` stays null
 | `ad_notification_action(adapter, &request, &out)`: set `request.identity` from `ad_list_notifications` and choose an explicit non-headless policy; reorder mismatches fail closed | `ad_free_action_result(&out)` |
 
 `ad_execute_ref_action_exact_with_policy` allocates nothing: it always fails with
-`AD_RESULT_ERR_AMBIGUOUS_TARGET` and leaves `out` zeroed.
+`AD_RESULT_ERR_ACTION_NOT_SUPPORTED` and leaves `out` zeroed.
 
 ### Clipboard and image buffers
 

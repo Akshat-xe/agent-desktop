@@ -87,7 +87,7 @@ impl ObservationOps for AmbiguousThenOkAdapter {
         _deadline: crate::Deadline,
     ) -> Result<NativeHandle, AdapterError> {
         self.resolve_calls.fetch_add(1, Ordering::SeqCst);
-        if self.resolve_calls.load(Ordering::SeqCst) == 1 {
+        if self.resolve_calls.load(Ordering::SeqCst) <= 2 {
             return Err(AdapterError::ambiguous_target("2 candidates")
                 .with_details(serde_json::json!({ "retryable": true })));
         }
@@ -151,6 +151,7 @@ fn entry() -> RefEntry {
             source_window_title: Some("Fixture".into()),
             source_window_bounds_hash: None,
             source_surface: crate::snapshot::snapshot_surface::SnapshotSurface::Window,
+            renderer_accessibility_forced: false,
         },
         scope: crate::RefScope {
             root_ref: None,
@@ -177,7 +178,7 @@ fn none_timeout_uses_single_resolve_attempt() {
             context: &CommandContext::default(),
         },
         ActionRequest::headless(Action::Click),
-        crate::ref_action::dispatch_resolved,
+        crate::ref_action::ref_action_single::dispatch_resolved,
     )
     .unwrap_err();
     assert_eq!(adapter.resolve_calls.load(Ordering::SeqCst), 1);
@@ -197,7 +198,7 @@ fn transient_ambiguity_is_recorded_in_result_details() {
             context: &CommandContext::default(),
         },
         request_with_timeout(5_000),
-        crate::ref_action::dispatch_resolved,
+        crate::ref_action::ref_action_single::dispatch_resolved,
     )
     .unwrap();
     assert_eq!(
@@ -276,7 +277,7 @@ fn policy_denied_disabled_target_fails_fast_without_exhausting_wait_budget() {
             context: &CommandContext::default(),
         },
         ActionRequest::headless(Action::RightClick).with_timeout_ms(Some(5_000)),
-        crate::ref_action::dispatch_resolved,
+        crate::ref_action::ref_action_single::dispatch_resolved,
     )
     .unwrap_err();
 
@@ -348,7 +349,7 @@ fn complete_no_candidate_returns_stale_ref_without_exhausting_budget() {
             context: &CommandContext::default(),
         },
         request_with_timeout(300),
-        crate::ref_action::dispatch_resolved,
+        crate::ref_action::ref_action_single::dispatch_resolved,
     )
     .unwrap_err();
 
@@ -357,7 +358,11 @@ fn complete_no_candidate_returns_stale_ref_without_exhausting_budget() {
     let details = err.details.expect("settled details");
     assert_eq!(details["kind"], "resolve_no_candidate");
     assert_eq!(details["complete"], true);
-    assert_eq!(adapter.resolve_calls.load(Ordering::SeqCst), 1);
+    assert_eq!(
+        adapter.resolve_calls.load(Ordering::SeqCst),
+        2,
+        "one provisional landing and one full resolution, then no retry"
+    );
 }
 
 #[path = "ref_action_wait_lease_tests.rs"]
@@ -368,3 +373,6 @@ mod unresponsive_tests;
 
 #[path = "ref_action_wait_stale_tests.rs"]
 mod stale_tests;
+
+#[path = "ref_action_wait_dispatch_tests.rs"]
+mod dispatch_tests;

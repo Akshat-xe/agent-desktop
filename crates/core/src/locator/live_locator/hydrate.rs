@@ -19,6 +19,12 @@ pub(super) fn retryable_error(error: &AdapterError) -> bool {
     )
 }
 
+/// Resolves each selected match to the entry it is published under.
+///
+/// The saved entry keeps the identity the whole-window read recorded and proved
+/// unique, and the landing is checked against it. Fields hydration read beyond
+/// that identity describe the match in the response only: a proof is never
+/// carried onto a predicate wider than the one it was measured for.
 pub(super) fn selected_matches(
     adapter: &dyn PlatformAdapter,
     query: &LocatorQuery,
@@ -74,7 +80,7 @@ pub(super) fn selected_matches(
             return Err(evidence_incomplete(&hydrated, None, query, bounds_space).into());
         }
         let root_index = hydrated.roots[0] as usize;
-        let (mut entry, name, value, root_order, screen_bounds) = {
+        let (entry, name, value, root_order, screen_bounds) = {
             let node = hydrated
                 .nodes
                 .get(root_index)
@@ -88,20 +94,15 @@ pub(super) fn selected_matches(
             {
                 return Err(changed_during_hydration().into());
             }
-            let mut entry = super::materialize::ref_entry(node, &hydrated.source, query);
-            preserve_verified_identity(&preliminary, node, &mut entry);
+            let entry = RefEntry {
+                identity: preliminary.identity.clone(),
+                ..super::materialize::ref_entry(node, &hydrated.source, query)
+            };
             let name = node.evidence.name.meaningful_string().unwrap_or_default();
             let value = node.evidence.value.meaningful_string();
             let screen_bounds = super::materialize::screen_bounds(&node.evidence);
             (entry, name, value, node.document_order, screen_bounds)
         };
-        entry.identity.unique_at_capture = proof.proves_node(&entry, index);
-        if !crate::refs::ref_identity::has_meaningful_identity(&entry)
-            && entry.geometry.bounds_hash.is_none()
-            && !entry.identity.unique_at_capture
-        {
-            return Err(anchor_missing(&entry).into());
-        }
         let validation = super::evaluate_locator_tree(
             hydrated,
             query,
@@ -188,11 +189,11 @@ pub(super) fn geometry_complete(
 
 /// Whether the landed element is the one the anchored entry names.
 ///
-/// An entry the whole-window read proved unique is identified by its full
-/// predicate, so a proof that records no text identity and no geometry anchors
-/// on that predicate rather than on a field it does not have: the land is
-/// confirmed by the same comparison a saved ref resolves under. Every other
-/// entry keeps its identity comparison and its bounds fallback.
+/// An entry the whole-window read proved unique must match the full predicate
+/// it was proven with, the same comparison a saved ref resolves under. A proof
+/// that records no text identity and no geometry anchors on that predicate
+/// alone. Every other entry, and a proven one that also records identity or
+/// geometry, keeps those comparisons too.
 fn anchor_matches(preliminary: &RefEntry, node: &ObservedNode, proven: bool) -> bool {
     let geometry = &node.evidence.ref_evidence;
     let actual_bounds_hash = match preliminary.geometry.bounds_space.unwrap_or_default() {
@@ -202,10 +203,16 @@ fn anchor_matches(preliminary: &RefEntry, node: &ObservedNode, proven: bool) -> 
     .known()
     .and_then(crate::Rect::bounds_hash);
     let has_identity = crate::refs::ref_identity::has_meaningful_identity(preliminary);
-    if proven && !has_identity && preliminary.geometry.bounds_hash.is_none() {
-        return crate::refs::ref_full_predicate::FullPredicate::of_entry(preliminary).compare(
+    if proven {
+        let landed = crate::refs::ref_full_predicate::FullPredicate::of_entry(preliminary).compare(
             &crate::refs::ref_live_predicate::LivePredicate::observed(&node.evidence),
-        ) == IdentityMatch::Match;
+        );
+        if landed != IdentityMatch::Match {
+            return false;
+        }
+        if !has_identity && preliminary.geometry.bounds_hash.is_none() {
+            return true;
+        }
     }
     if has_identity {
         return match crate::refs::ref_identity::identity_match(
@@ -226,29 +233,6 @@ fn anchor_matches(preliminary: &RefEntry, node: &ObservedNode, proven: bool) -> 
     }
     preliminary.geometry.bounds_hash.is_some()
         && preliminary.geometry.bounds_hash == actual_bounds_hash
-}
-
-fn preserve_verified_identity(preliminary: &RefEntry, node: &ObservedNode, entry: &mut RefEntry) {
-    if node.evidence.name.is_unknown() {
-        entry.identity.name.clone_from(&preliminary.identity.name);
-    }
-    if node.evidence.description.is_unknown() {
-        entry
-            .identity
-            .description
-            .clone_from(&preliminary.identity.description);
-    }
-    if node.evidence.value.is_unknown()
-        && !crate::tree::roles::is_mutable_value_role(&entry.identity.role)
-    {
-        entry.identity.value.clone_from(&preliminary.identity.value);
-    }
-    if !node.evidence.identifiers.is_complete() {
-        entry
-            .identity
-            .native_id
-            .clone_from(&preliminary.identity.native_id);
-    }
 }
 
 fn anchor_missing(entry: &RefEntry) -> AdapterError {

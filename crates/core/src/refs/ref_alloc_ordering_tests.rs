@@ -22,6 +22,7 @@ fn allocate_refs_assigns_refs_in_depth_first_order() {
             include_bounds: false,
             interactive_only: false,
             compact: false,
+            force_renderer_accessibility: false,
         },
         source: crate::refs::ref_alloc_source::RefAllocSource {
             pid: crate::ProcessId::new(1),
@@ -103,6 +104,7 @@ fn allocate_refs_keeps_bounds_in_refmap_when_snapshot_includes_bounds() {
             include_bounds: true,
             interactive_only: false,
             compact: false,
+            force_renderer_accessibility: false,
         },
         source: crate::refs::ref_alloc_source::RefAllocSource {
             pid: crate::ProcessId::new(7),
@@ -200,6 +202,7 @@ fn allocation_config(include_bounds: bool) -> RefAllocConfig<'static> {
             include_bounds,
             interactive_only: false,
             compact: false,
+            force_renderer_accessibility: false,
         },
         source: crate::refs::ref_alloc_source::RefAllocSource {
             pid: crate::ProcessId::new(7),

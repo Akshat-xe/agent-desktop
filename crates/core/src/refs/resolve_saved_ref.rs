@@ -46,6 +46,36 @@ pub fn resolve_saved_ref(
     Ok(handle)
 }
 
+/// Lands a tokenless saved ref at its recorded path and confirms the landed
+/// element against the full predicate, skipping the whole-window count.
+///
+/// The count is what proves the ref still unique, so this handle may only feed
+/// a wait that runs a full [`resolve_saved_ref`] under the interaction lease
+/// before acting, or a presentation that never acts, such as placing the cursor
+/// overlay. A landing that fails or does not confirm falls back to the full
+/// resolution, so a moved, missing or twinned element gets the same verdict
+/// either way and only the common case is cheaper.
+pub(crate) fn land_saved_ref(
+    adapter: &dyn PlatformAdapter,
+    entry: &RefEntry,
+    deadline: Deadline,
+) -> Result<NativeHandle, AdapterError> {
+    if element_token(entry).is_none()
+        && entry.identity.unique_at_capture
+        && let Ok(handle) = adapter.resolve_locator_anchor(entry, deadline)
+    {
+        let root = ObservationRoot::Element {
+            handle: &handle,
+            entry,
+            root_ref: None,
+        };
+        if confirm_landed(adapter, entry, root, deadline, None).is_ok() {
+            return Ok(handle);
+        }
+    }
+    resolve_saved_ref(adapter, entry, deadline, None)
+}
+
 /// The window a saved ref is captured from, one complete observation of it, and
 /// the node in that observation it names.
 pub(crate) type SavedRefMatch = (WindowInfo, ObservedTree, usize);
@@ -67,13 +97,12 @@ pub(crate) fn observe_saved_ref(
         return Err(identity_not_unique(entry));
     }
     let window = recorded_window(adapter, entry, deadline)?;
-    let observed = observe_whole_window(
-        adapter,
-        entry.source.source_surface,
-        &window,
-        deadline,
-        lease,
-    )?;
+    let base = TreeOptions {
+        surface: entry.source.source_surface,
+        force_renderer_accessibility: entry.source.renderer_accessibility_forced,
+        ..TreeOptions::default()
+    };
+    let observed = observe_whole_window(adapter, &base, &window, deadline, lease)?;
     let index = saved_ref_node(entry, token, &observed)?;
     let node = observed
         .nodes
@@ -140,7 +169,7 @@ fn confirm_landed(
 /// the process and its generation on that answer. Only an entry that records no
 /// window id falls back to enumerating the process's windows, where the
 /// generation alone still says which one it was.
-fn recorded_window(
+pub(crate) fn recorded_window(
     adapter: &dyn PlatformAdapter,
     entry: &RefEntry,
     deadline: Deadline,
@@ -178,6 +207,10 @@ fn gone() -> AdapterError {
     AdapterError::stale_ref_because("The window the ref was captured from is gone")
 }
 
+/// Whether a live window is the one the entry was captured from. Pid and a
+/// recorded window id must agree. Process generations must agree when both
+/// sides carry one; a window listing that cannot read the generation leaves
+/// the pid and window id to decide, since some macOS window records omit it.
 fn belongs_to_entry(window: &WindowInfo, entry: &RefEntry) -> bool {
     window.pid == entry.process.pid
         && entry
@@ -194,28 +227,39 @@ fn belongs_to_entry(window: &WindowInfo, entry: &RefEntry) -> bool {
 
 /// The one observation a tokenless ref is judged by, in the settings resolution
 /// uses: the whole window at the deepest limit a walk supports, so a capture
-/// proof and a later resolution count the same evidence.
+/// proof and a later resolution count the same evidence. `base` supplies the
+/// surface and the renderer-accessibility hint; its depth and presentation
+/// settings are ignored.
 pub(crate) fn observe_whole_window(
     adapter: &dyn PlatformAdapter,
-    surface: crate::SnapshotSurface,
+    base: &TreeOptions,
     window: &WindowInfo,
     deadline: Deadline,
     lease: Option<&crate::InteractionLease>,
 ) -> Result<ObservedTree, AdapterError> {
     let options = TreeOptions {
         max_depth: WHOLE_WINDOW_DEPTH,
-        surface,
+        surface: base.surface,
+        force_renderer_accessibility: base.force_renderer_accessibility,
         ..TreeOptions::default()
     }
     .with_ref_identity_bounds();
     let request = ObservationRequest::snapshot(&options, deadline).validate()?;
-    crate::tree::renderer_accessibility::observe_tree(
+    let mut observed = crate::tree::renderer_accessibility::observe_tree(
         adapter,
         ObservationRoot::Window(window),
         &request,
         lease,
     )
-    .map_err(adapter_error)
+    .map_err(adapter_error)?;
+    if let crate::locator::live_locator::ObservationSource::Window {
+        renderer_accessibility_forced,
+        ..
+    } = &mut observed.source
+    {
+        *renderer_accessibility_forced = options.force_renderer_accessibility;
+    }
+    Ok(observed)
 }
 
 fn saved_ref_node(
@@ -224,11 +268,15 @@ fn saved_ref_node(
     observed: &ObservedTree,
 ) -> Result<usize, AdapterError> {
     if let Some(token) = token {
-        return observed
+        let found = observed
             .nodes
             .iter()
-            .position(|node| node.evidence.identifiers.retained_object() == Some(token))
-            .ok_or_else(|| absent(entry));
+            .position(|node| node.evidence.identifiers.retained_object() == Some(token));
+        return match found {
+            Some(index) => Ok(index),
+            None if observed.is_exhaustive() => Err(absent(entry)),
+            None => Err(identity_unknown_error(entry)),
+        };
     }
     unique_live_match(entry, observed)
 }
@@ -270,11 +318,7 @@ fn positional_anchor(
         &crate::locator::LocatorQuery::default(),
     );
     anchor.identity = crate::RefEntryIdentity {
-        retained_object: entry
-            .identity
-            .retained_object
-            .clone()
-            .filter(|_| element_token(entry).is_none()),
+        retained_object: entry.identity.retained_object.clone(),
         unique_at_capture: false,
         ..entry.identity.clone()
     };
@@ -284,11 +328,13 @@ fn positional_anchor(
 fn identity_not_unique(entry: &RefEntry) -> AdapterError {
     AdapterError::new(
         ErrorCode::AmbiguousTarget,
-        "Saved ref was not unique when it was captured, so it cannot be re-identified safely",
+        "Saved ref was not proven unique when it was captured, so it cannot be re-identified safely",
     )
     .with_suggestion(
-        "Take a new snapshot. Identical twins can only be picked by an explicit --headed \
-         coordinate click, which takes the foreground.",
+        "Either another element in the window matched it, or the window could not be read \
+         whole within the snapshot timeout. For a large window, retake the snapshot with a \
+         larger --timeout-ms. Identical twins are refused again by every snapshot; where \
+         headed pointer input is available, an explicit --headed coordinate click can pick one.",
     )
     .with_details(json!({
         "kind": "identity_not_unique",
@@ -301,6 +347,11 @@ fn identity_not_unique(entry: &RefEntry) -> AdapterError {
 fn ambiguous_live_match(entry: &RefEntry) -> AdapterError {
     AdapterError::ambiguous_target(
         "Two or more live elements match the saved ref's recorded role and stable identity",
+    )
+    .with_suggestion(
+        "An element identical to the captured one appeared, so neither can be picked by ref and \
+         a new snapshot refuses both as twins. Act on a control that is unique in the window, or, \
+         where headed pointer input is available, use an explicit --headed coordinate click.",
     )
     .with_details(json!({
         "kind": "saved_ref_ambiguous",
@@ -330,3 +381,15 @@ fn adapter_error(error: AppError) -> AdapterError {
 #[cfg(test)]
 #[path = "resolve_saved_ref_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "resolve_saved_ref_window_tests.rs"]
+mod window_tests;
+
+#[cfg(test)]
+#[path = "resolve_saved_ref_context_tests.rs"]
+mod context_tests;
+
+#[cfg(test)]
+#[path = "resolve_saved_ref_test_support.rs"]
+mod test_support;

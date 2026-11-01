@@ -117,7 +117,7 @@ fn entry(states: Vec<String>, value: Option<&str>, actions: Vec<&str>) -> RefEnt
             source_window_id: None,
             source_window_title: None,
             source_window_bounds_hash: None,
-            source_surface: crate::adapter::SnapshotSurface::Window,
+            ..Default::default()
         },
         scope: crate::RefScope {
             root_ref: None,

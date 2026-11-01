@@ -12,6 +12,7 @@ use super::test_support::evidence;
 fn source() -> ObservationSource {
     ObservationSource::Window {
         surface: crate::SnapshotSurface::Window,
+        renderer_accessibility_forced: false,
         window: WindowInfo {
             id: "w-1".into(),
             title: "Fixture".into(),

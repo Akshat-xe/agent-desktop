@@ -290,7 +290,7 @@ fn ref_entry(pid: u32) -> RefEntry {
             source_window_id: Some(format!("w-{pid}")),
             source_window_title: Some(format!("Window {pid}")),
             source_window_bounds_hash: None,
-            source_surface: crate::adapter::SnapshotSurface::Window,
+            ..Default::default()
         },
         scope: crate::RefScope {
             root_ref: None,
