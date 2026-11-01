@@ -1,60 +1,27 @@
 //! Stops command hosts that earlier agent-desktop versions left running.
 
 use std::mem::{MaybeUninit, size_of};
-use std::time::{Duration, Instant};
 
 const HOST_MARKER: &[u8] = b"AGENT_DESKTOP_INTERNAL_COMMAND_HOST=1";
 const PROC_UID_ONLY: u32 = 4;
-const TERMINATION_GRACE: Duration = Duration::from_millis(500);
 
-struct LegacyHost {
-    pid: libc::pid_t,
-    uid: libc::uid_t,
-    started_at: (u64, u64),
-}
-
-/// Stops this user's legacy command hosts, allowing up to 500 ms for graceful termination.
-/// Processes whose ownership or identity cannot be verified are left alone.
+/// Sends SIGTERM to this user's processes whose environment carries the old command host marker.
+/// A process whose owner, start time or environment cannot be read is left alone.
 pub fn stop_legacy_command_hosts() {
     let uid = unsafe { libc::geteuid() };
     let own_pid = std::process::id() as libc::pid_t;
-    let mut hosts: Vec<_> = user_processes(uid)
-        .into_iter()
-        .filter(|pid| *pid > 0 && *pid != own_pid)
-        .filter_map(|pid| {
-            let started_at = process_start_time(pid, uid)?;
-            if !process_arguments(pid).is_some_and(|args| environment_has_marker(&args)) {
-                return None;
-            }
-            Some(LegacyHost {
-                pid,
-                uid,
-                started_at,
-            })
-        })
-        .collect();
-    let deadline = Instant::now() + TERMINATION_GRACE;
-    hosts.retain(|host| host.signal_if_matches(libc::SIGTERM));
-    while !hosts.is_empty() {
-        hosts.retain(LegacyHost::is_running);
-        let remaining = deadline.saturating_duration_since(Instant::now());
-        if hosts.is_empty() || remaining.is_zero() {
-            break;
+    for pid in user_processes(uid) {
+        if pid <= 0 || pid == own_pid {
+            continue;
         }
-        std::thread::sleep(remaining.min(Duration::from_millis(10)));
-    }
-    for host in hosts {
-        host.signal_if_matches(libc::SIGKILL);
-    }
-}
-
-impl LegacyHost {
-    fn is_running(&self) -> bool {
-        process_start_time(self.pid, self.uid) == Some(self.started_at)
-    }
-
-    fn signal_if_matches(&self, signal: libc::c_int) -> bool {
-        self.is_running() && unsafe { libc::kill(self.pid, signal) } == 0
+        let Some(started_at) = process_start_time(pid, uid) else {
+            continue;
+        };
+        if process_arguments(pid).is_some_and(|args| environment_has_marker(&args))
+            && process_start_time(pid, uid) == Some(started_at)
+        {
+            unsafe { libc::kill(pid, libc::SIGTERM) };
+        }
     }
 }
 

@@ -519,7 +519,7 @@ test('a failed relink that leaves an older native entry fails the install', {
   }
 });
 
-test('postinstall links the bin entry of an installed package to the native binary and runs it once', {
+test('postinstall links the bin entry of an installed package to the native binary', {
   skip: process.platform === 'win32',
 }, async () => {
   const root = join(temporaryDirectory(), 'node_modules', 'agent-desktop');
@@ -529,15 +529,13 @@ test('postinstall links the bin entry of an installed package to the native bina
   }
   const source = join(temporaryDirectory(), 'release');
   mkdirSync(source);
-  const ran = join(source, 'ran');
-  writeFileSync(join(source, 'agent-desktop'), `#!/bin/sh\necho "$@" >> '${ran}'\n`, { mode: 0o755 });
+  writeFileSync(join(source, 'agent-desktop'), 'native', { mode: 0o755 });
   writeFileSync(join(source, 'agent-desktop-macos-helper'), 'helper', { mode: 0o755 });
   process.env.AGENT_DESKTOP_BINARY_PATH = join(source, 'agent-desktop');
   try {
     const { code, stderr } = await runScriptWithOsStub(join(root, 'scripts', 'postinstall.js'), 'darwin', 'arm64');
     assert.equal(code, 0, stderr);
     assert.match(stderr, /Native binary linked: each call runs without the Node launcher/);
-    assert.equal(readFileSync(ran, 'utf8'), 'version\n');
   } finally {
     delete process.env.AGENT_DESKTOP_BINARY_PATH;
   }

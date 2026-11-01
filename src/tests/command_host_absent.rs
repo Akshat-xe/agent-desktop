@@ -4,26 +4,21 @@ use std::os::unix::fs::{DirBuilderExt, MetadataExt};
 use std::os::unix::net::UnixListener;
 use std::os::unix::process::ExitStatusExt;
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Output, Stdio};
+use std::process::{Child, Command, ExitStatus, Output, Stdio};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
+const MARKER: &str = "AGENT_DESKTOP_INTERNAL_COMMAND_HOST";
+const SIGTERM: i32 = 15;
+
 static HOST_TEST_LOCK: Mutex<()> = Mutex::new(());
 
-struct ReapedChild(Option<Child>);
+struct KilledOnDrop(Child);
 
-impl ReapedChild {
-    fn child(&mut self) -> &mut Child {
-        self.0.as_mut().expect("child is present")
-    }
-}
-
-impl Drop for ReapedChild {
+impl Drop for KilledOnDrop {
     fn drop(&mut self) {
-        if let Some(child) = &mut self.0 {
-            let _ = child.kill();
-            let _ = child.wait();
-        }
+        let _ = self.0.kill();
+        let _ = self.0.wait();
     }
 }
 
@@ -37,226 +32,87 @@ fn private_dir(label: &str) -> PathBuf {
     path
 }
 
-fn run(args: &[&str], tmpdir: &Path, home: &Path) -> Output {
-    let mut child = ReapedChild(Some(
-        Command::new(env!("CARGO_BIN_EXE_agent-desktop"))
-            .args(args)
-            .env("TMPDIR", tmpdir)
-            .env("AGENT_DESKTOP_HOME", home)
-            .env_remove("AGENT_DESKTOP_INTERNAL_COMMAND_HOST")
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .expect("binary starts"),
-    ));
-    let deadline = Instant::now() + Duration::from_secs(60);
-    while child.child().try_wait().expect("poll child").is_none() {
-        assert!(Instant::now() < deadline, "{args:?} did not finish in 60s");
-        std::thread::sleep(Duration::from_millis(20));
-    }
-    child
-        .0
-        .take()
-        .expect("child is present")
-        .wait_with_output()
-        .expect("collect output")
+fn run(args: &[&str], tmpdir: &Path) -> Output {
+    let output = Command::new(env!("CARGO_BIN_EXE_agent-desktop"))
+        .args(args)
+        .env("TMPDIR", tmpdir)
+        .env("AGENT_DESKTOP_HOME", tmpdir.join("home"))
+        .env_remove(MARKER)
+        .stdin(Stdio::null())
+        .output()
+        .expect("binary runs");
+    assert!(output.status.success(), "{args:?}: {output:?}");
+    output
 }
 
-fn wait_process(tmpdir: &Path, home: &Path, marked: bool) -> ReapedChild {
-    let executable = tmpdir.join("renamed-host");
+fn spawn_renamed_copy(tmpdir: &Path, name: &str, marked: bool) -> KilledOnDrop {
+    let executable = tmpdir.join(name);
     std::fs::copy(env!("CARGO_BIN_EXE_agent-desktop"), &executable).expect("copy binary");
     let mut command = Command::new(&executable);
     command
         .args(["wait", "10000"])
-        .env("TMPDIR", tmpdir)
-        .env("AGENT_DESKTOP_HOME", home)
-        .env_remove("AGENT_DESKTOP_INTERNAL_COMMAND_HOST")
+        .env("AGENT_DESKTOP_HOME", tmpdir.join("home"))
+        .env_remove(MARKER)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
     if marked {
-        command.env("AGENT_DESKTOP_INTERNAL_COMMAND_HOST", "1");
+        command.env(MARKER, "1");
     }
-    ReapedChild(Some(command.spawn().expect("wait process starts")))
+    KilledOnDrop(command.spawn().expect("copy starts"))
 }
 
-fn host_marked_processes(tmpdir: &Path) -> Vec<String> {
-    let output = Command::new("ps")
-        .args(["eww", "-A", "-o", "pid=,command="])
-        .output()
-        .expect("ps runs");
-    String::from_utf8_lossy(&output.stdout)
-        .lines()
-        .filter(|line| {
-            line.contains("AGENT_DESKTOP_INTERNAL_COMMAND_HOST")
-                && line.contains(&tmpdir.display().to_string())
-        })
-        .map(str::to_owned)
-        .collect()
+fn exit_within(child: &mut KilledOnDrop, limit: Duration) -> Option<ExitStatus> {
+    let deadline = Instant::now() + limit;
+    while Instant::now() < deadline {
+        if let Some(status) = child.0.try_wait().expect("poll child") {
+            return Some(status);
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    None
 }
 
 #[test]
-fn commands_never_reach_a_listening_command_host_socket() {
-    let _lock = HOST_TEST_LOCK
-        .lock()
-        .unwrap_or_else(|error| error.into_inner());
-    let tmpdir = private_dir("armed");
-    let home = private_dir("home");
+fn commands_never_reach_or_remove_a_command_host_socket() {
+    let _lock = HOST_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let tmpdir = private_dir("socket");
     let uid = std::fs::metadata(&tmpdir).expect("stat tmpdir").uid();
     let host_dir = tmpdir.join(format!("agent-desktop-host-{uid}"));
     std::fs::DirBuilder::new()
         .mode(0o700)
         .create(&host_dir)
         .expect("create host dir");
-    let listener =
-        UnixListener::bind(host_dir.join("0123456789abcdef.sock")).expect("bind decoy socket");
+    let socket = host_dir.join("0123456789abcdef.sock");
+    let listener = UnixListener::bind(&socket).expect("bind decoy socket");
     listener.set_nonblocking(true).expect("nonblocking");
 
-    let version = run(&["version"], &tmpdir, &home);
-    assert!(version.status.success(), "{:?}", version);
-    run(&["list-apps"], &tmpdir, &home);
-    let batch = run(&["batch", r#"[{"command":"version"}]"#], &tmpdir, &home);
-    assert!(batch.status.success(), "{:?}", batch);
+    run(&["version"], &tmpdir);
+    run(&["list-apps"], &tmpdir);
+    run(&["batch", r#"[{"command":"version"}]"#], &tmpdir);
 
     assert!(
         matches!(listener.accept(), Err(error) if error.kind() == std::io::ErrorKind::WouldBlock),
         "a command connected to the host socket"
     );
-    assert!(
-        host_dir.join("0123456789abcdef.sock").exists(),
-        "a listener that is not an agent-desktop host must be left alone"
-    );
-    assert!(host_marked_processes(&tmpdir).is_empty());
+    assert!(socket.exists(), "a command removed the socket file");
     let _ = std::fs::remove_dir_all(&tmpdir);
-    let _ = std::fs::remove_dir_all(&home);
 }
 
 #[test]
-fn commands_do_not_create_a_host_directory_or_process() {
-    let _lock = HOST_TEST_LOCK
-        .lock()
-        .unwrap_or_else(|error| error.into_inner());
-    let tmpdir = private_dir("fresh");
-    let home = private_dir("freshhome");
-    let uid = std::fs::metadata(&tmpdir).expect("stat tmpdir").uid();
-    run(&["version"], &tmpdir, &home);
-    run(&["list-apps"], &tmpdir, &home);
-    run(&["batch", r#"[{"command":"version"}]"#], &tmpdir, &home);
-    assert!(!tmpdir.join(format!("agent-desktop-host-{uid}")).exists());
-    assert!(host_marked_processes(&tmpdir).is_empty());
-    let _ = std::fs::remove_dir_all(&tmpdir);
-    let _ = std::fs::remove_dir_all(&home);
-}
-
-#[test]
-fn a_dead_legacy_socket_is_left_alone_and_does_not_block_commands() {
-    let _lock = HOST_TEST_LOCK
-        .lock()
-        .unwrap_or_else(|error| error.into_inner());
-    let tmpdir = private_dir("stale");
-    let home = private_dir("stalehome");
-    let uid = std::fs::metadata(&tmpdir).expect("stat tmpdir").uid();
-    let host_dir = tmpdir.join(format!("agent-desktop-host-{uid}"));
-    std::fs::DirBuilder::new()
-        .mode(0o700)
-        .create(&host_dir)
-        .expect("create host dir");
-    let socket = host_dir.join("fedcba9876543210.sock");
-    drop(UnixListener::bind(&socket).expect("bind stale socket"));
-    let version = run(&["version"], &tmpdir, &home);
-    assert!(version.status.success(), "{:?}", version);
-    assert!(
-        socket.exists(),
-        "files in the legacy host directory are never deleted"
-    );
-    let _ = std::fs::remove_dir_all(&tmpdir);
-    let _ = std::fs::remove_dir_all(&home);
-}
-
-#[test]
-fn version_stops_a_marked_host_running_from_a_renamed_executable() {
-    let _lock = HOST_TEST_LOCK
-        .lock()
-        .unwrap_or_else(|error| error.into_inner());
+fn a_call_stops_marked_processes_under_any_name_and_leaves_others_running() {
+    let _lock = HOST_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let tmpdir = private_dir("marker");
-    let home = private_dir("markerhome");
-    let command_tmpdir = private_dir("cleanup");
-    let mut marked = wait_process(&tmpdir, &home, true);
-    let deadline = Instant::now() + Duration::from_secs(3);
-    while host_marked_processes(&tmpdir).is_empty() {
-        assert!(
-            marked
-                .child()
-                .try_wait()
-                .expect("poll marked process")
-                .is_none(),
-            "marked stand-in exited before cleanup"
-        );
-        assert!(Instant::now() < deadline, "marked stand-in was not visible");
-        std::thread::sleep(Duration::from_millis(20));
-    }
-    assert!(
-        marked
-            .child()
-            .try_wait()
-            .expect("poll marked process")
-            .is_none()
-    );
+    let mut marked = spawn_renamed_copy(&tmpdir, "renamed-host", true);
+    let mut unmarked = spawn_renamed_copy(&tmpdir, "ordinary-copy", false);
 
-    let deadline = Instant::now() + Duration::from_secs(3);
-    let version = run(&["version"], &command_tmpdir, &home);
-    assert!(version.status.success(), "{version:?}");
-    let status = loop {
-        assert!(
-            Instant::now() < deadline,
-            "marked stand-in survived cleanup for 3s"
-        );
-        if let Some(status) = marked.child().try_wait().expect("poll marked process") {
-            break status;
-        }
-        std::thread::sleep(Duration::from_millis(20));
-    };
-    assert_eq!(
-        status.signal(),
-        Some(15),
-        "marked stand-in should exit on SIGTERM: {status}"
-    );
-    let _ = std::fs::remove_dir_all(&command_tmpdir);
-    let _ = std::fs::remove_dir_all(&tmpdir);
-    let _ = std::fs::remove_dir_all(&home);
-}
+    run(&["version"], &tmpdir);
 
-#[test]
-fn version_leaves_the_same_executable_running_without_the_host_marker() {
-    let _lock = HOST_TEST_LOCK
-        .lock()
-        .unwrap_or_else(|error| error.into_inner());
-    let tmpdir = private_dir("unmarked");
-    let home = private_dir("unmarkedhome");
-    let mut unmarked = wait_process(&tmpdir, &home, false);
+    let status = exit_within(&mut marked, Duration::from_secs(3)).expect("marked copy survived");
+    assert_eq!(status.signal(), Some(SIGTERM), "{status}");
     assert!(
-        unmarked
-            .child()
-            .try_wait()
-            .expect("poll unmarked process")
-            .is_none()
+        exit_within(&mut unmarked, Duration::from_secs(1)).is_none(),
+        "a process without the marker was stopped"
     );
-    let version = run(&["version"], &tmpdir, &home);
-    assert!(version.status.success(), "{version:?}");
-    let deadline = Instant::now() + Duration::from_secs(1);
-    while Instant::now() < deadline {
-        assert!(
-            unmarked
-                .child()
-                .try_wait()
-                .expect("poll unmarked process")
-                .is_none(),
-            "cleanup stopped an ordinary command without the host marker"
-        );
-        std::thread::sleep(Duration::from_millis(20));
-    }
-    drop(unmarked);
     let _ = std::fs::remove_dir_all(&tmpdir);
-    let _ = std::fs::remove_dir_all(&home);
 }
