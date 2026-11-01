@@ -233,8 +233,18 @@ fn bounds_anchor_match(preliminary: &RefEntry, node: &ObservedNode) -> IdentityM
 }
 
 /// Keeps the basis the survey proved, or records the unproven basis instead when
-/// hydration discovers identity the survey never read.
+/// hydration discovers identity the survey never read. The identifier that basis proved
+/// stays on the entry: another identifier of the same element was never counted, so
+/// recording it would transfer the proof to evidence that singles out no one.
 fn preserve_verified_identity(preliminary: &RefEntry, node: &ObservedNode, entry: &mut RefEntry) {
+    let proven_basis = matches!(
+        preliminary.identity.basis,
+        Some(
+            crate::IdentityBasis::NativeId
+                | crate::IdentityBasis::Name
+                | crate::IdentityBasis::Description
+        )
+    );
     entry.identity.basis = match preliminary.identity.basis {
         Some(crate::IdentityBasis::Positional) => Some(
             crate::refs::identity_basis_counts::unproven_basis(&entry.identity),
@@ -255,7 +265,7 @@ fn preserve_verified_identity(preliminary: &RefEntry, node: &ObservedNode, entry
     {
         entry.identity.value.clone_from(&preliminary.identity.value);
     }
-    if !node.evidence.identifiers.is_complete() {
+    if !node.evidence.identifiers.is_complete() || proven_basis {
         entry
             .identity
             .native_id
