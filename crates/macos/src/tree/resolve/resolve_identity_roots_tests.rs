@@ -44,6 +44,28 @@ fn a_focused_ref_without_a_recorded_window_is_refused_instead_of_following_focus
 }
 
 #[test]
+fn a_focused_positional_ref_uses_the_same_recorded_window_scope() {
+    let mut captured = focused_entry(Some("w-10"), Some("Editor"));
+    captured.identity.basis = Some(agent_desktop_core::IdentityBasis::Positional);
+    assert_eq!(
+        identity_root_scope(&captured),
+        IdentityRootScope::RecordedWindow
+    );
+
+    captured.source.source_window_id = None;
+    captured.source.source_window_title = None;
+    let mut context = ResolveReadContext::new(Instant::now() + Duration::from_secs(1));
+    let error = candidate_roots(&captured, &mut context)
+        .err()
+        .expect("positional refs must not follow the live focused surface either");
+    assert_eq!(error.code, ErrorCode::ElementNotFound);
+    assert_eq!(
+        error.message,
+        AdapterError::element_not_found("saved source window").message
+    );
+}
+
+#[test]
 fn a_window_scoped_ref_keeps_the_existing_root_logic() {
     let mut window = crate::tree::resolve::tests::entry(Some(42), Some("w-42"), None, None);
     window.identity.basis = Some(agent_desktop_core::IdentityBasis::Name);

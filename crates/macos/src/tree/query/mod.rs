@@ -194,8 +194,8 @@ fn resolve_window_surface(
             let owner_number = crate::system::window::window_ax_state::focused_owner_window_number(
                 &element, deadline,
             )?;
-            admit_focused_owner(&window.id, owner_number)?;
-            element
+            let capture_surface = admit_focused_owner(&window.id, owner_number)?;
+            resolve_window_surface(window, capture_surface, deadline)?
         }
         SnapshotSurface::Menu => crate::tree::surfaces::menu_element_for_pid(pid, deadline)?
             .ok_or_else(|| AdapterError::element_not_found("No open context menu"))?,
@@ -207,20 +207,23 @@ fn resolve_window_surface(
     Ok(element)
 }
 
-/// The decision a focused-surface snapshot makes: the surface the application focused may carry
-/// this snapshot's refs only when the recorded window owns it.
+/// A focused capture walks the recorded window only after its ownership is proven.
 fn admit_focused_owner(
     recorded_id: &str,
     owner_window_number: Option<i64>,
-) -> Result<(), AdapterError> {
+) -> Result<SnapshotSurface, AdapterError> {
     if crate::system::window::window_ax_state::observes_recorded_window(
         recorded_id,
         owner_window_number,
     ) {
-        return Ok(());
+        return Ok(SnapshotSurface::Window);
     }
     Err(crate::system::window::window_resolve::window_identity_mismatch(recorded_id))
 }
+
+#[cfg(test)]
+#[path = "mod_tests.rs"]
+mod focused_capture_tests;
 
 #[cfg(test)]
 mod tests {

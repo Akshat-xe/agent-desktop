@@ -18,6 +18,9 @@ pub(in crate::tree) fn candidate_roots(
 ) -> Result<CandidateRoots, AdapterError> {
     let deadline = context.deadline;
     crate::tree::locator_deadline::remaining(deadline)?;
+    if entry.source.source_surface == SnapshotSurface::Focused {
+        return super::resolve_identity_roots::identity_scope_roots(entry, context);
+    }
     let pid = crate::system::process::process_identity::to_pid_t(entry.process.pid)?;
     let application = element_for_pid(pid);
     if entry.source.source_surface != SnapshotSurface::Window {
