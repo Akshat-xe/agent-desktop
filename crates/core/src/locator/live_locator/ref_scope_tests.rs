@@ -335,3 +335,49 @@ fn hydration_refuses_a_landing_with_another_retained_token() {
     adapter.hydrated = adapter.surveyed.clone();
     assert!(resolve_in_root(&adapter, &entry, &root, &handle, deadline).is_ok());
 }
+
+struct AnchorRecorder {
+    seen: std::sync::Mutex<Option<crate::RefEntryIdentity>>,
+}
+
+impl crate::ObservationOps for AnchorRecorder {
+    fn resolve_locator_anchor(
+        &self,
+        entry: &RefEntry,
+        _deadline: Deadline,
+    ) -> Result<NativeHandle, AdapterError> {
+        *self.seen.lock().unwrap() = Some(entry.identity.clone());
+        Ok(NativeHandle::new(entry.scope.path.to_vec()))
+    }
+
+    fn observe_tree(
+        &self,
+        root: ObservationRoot<'_>,
+        _request: &ObservationRequest,
+    ) -> Result<ObservedTree, AdapterError> {
+        let mut raw = crate::adapter::minimal_accessibility_node("textfield", "draft");
+        raw.identity.value = Some("draft".into());
+        raw.identity.description = Some("Address".into());
+        crate::adapter::observed_tree(&root, raw)
+    }
+}
+
+impl crate::ActionOps for AnchorRecorder {}
+impl crate::InputOps for AnchorRecorder {}
+impl crate::SystemOps for AnchorRecorder {}
+
+#[test]
+fn a_value_mirroring_name_is_not_sent_to_the_platform_as_stable_identity() {
+    let mut entry = crate::adapter::minimal_ref_entry("textfield", Some("draft"));
+    entry.identity.value = Some("draft".into());
+    entry.identity.description = Some("Address".into());
+    entry.identity.basis = Some(IdentityBasis::Description);
+    let adapter = AnchorRecorder {
+        seen: Default::default(),
+    };
+    resolve_anchor(&adapter, &entry, Deadline::standard().unwrap()).unwrap();
+    let seen = adapter.seen.lock().unwrap().clone().unwrap();
+    assert_eq!(seen.name, None);
+    assert_eq!(seen.value, None);
+    assert_eq!(seen.description.as_deref(), Some("Address"));
+}

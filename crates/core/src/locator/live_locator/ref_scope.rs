@@ -174,7 +174,17 @@ fn resolve_anchor(
     if requires_live_uniqueness(&entry.identity) {
         anchor.geometry.bounds = None;
         anchor.geometry.bounds_hash = None;
-        anchor.identity.value = None;
+        let identity = &mut anchor.identity;
+        if crate::refs::ref_identity::stable_name(
+            &identity.role,
+            identity.name.as_deref(),
+            identity.value.as_deref(),
+        )
+        .is_none()
+        {
+            identity.name = None;
+        }
+        identity.value = None;
     }
     let handle = adapter.resolve_locator_anchor(&anchor, deadline)?;
     let options = crate::TreeOptions {
