@@ -4,7 +4,8 @@
 
 ### ⚠ BREAKING CHANGES
 
-* The C ABI major version is now 7. `ad_resolve_element_exact` and `ad_execute_ref_action_exact_with_policy` always refuse with `AMBIGUOUS_TARGET`: a C caller cannot supply the capture proof a ref now resolves by, so act through a snapshot ref instead.
+* The C ABI major version is now 7. `ad_resolve_element_exact` and `ad_execute_ref_action_exact_with_policy` always refuse with `ACTION_NOT_SUPPORTED` (`details.kind: exact_entry_unsupported`): a C caller cannot supply the capture proof a ref now resolves by, so act through a snapshot ref instead.
+* The response envelope moves to 2.6. On Windows and Linux, a ref to one of several identical controls, a ref from a window the snapshot could not read whole, and a ref from an earlier snapshot now return `AMBIGUOUS_TARGET` with `details.kind: identity_not_unique` where some used to act. See the version 2.6 migration in `docs/json-output.md`.
 
 ### Bug Fixes
 

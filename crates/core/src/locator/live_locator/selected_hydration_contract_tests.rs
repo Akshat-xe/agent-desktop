@@ -153,14 +153,19 @@ fn a_hydrated_entry_keeps_the_capture_proof_and_its_ref_resolves() {
         "hydration must keep the proof the whole-window read gave the match"
     );
 
-    let handle = crate::refs::resolve_saved_ref::resolve_saved_ref(
+    let anchored = adapter.strict_resolutions.load(Ordering::SeqCst);
+    crate::refs::resolve_saved_ref::resolve_saved_ref(
         &adapter,
         &entry,
         crate::Deadline::standard().unwrap(),
         None,
     )
     .expect("the published ref re-identifies the element it was proven from");
-    assert!(handle.downcast_ref::<()>().is_none());
+    assert_eq!(
+        adapter.strict_resolutions.load(Ordering::SeqCst),
+        anchored + 1,
+        "the ref lands through one positional anchor"
+    );
 }
 
 #[test]

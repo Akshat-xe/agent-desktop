@@ -92,9 +92,11 @@ Observation and semantic actions need no helper tool.
   a role and carry no other field, refuse with `AMBIGUOUS_TARGET`,
   `details.kind: identity_not_unique`, before anything reaches the app, and an
   element that is gone is `STALE_REF`, `saved_ref_absent`. Take a
-  fresh snapshot after a list changes, and use `--headed mouse-click --xy` when
-  you must pick one of two identical controls. A ref belongs to the window it
-  was taken in, so two windows with the same title each resolve their own refs.
+  fresh snapshot after a list changes. To pick one of two identical controls on
+  X11, use `--headed mouse-click --xy`; a Wayland session refuses headed pointer
+  input, so there the twin has neither a ref nor a pointer path. A ref belongs
+  to the window it was taken in, so two windows with the same title each
+  resolve their own refs.
 - **Chromium and Qt apps need a launch flag or variable** to appear on the bus;
   Electron apps need none, only `--no-sandbox` where `chrome-sandbox` is not
   setuid. See `references/troubleshooting.md`.
@@ -211,7 +213,7 @@ cursor; on Wayland none is drawn.
   display server. Focusing a window on another workspace can switch the user's
   current desktop.
 - The exact FFI ref calls (`ad_resolve_element_exact` and
-  `ad_execute_ref_action_exact_with_policy`) fail with `AMBIGUOUS_TARGET` on every
+  `ad_execute_ref_action_exact_with_policy`) fail with `ACTION_NOT_SUPPORTED` on every
   platform; their bounds rule applies first: bounds must be window-relative.
 - A ref re-identifies a unique element, not a widget instance. A toolkit that
   destroys and recreates its rows (GTK4, Qt6) resolves a ref with a unique name

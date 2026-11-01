@@ -47,7 +47,11 @@ fn expand_complete_no_candidate_fails_immediately_with_stale_ref() {
     .unwrap_err();
 
     assert_eq!(error.code, ErrorCode::StaleRef);
-    assert_eq!(adapter.resolve_calls.load(Ordering::SeqCst), 1);
+    assert_eq!(
+        adapter.resolve_calls.load(Ordering::SeqCst),
+        2,
+        "one provisional landing and one full resolution, then no retry"
+    );
     assert!(started.elapsed() < std::time::Duration::from_millis(500));
 }
 

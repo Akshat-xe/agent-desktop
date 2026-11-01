@@ -89,8 +89,10 @@ fn remote_panel() -> Fake {
     fake
 }
 
+/// Identity is the element's role and stable fields, so the changed name is
+/// what refuses the replacement; another owner at the same path alone does not.
 #[test]
-fn a_retained_ref_refuses_the_same_path_and_rectangle_on_another_owner() {
+fn a_retained_ref_refuses_a_differently_named_replacement_on_another_owner() {
     let mut fake = Fake::new();
     fake.add(
         FRAME_PATH,

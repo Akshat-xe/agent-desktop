@@ -67,7 +67,7 @@ impl ObservationOps for DispatchGuardAdapter {
             return Err(AdapterError::timeout("strict resolution was uncertain")
                 .with_disposition(crate::DeliverySemantics::uncertain()));
         }
-        if self.mode == "ambiguous" && call == 1 {
+        if self.mode == "ambiguous" && call <= 2 {
             return Err(AdapterError::ambiguous_target("two live candidates")
                 .with_details(serde_json::json!({ "retryable": true })));
         }

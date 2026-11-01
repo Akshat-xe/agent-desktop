@@ -10,8 +10,8 @@ use crate::{
     tree::accname::non_blank,
 };
 
-const ROLE: u8 = 0b1000;
-const MASKS: usize = 8;
+const ROLE: u8 = DESCRIPTION << 1;
+const MASKS: usize = (NATIVE_ID | NAME | DESCRIPTION) as usize + 1;
 
 /// One whole-window observation, counted once into the field subsets its
 /// entries record, so every tokenless entry published from it is proven by the
@@ -183,3 +183,7 @@ struct LiveKey<'a> {
     description: Option<&'a str>,
     native_id: Option<&'a ElementIdentifier>,
 }
+
+#[cfg(test)]
+#[path = "ref_capture_proof_tests.rs"]
+mod tests;

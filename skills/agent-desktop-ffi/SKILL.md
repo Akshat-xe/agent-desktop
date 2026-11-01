@@ -88,7 +88,7 @@ are not exposed over the ABI. A bare `@eN` ref returns
   including `TypeText`, defaults to `headless`. Pass `AD_POLICY_KIND_FOCUS_FALLBACK`
   (1) to allow focus without cursor movement, or `AD_POLICY_KIND_HEADED` (2) to allow
   physical cursor and keyboard delivery. `ad_execute_ref_action_exact_with_policy`
-  always fails with `AD_RESULT_ERR_AMBIGUOUS_TARGET`: an exact entry has no
+  always fails with `AD_RESULT_ERR_ACTION_NOT_SUPPORTED`: an exact entry has no
   retained element token and no capture proof, so it cannot be re-identified.
   Use `ad_execute_by_ref` instead.
 
@@ -107,7 +107,7 @@ are not exposed over the ABI. A bare `@eN` ref returns
   recorded role, native id, name and description, and returns `AD_RESULT_ERR_STALE_REF`
   instead of a handle when a different control occupies the anchored path.
   `ad_resolve_element_exact` takes an exact ref entry and always fails with
-  `AD_RESULT_ERR_AMBIGUOUS_TARGET` for the same reason as the exact action call.
+  `AD_RESULT_ERR_ACTION_NOT_SUPPORTED` for the same reason as the exact action call.
   `ad_execute_action` (headless, no preflight) and
   `ad_execute_action_with_policy` act on a handle directly, bypassing the ref-action
   pipeline. Release every handle with `ad_free_handle(adapter, &handle)` on the

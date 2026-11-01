@@ -35,9 +35,10 @@ impl WindowCapture {
 /// A shallow walk never sees the nodes below its depth, so the census that
 /// proves a ref unique cannot run over it, and every ref it allocates is
 /// refused at resolution. A ref carrying an element token re-identifies itself,
-/// so a capture made of those keeps its single shallow walk. A window that
-/// cannot be observed completely keeps that shallow tree and proves nothing,
-/// rather than counting a narrower window.
+/// so a capture made of those keeps its single shallow walk. A whole-window
+/// read that fails or comes back incomplete keeps that shallow tree and proves
+/// nothing, rather than counting a narrower window or failing a capture whose
+/// shallow walk already succeeded.
 pub(crate) fn capture_window(
     adapter: &dyn PlatformAdapter,
     opts: &TreeOptions,
@@ -54,21 +55,16 @@ pub(crate) fn capture_window(
         });
     }
     match crate::refs::resolve_saved_ref::observe_whole_window(
-        adapter,
-        opts.surface,
-        window,
-        deadline,
-        None,
+        adapter, opts, window, deadline, None,
     ) {
-        Ok(whole) => Ok(WindowCapture {
+        Ok(whole) if whole.is_exhaustive() => Ok(WindowCapture {
             observed: whole,
             presentation_depth: Some(depth),
         }),
-        Err(error) if error.code == crate::ErrorCode::Timeout => Ok(WindowCapture {
+        _ => Ok(WindowCapture {
             observed,
             presentation_depth: None,
         }),
-        Err(error) => Err(AppError::Adapter(error)),
     }
 }
 
@@ -95,9 +91,11 @@ fn observe_window(
 /// re-observed. A presentation whose selected entries all carry a token resolves
 /// through the tokens and keeps its single shallow walk.
 fn needs_whole_window(observed: &ObservedTree) -> bool {
-    let cut = !observed.is_exhaustive();
+    if observed.is_exhaustive() {
+        return false;
+    }
     let mut presented = observed.clone();
-    cut && presented
+    presented
         .project_partial()
         .is_ok_and(|(presented, _, _)| crate::refs::ref_alloc::selects_tokenless_entry(&presented))
 }

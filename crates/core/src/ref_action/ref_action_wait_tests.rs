@@ -87,7 +87,7 @@ impl ObservationOps for AmbiguousThenOkAdapter {
         _deadline: crate::Deadline,
     ) -> Result<NativeHandle, AdapterError> {
         self.resolve_calls.fetch_add(1, Ordering::SeqCst);
-        if self.resolve_calls.load(Ordering::SeqCst) == 1 {
+        if self.resolve_calls.load(Ordering::SeqCst) <= 2 {
             return Err(AdapterError::ambiguous_target("2 candidates")
                 .with_details(serde_json::json!({ "retryable": true })));
         }
@@ -357,7 +357,11 @@ fn complete_no_candidate_returns_stale_ref_without_exhausting_budget() {
     let details = err.details.expect("settled details");
     assert_eq!(details["kind"], "resolve_no_candidate");
     assert_eq!(details["complete"], true);
-    assert_eq!(adapter.resolve_calls.load(Ordering::SeqCst), 1);
+    assert_eq!(
+        adapter.resolve_calls.load(Ordering::SeqCst),
+        2,
+        "one provisional landing and one full resolution, then no retry"
+    );
 }
 
 #[path = "ref_action_wait_lease_tests.rs"]

@@ -35,7 +35,7 @@ Every pointer the library hands you was allocated by Rust, so C's `free()` canno
 - `ad_free_handle` zeroes the handle, so a second call on the same struct is a no-op. Free handles before you destroy the adapter that produced them.
 - Strings inside a struct belong to the struct's owner. Do not free them one by one.
 - Every fallible function zeroes its out-parameter before validating anything, so calling the paired free function after a failure is safe.
-- `ad_resolve_element_exact` and `ad_execute_ref_action_exact_with_policy` allocate nothing. They fail with `AD_RESULT_ERR_AMBIGUOUS_TARGET` and leave their out-parameter null or zeroed.
+- `ad_resolve_element_exact` and `ad_execute_ref_action_exact_with_policy` allocate nothing. They fail with `AD_RESULT_ERR_ACTION_NOT_SUPPORTED` and leave their out-parameter null or zeroed.
 
 ## Threading
 

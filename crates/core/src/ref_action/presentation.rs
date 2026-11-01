@@ -81,11 +81,10 @@ fn target_center(
     .flatten()
     .and_then(center_of);
     stored.or_else(|| {
-        let handle = crate::refs::resolve_saved_ref::resolve_saved_ref(
+        let handle = crate::refs::resolve_saved_ref::land_saved_ref(
             context.adapter,
             context.entry,
             deadline,
-            None,
         )
         .ok()?;
         let bounds = context

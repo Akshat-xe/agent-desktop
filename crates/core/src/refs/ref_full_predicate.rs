@@ -87,11 +87,15 @@ impl<'a> FullPredicate<'a> {
     }
 
     fn recorded(mut self) -> Self {
-        self.mask = u8::from(self.native_id.is_some())
-            | (u8::from(self.name.is_some()) << 1)
-            | (u8::from(self.description.is_some()) << 2);
+        self.mask = bit(self.native_id.is_some(), NATIVE_ID)
+            | bit(self.name.is_some(), NAME)
+            | bit(self.description.is_some(), DESCRIPTION);
         self
     }
+}
+
+fn bit(recorded: bool, field: u8) -> u8 {
+    if recorded { field } else { 0 }
 }
 
 fn field_match(expected: Option<&str>, actual: &LocatorField<&str>) -> IdentityMatch {

@@ -1104,13 +1104,11 @@ AdResult ad_execute_action_with_policy(const struct AdAdapter *adapter,
                                        struct AdActionResult *out);
 
 /**
- * Executes a struct-based ref action with exact process-generation and typed
- * native-id evidence.
- *
- * An exact entry carries no retained element token and no capture proof, so
- * its saved ref cannot be re-identified safely: the action fails with
- * `AMBIGUOUS_TARGET` (`identity_not_unique`) and callers act through a
- * snapshot ref instead.
+ * Validates a struct-based ref action and refuses it without acting. An exact
+ * entry carries no retained element token and no capture proof, so a
+ * well-formed call fails with `ACTION_NOT_SUPPORTED`
+ * (`exact_entry_unsupported`) and a malformed one with `INVALID_ARGS`;
+ * callers act through a snapshot ref with `ad_execute_by_ref` instead.
  *
  * # Safety
  *
@@ -1148,9 +1146,11 @@ AdResult ad_execute_ref_action_exact_with_policy(const struct AdAdapter *adapter
 AdResult ad_free_handle(const struct AdAdapter *adapter, struct AdNativeHandle *handle);
 
 /**
- * Resolves an exact entry, which carries no retained element token and no
- * capture proof: it fails with `AMBIGUOUS_TARGET` (`identity_not_unique`), so
- * callers act through a snapshot ref instead.
+ * Validates an exact entry and refuses it. An exact entry carries no retained
+ * element token and no capture proof, so a well-formed one fails with
+ * `ACTION_NOT_SUPPORTED` (`exact_entry_unsupported`) and a malformed one with
+ * `INVALID_ARGS`; callers act through a snapshot ref with `ad_execute_by_ref`
+ * or locate the element with `ad_find_exact` instead.
  *
  * # Safety
  *
@@ -1373,7 +1373,7 @@ AdResult ad_execute_by_ref_timeout(const struct AdAdapter *adapter,
  * interactive elements, persists the refmap to disk, and writes the JSON envelope into `*out`.
  *
  * The JSON shape matches `agent-desktop snapshot`:
- * `{"version":"2.5","ok":true,"command":"snapshot","data":{"app":"...","window":{...},"ref_count":N,"snapshot_id":"...","complete":true,"tree":{...}}}`.
+ * `{"version":"2.6","ok":true,"command":"snapshot","data":{"app":"...","window":{...},"ref_count":N,"snapshot_id":"...","complete":true,"tree":{...}}}`.
  *
  * `data.complete` is always present. A snapshot that exhausts its observation
  * budget still succeeds with `"complete":false` and the tree it did observe,

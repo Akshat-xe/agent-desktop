@@ -9,6 +9,25 @@ use agent_desktop_core::{
 const MAX_REF_FIELD_BYTES: usize = 65_536;
 const MAX_REF_TOKEN_BYTES: usize = 256;
 
+/// The refusal every well-formed exact entry gets. An exact entry carries no
+/// retained element token and no capture proof, so the library cannot tell
+/// whether the element it describes is the one a caller means.
+pub(crate) fn exact_entry_unsupported() -> AdapterError {
+    AdapterError::new(
+        ErrorCode::ActionNotSupported,
+        "An exact entry carries no capture proof, so the element it describes cannot be re-identified",
+    )
+    .with_suggestion(
+        "Snapshot the window and act through the ref with ad_execute_by_ref, or locate the \
+         element with ad_find_exact.",
+    )
+    .with_details(serde_json::json!({
+        "kind": "exact_entry_unsupported",
+        "retryable": false,
+    }))
+    .with_disposition(agent_desktop_core::DeliverySemantics::not_delivered())
+}
+
 pub(crate) unsafe fn core_ref_entry_from_exact(
     exact: &AdExactRefEntry,
 ) -> Result<CoreRefEntry, AdapterError> {
@@ -316,5 +335,5 @@ unsafe fn ref_path(
 }
 
 #[cfg(test)]
-#[path = "resolve_tests.rs"]
+#[path = "exact_entry_tests.rs"]
 mod tests;

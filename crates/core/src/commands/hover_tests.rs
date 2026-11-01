@@ -83,7 +83,7 @@ impl ObservationOps for HoverCaptureAdapter {
 
     fn confirm_pointer_receiver(
         &self,
-        _entry: &RefEntry,
+        _handle: &NativeHandle,
         _point: crate::Point,
         _deadline: crate::Deadline,
     ) -> Result<(), AdapterError> {
