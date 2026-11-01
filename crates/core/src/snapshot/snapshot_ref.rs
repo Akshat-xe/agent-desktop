@@ -163,7 +163,7 @@ pub(crate) fn resolve_result_window(
         .into_iter()
         .filter(|window| window.id == window_id && window.pid == entry.process.pid)
         .collect();
-    crate::system::window_lookup::select_window(
+    let window = crate::system::window_lookup::select_window(
         candidates,
         crate::AdapterError::new(
             crate::ErrorCode::WindowNotFound,
@@ -171,7 +171,15 @@ pub(crate) fn resolve_result_window(
         )
         .with_suggestion("Run 'snapshot' to refresh, then retry with an updated ref"),
         "Multiple windows matched the source window ID",
-    )
+    )?;
+    if window.process_instance.is_none()
+        || window.process_instance != entry.process.process_instance
+    {
+        return Err(AppError::Adapter(crate::AdapterError::stale_ref_because(
+            "Source window belongs to a different process instance",
+        )));
+    }
+    Ok(window)
 }
 
 fn count_nodes(node: &crate::AccessibilityNode) -> usize {

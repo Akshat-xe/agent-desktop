@@ -67,7 +67,10 @@ pub(crate) fn resolve_by_census(
         max_depth: depth,
         include_bounds: true,
         skeleton: true,
-        surface: entry.source.source_surface,
+        surface: match entry.source.source_surface {
+            crate::SnapshotSurface::Focused => crate::SnapshotSurface::Window,
+            surface => surface,
+        },
         ..Default::default()
     };
     let tree = crate::tree::renderer_accessibility::observe_tree(
@@ -247,3 +250,7 @@ mod tests;
 #[cfg(test)]
 #[path = "ref_scope_omitted_tests.rs"]
 mod omitted_tests;
+
+#[cfg(test)]
+#[path = "ref_scope_census_tests.rs"]
+mod census_tests;
