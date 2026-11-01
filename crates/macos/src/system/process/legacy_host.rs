@@ -1,46 +1,65 @@
 //! Stops command hosts that earlier agent-desktop versions left running.
 
-use std::os::fd::AsRawFd;
-use std::os::unix::fs::{FileTypeExt, MetadataExt};
-use std::os::unix::net::UnixStream;
+use std::mem::{MaybeUninit, size_of};
+use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
+use std::time::{Duration, Instant};
 
 const HOST_MARKER: &[u8] = b"AGENT_DESKTOP_INTERNAL_COMMAND_HOST=1";
-const MAX_ENTRIES: usize = 64;
+const PROC_UID_ONLY: u32 = 4;
+const TERMINATION_GRACE: Duration = Duration::from_millis(500);
 
-unsafe extern "C" {
-    fn proc_signal_with_audittoken(token: *mut [u32; 8], signal: libc::c_int) -> libc::c_int;
+struct LegacyHost {
+    pid: libc::pid_t,
+    uid: libc::uid_t,
+    started_at: (u64, u64),
 }
 
-/// Stops every command host an earlier version left running for this user; it
-/// changes no files and ignores failures so a command never waits on it.
+/// Stops this user's legacy command hosts, allowing up to 500 ms for graceful termination.
+/// Processes whose ownership or identity cannot be verified are left alone.
 pub fn stop_legacy_command_hosts() {
     let uid = unsafe { libc::geteuid() };
-    let directory = std::env::temp_dir().join(format!("agent-desktop-host-{uid}"));
-    let is_private = std::fs::symlink_metadata(&directory).is_ok_and(|metadata| {
-        metadata.is_dir() && metadata.uid() == uid && metadata.mode() & 0o077 == 0
-    });
-    if !is_private {
-        return;
+    let own_pid = std::process::id() as libc::pid_t;
+    let mut hosts: Vec<_> = user_processes(uid)
+        .into_iter()
+        .filter(|pid| *pid > 0 && *pid != own_pid)
+        .filter_map(|pid| {
+            let started_at = process_start_time(pid, uid)?;
+            if !executable_path(pid).is_some_and(|path| is_shipped_executable(&path))
+                || !process_arguments(pid).is_some_and(|args| environment_has_marker(&args))
+            {
+                return None;
+            }
+            Some(LegacyHost {
+                pid,
+                uid,
+                started_at,
+            })
+        })
+        .collect();
+    let deadline = Instant::now() + TERMINATION_GRACE;
+    hosts.retain(|host| host.signal_if_matches(libc::SIGTERM));
+    while !hosts.is_empty() {
+        hosts.retain(LegacyHost::is_running);
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if hosts.is_empty() || remaining.is_zero() {
+            break;
+        }
+        std::thread::sleep(remaining.min(Duration::from_millis(10)));
     }
-    let Ok(entries) = std::fs::read_dir(&directory) else {
-        return;
-    };
-    entries
-        .flatten()
-        .take(MAX_ENTRIES)
-        .map(|entry| entry.path())
-        .filter(|path| is_legacy_socket_name(path))
-        .for_each(|socket| stop_host_at(&socket, uid));
+    for host in hosts {
+        host.signal_if_matches(libc::SIGKILL);
+    }
 }
 
-/// Whether a file has the name earlier versions gave a host socket: a 16-digit
-/// hex stem with a `.sock` suffix.
-pub(crate) fn is_legacy_socket_name(path: &Path) -> bool {
-    path.file_name()
-        .and_then(|name| name.to_str())
-        .and_then(|name| name.strip_suffix(".sock"))
-        .is_some_and(|stem| stem.len() == 16 && stem.bytes().all(|byte| byte.is_ascii_hexdigit()))
+impl LegacyHost {
+    fn is_running(&self) -> bool {
+        process_start_time(self.pid, self.uid) == Some(self.started_at)
+    }
+
+    fn signal_if_matches(&self, signal: libc::c_int) -> bool {
+        self.is_running() && unsafe { libc::kill(self.pid, signal) } == 0
+    }
 }
 
 /// Whether an executable file name is one agent-desktop shipped: the CLI or the
@@ -57,54 +76,81 @@ pub(crate) fn environment_has_marker(procargs: &[u8]) -> bool {
     let Some((count, rest)) = procargs.split_first_chunk::<4>() else {
         return false;
     };
-    let arguments = u32::from_ne_bytes(*count) as usize;
-    let mut fields = rest
-        .split(|byte| *byte == 0)
-        .filter(|field| !field.is_empty());
-    fields
-        .by_ref()
-        .take(arguments.saturating_add(1))
-        .for_each(drop);
-    fields.any(|field| field == HOST_MARKER)
+    let arguments = i32::from_ne_bytes(*count);
+    if arguments <= 0 {
+        return false;
+    }
+    let Some(path_end) = rest.iter().position(|byte| *byte == 0) else {
+        return false;
+    };
+    let rest = &rest[path_end + 1..];
+    let Some(arguments_start) = rest.iter().position(|byte| *byte != 0) else {
+        return false;
+    };
+    let mut rest = &rest[arguments_start..];
+    for _ in 0..arguments {
+        let Some(end) = rest.iter().position(|byte| *byte == 0) else {
+            return false;
+        };
+        rest = &rest[end + 1..];
+    }
+    while let Some(end) = rest.iter().position(|byte| *byte == 0) {
+        let entry = &rest[..end];
+        if entry.is_empty() {
+            break;
+        }
+        if entry == HOST_MARKER {
+            return true;
+        }
+        rest = &rest[end + 1..];
+    }
+    false
 }
 
-fn stop_host_at(socket: &Path, uid: u32) {
-    let is_own_socket = std::fs::symlink_metadata(socket)
-        .is_ok_and(|metadata| metadata.file_type().is_socket() && metadata.uid() == uid);
-    if !is_own_socket {
-        return;
-    }
-    let Ok(stream) = UnixStream::connect(socket) else {
-        return;
+fn user_processes(uid: libc::uid_t) -> Vec<libc::pid_t> {
+    let size = unsafe { libc::proc_listpids(PROC_UID_ONLY, uid, std::ptr::null_mut(), 0) };
+    let Ok(size) = usize::try_from(size) else {
+        return Vec::new();
     };
-    let Some(mut token) = peer_token(&stream) else {
-        return;
-    };
-    let pid = token[5] as libc::pid_t;
-    let own = std::process::id() as libc::pid_t;
-    if token[1] != uid || pid <= 0 || pid == own {
-        return;
-    }
-    let is_host = process_arguments(pid).is_some_and(|args| environment_has_marker(&args))
-        && executable_path(pid).is_some_and(|path| is_shipped_executable(&path));
-    if is_host {
-        unsafe { proc_signal_with_audittoken(&mut token, libc::SIGTERM) };
+    let mut pids = vec![0; size / size_of::<libc::pid_t>() + 1];
+    loop {
+        let Some(bytes) = pids.len().checked_mul(size_of::<libc::pid_t>()) else {
+            return Vec::new();
+        };
+        let Ok(bytes) = i32::try_from(bytes) else {
+            return Vec::new();
+        };
+        let written =
+            unsafe { libc::proc_listpids(PROC_UID_ONLY, uid, pids.as_mut_ptr().cast(), bytes) };
+        if written <= 0 {
+            return Vec::new();
+        }
+        if written < bytes {
+            pids.truncate(written as usize / size_of::<libc::pid_t>());
+            return pids;
+        }
+        pids.resize(pids.len() * 2, 0);
     }
 }
 
-fn peer_token(stream: &UnixStream) -> Option<[u32; 8]> {
-    let mut token = [0u32; 8];
-    let mut length = std::mem::size_of::<[u32; 8]>() as libc::socklen_t;
+fn process_start_time(pid: libc::pid_t, uid: libc::uid_t) -> Option<(u64, u64)> {
+    let mut info = MaybeUninit::<libc::proc_bsdinfo>::zeroed();
+    let size = size_of::<libc::proc_bsdinfo>() as i32;
     let read = unsafe {
-        libc::getsockopt(
-            stream.as_raw_fd(),
-            libc::SOL_LOCAL,
-            libc::LOCAL_PEERTOKEN,
-            token.as_mut_ptr().cast(),
-            &mut length,
+        libc::proc_pidinfo(
+            pid,
+            libc::PROC_PIDTBSDINFO,
+            0,
+            info.as_mut_ptr().cast(),
+            size,
         )
     };
-    (read == 0).then_some(token)
+    if read != size {
+        return None;
+    }
+    let info = unsafe { info.assume_init() };
+    (info.pbi_pid == pid as u32 && info.pbi_uid == uid && info.pbi_status != libc::SZOMB)
+        .then_some((info.pbi_start_tvsec, info.pbi_start_tvusec))
 }
 
 fn process_arguments(pid: libc::pid_t) -> Option<Vec<u8>> {
@@ -132,14 +178,14 @@ fn process_arguments(pid: libc::pid_t) -> Option<Vec<u8>> {
 }
 
 fn executable_path(pid: libc::pid_t) -> Option<std::path::PathBuf> {
-    let mut buffer = vec![0u8; libc::PROC_PIDPATHINFO_MAXSIZE as usize];
+    let mut buffer = [0u8; libc::PROC_PIDPATHINFO_MAXSIZE as usize];
     let written =
         unsafe { libc::proc_pidpath(pid, buffer.as_mut_ptr().cast(), buffer.len() as u32) };
     let written = usize::try_from(written)
         .ok()
         .filter(|written| *written > 0)?;
-    buffer.truncate(written);
-    String::from_utf8(buffer).ok().map(std::path::PathBuf::from)
+    let path = std::ffi::OsStr::from_bytes(buffer.get(..written)?);
+    Some(std::path::PathBuf::from(path))
 }
 
 #[cfg(test)]

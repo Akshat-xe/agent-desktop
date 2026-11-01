@@ -2,11 +2,30 @@
 
 use std::os::unix::fs::{DirBuilderExt, MetadataExt};
 use std::os::unix::net::UnixListener;
+use std::os::unix::process::ExitStatusExt;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output};
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::process::{Child, Command, Output, Stdio};
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
+
+static HOST_TEST_LOCK: Mutex<()> = Mutex::new(());
+
+struct ReapedChild(Option<Child>);
+
+impl ReapedChild {
+    fn child(&mut self) -> &mut Child {
+        self.0.as_mut().expect("child is present")
+    }
+}
+
+impl Drop for ReapedChild {
+    fn drop(&mut self) {
+        if let Some(child) = &mut self.0 {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+    }
+}
 
 fn private_dir(label: &str) -> PathBuf {
     let path = PathBuf::from(format!("/tmp/adh-{label}-{}", std::process::id()));
@@ -19,21 +38,45 @@ fn private_dir(label: &str) -> PathBuf {
 }
 
 fn run(args: &[&str], tmpdir: &Path, home: &Path) -> Output {
-    let mut child = Command::new(env!("CARGO_BIN_EXE_agent-desktop"))
-        .args(args)
-        .env("TMPDIR", tmpdir)
-        .env("AGENT_DESKTOP_HOME", home)
-        .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .spawn()
-        .expect("binary starts");
+    let mut child = ReapedChild(Some(
+        Command::new(env!("CARGO_BIN_EXE_agent-desktop"))
+            .args(args)
+            .env("TMPDIR", tmpdir)
+            .env("AGENT_DESKTOP_HOME", home)
+            .env_remove("AGENT_DESKTOP_INTERNAL_COMMAND_HOST")
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("binary starts"),
+    ));
     let deadline = Instant::now() + Duration::from_secs(60);
-    while child.try_wait().expect("poll child").is_none() {
+    while child.child().try_wait().expect("poll child").is_none() {
         assert!(Instant::now() < deadline, "{args:?} did not finish in 60s");
         std::thread::sleep(Duration::from_millis(20));
     }
-    child.wait_with_output().expect("collect output")
+    child
+        .0
+        .take()
+        .expect("child is present")
+        .wait_with_output()
+        .expect("collect output")
+}
+
+fn wait_process(tmpdir: &Path, home: &Path, marked: bool) -> ReapedChild {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_agent-desktop"));
+    command
+        .args(["wait", "10000"])
+        .env("TMPDIR", tmpdir)
+        .env("AGENT_DESKTOP_HOME", home)
+        .env_remove("AGENT_DESKTOP_INTERNAL_COMMAND_HOST")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    if marked {
+        command.env("AGENT_DESKTOP_INTERNAL_COMMAND_HOST", "1");
+    }
+    ReapedChild(Some(command.spawn().expect("wait process starts")))
 }
 
 fn host_marked_processes(tmpdir: &Path) -> Vec<String> {
@@ -53,6 +96,9 @@ fn host_marked_processes(tmpdir: &Path) -> Vec<String> {
 
 #[test]
 fn commands_never_reach_a_listening_command_host_socket() {
+    let _lock = HOST_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
     let tmpdir = private_dir("armed");
     let home = private_dir("home");
     let uid = std::fs::metadata(&tmpdir).expect("stat tmpdir").uid();
@@ -64,23 +110,6 @@ fn commands_never_reach_a_listening_command_host_socket() {
     let listener =
         UnixListener::bind(host_dir.join("0123456789abcdef.sock")).expect("bind decoy socket");
     listener.set_nonblocking(true).expect("nonblocking");
-    let connections = Arc::new(AtomicUsize::new(0));
-    let stop = Arc::new(AtomicBool::new(false));
-    let watcher = {
-        let (connections, stop) = (connections.clone(), stop.clone());
-        std::thread::spawn(move || {
-            while !stop.load(Ordering::SeqCst) {
-                if let Ok((mut stream, _)) = listener.accept() {
-                    let _ = stream.set_read_timeout(Some(Duration::from_millis(500)));
-                    let mut buffer = [0u8; 64];
-                    if let Ok(read) = std::io::Read::read(&mut stream, &mut buffer) {
-                        connections.fetch_add(read, Ordering::SeqCst);
-                    }
-                }
-                std::thread::sleep(Duration::from_millis(10));
-            }
-        })
-    };
 
     let version = run(&["version"], &tmpdir, &home);
     assert!(version.status.success(), "{:?}", version);
@@ -88,13 +117,9 @@ fn commands_never_reach_a_listening_command_host_socket() {
     let batch = run(&["batch", r#"[{"command":"version"}]"#], &tmpdir, &home);
     assert!(batch.status.success(), "{:?}", batch);
 
-    std::thread::sleep(Duration::from_millis(300));
-    stop.store(true, Ordering::SeqCst);
-    watcher.join().expect("watcher joins");
-    assert_eq!(
-        connections.load(Ordering::SeqCst),
-        0,
-        "a command sent bytes to the host socket"
+    assert!(
+        matches!(listener.accept(), Err(error) if error.kind() == std::io::ErrorKind::WouldBlock),
+        "a command connected to the host socket"
     );
     assert!(
         host_dir.join("0123456789abcdef.sock").exists(),
@@ -107,6 +132,9 @@ fn commands_never_reach_a_listening_command_host_socket() {
 
 #[test]
 fn commands_do_not_create_a_host_directory_or_process() {
+    let _lock = HOST_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
     let tmpdir = private_dir("fresh");
     let home = private_dir("freshhome");
     let uid = std::fs::metadata(&tmpdir).expect("stat tmpdir").uid();
@@ -121,6 +149,9 @@ fn commands_do_not_create_a_host_directory_or_process() {
 
 #[test]
 fn a_dead_legacy_socket_is_left_alone_and_does_not_block_commands() {
+    let _lock = HOST_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
     let tmpdir = private_dir("stale");
     let home = private_dir("stalehome");
     let uid = std::fs::metadata(&tmpdir).expect("stat tmpdir").uid();
@@ -142,28 +173,88 @@ fn a_dead_legacy_socket_is_left_alone_and_does_not_block_commands() {
 }
 
 #[test]
-fn the_host_process_check_finds_a_process_carrying_the_marker() {
+fn version_stops_a_marked_legacy_host_without_a_socket_in_another_tmpdir() {
+    let _lock = HOST_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
     let tmpdir = private_dir("marker");
     let home = private_dir("markerhome");
-    let mut marked = Command::new(env!("CARGO_BIN_EXE_agent-desktop"))
-        .args(["wait", "5000"])
-        .env("AGENT_DESKTOP_INTERNAL_COMMAND_HOST", "1")
-        .env("AGENT_DESKTOP_HOME", &home)
-        .env("TMPDIR", &tmpdir)
-        .stdout(std::process::Stdio::null())
-        .spawn()
-        .expect("marked process starts");
-    let deadline = Instant::now() + Duration::from_secs(5);
-    let mut found = false;
-    while Instant::now() < deadline && !found {
-        found = !host_marked_processes(&tmpdir).is_empty();
-        std::thread::sleep(Duration::from_millis(50));
+    let command_tmpdir = private_dir("cleanup");
+    let mut marked = wait_process(&tmpdir, &home, true);
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while host_marked_processes(&tmpdir).is_empty() {
+        assert!(
+            marked
+                .child()
+                .try_wait()
+                .expect("poll marked process")
+                .is_none(),
+            "marked stand-in exited before cleanup"
+        );
+        assert!(Instant::now() < deadline, "marked stand-in was not visible");
+        std::thread::sleep(Duration::from_millis(20));
     }
-    let _ = marked.kill();
-    let _ = marked.wait();
-    let _ = std::fs::remove_dir_all(&tmpdir);
     assert!(
-        found,
-        "the marker check must see a process that carries the marker"
+        marked
+            .child()
+            .try_wait()
+            .expect("poll marked process")
+            .is_none()
     );
+
+    let deadline = Instant::now() + Duration::from_secs(3);
+    let version = run(&["version"], &command_tmpdir, &home);
+    assert!(version.status.success(), "{version:?}");
+    let status = loop {
+        assert!(
+            Instant::now() < deadline,
+            "marked stand-in survived cleanup for 3s"
+        );
+        if let Some(status) = marked.child().try_wait().expect("poll marked process") {
+            break status;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    };
+    assert_eq!(
+        status.signal(),
+        Some(15),
+        "marked stand-in should exit on SIGTERM: {status}"
+    );
+    let _ = std::fs::remove_dir_all(&command_tmpdir);
+    let _ = std::fs::remove_dir_all(&tmpdir);
+    let _ = std::fs::remove_dir_all(&home);
+}
+
+#[test]
+fn version_leaves_the_same_executable_running_without_the_host_marker() {
+    let _lock = HOST_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    let tmpdir = private_dir("unmarked");
+    let home = private_dir("unmarkedhome");
+    let mut unmarked = wait_process(&tmpdir, &home, false);
+    assert!(
+        unmarked
+            .child()
+            .try_wait()
+            .expect("poll unmarked process")
+            .is_none()
+    );
+    let version = run(&["version"], &tmpdir, &home);
+    assert!(version.status.success(), "{version:?}");
+    let deadline = Instant::now() + Duration::from_secs(1);
+    while Instant::now() < deadline {
+        assert!(
+            unmarked
+                .child()
+                .try_wait()
+                .expect("poll unmarked process")
+                .is_none(),
+            "cleanup stopped an ordinary command without the host marker"
+        );
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    drop(unmarked);
+    let _ = std::fs::remove_dir_all(&tmpdir);
+    let _ = std::fs::remove_dir_all(&home);
 }
