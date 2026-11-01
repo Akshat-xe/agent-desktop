@@ -110,3 +110,17 @@ fn focused_capture_keeps_a_unique_sheet_button_relative_to_the_window() {
     assert_eq!(captured.scope.path.as_slice(), &[0, 0]);
     assert!(basis_gate(&captured.identity).is_ok());
 }
+
+#[test]
+fn focused_capture_walks_the_verified_owner_not_a_title_lookup_result() {
+    let walked = verified_focused_owner("w-11", Some("window-a"), |owner| {
+        assert_eq!(*owner, "window-a");
+        Ok(Some(11))
+    })
+    .unwrap();
+    assert_eq!(walked, "window-a");
+
+    let refused = verified_focused_owner("w-11", Some("window-b"), |_| Ok(Some(12))).unwrap_err();
+    assert_eq!(refused.code, ErrorCode::WindowNotFound);
+    assert!(verified_focused_owner::<&str>("w-11", None, |_| Ok(None)).is_err());
+}

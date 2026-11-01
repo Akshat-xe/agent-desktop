@@ -191,11 +191,10 @@ fn resolve_window_surface(
         SnapshotSurface::Focused => {
             let element = crate::tree::surfaces::focused_surface_for_pid(pid, deadline)?
                 .ok_or_else(|| AdapterError::element_not_found("No focused surface found"))?;
-            let owner_number = crate::system::window::window_ax_state::focused_owner_window_number(
-                &element, deadline,
-            )?;
-            let capture_surface = admit_focused_owner(&window.id, owner_number)?;
-            resolve_window_surface(window, capture_surface, deadline)?
+            let owner = crate::system::window::window_ax_state::owning_window(&element, deadline)?;
+            verified_focused_owner(&window.id, owner, |owner| {
+                crate::system::window::window_resolve::ax_window_id_with_deadline(owner, deadline)
+            })?
         }
         SnapshotSurface::Menu => crate::tree::surfaces::menu_element_for_pid(pid, deadline)?
             .ok_or_else(|| AdapterError::element_not_found("No open context menu"))?,
@@ -219,6 +218,19 @@ fn admit_focused_owner(
         return Ok(SnapshotSurface::Window);
     }
     Err(crate::system::window::window_resolve::window_identity_mismatch(recorded_id))
+}
+
+/// Returns the owner handle whose number was verified, so the walk uses that exact window.
+fn verified_focused_owner<T>(
+    recorded_id: &str,
+    owner: Option<T>,
+    number_of: impl FnOnce(&T) -> Result<Option<i64>, AdapterError>,
+) -> Result<T, AdapterError> {
+    let Some(owner) = owner else {
+        return Err(crate::system::window::window_resolve::window_identity_mismatch(recorded_id));
+    };
+    admit_focused_owner(recorded_id, number_of(&owner)?)?;
+    Ok(owner)
 }
 
 #[cfg(test)]

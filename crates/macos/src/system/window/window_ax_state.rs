@@ -123,18 +123,6 @@ pub(crate) fn owning_window(
     }
 }
 
-/// The window number a focused surface belongs to: the surface itself when it is a window, the
-/// window owning a transient surface, and none when nothing can be attributed.
-pub(crate) fn focused_owner_window_number(
-    focused: &crate::tree::AXElement,
-    deadline: Instant,
-) -> Result<Option<i64>, AdapterError> {
-    let Some(owner) = owning_window(focused, deadline)? else {
-        return Ok(None);
-    };
-    crate::system::window::window_resolve::ax_window_id_with_deadline(&owner, deadline)
-}
-
 /// Whether a capture may record `recorded_id` for the observed surface: the window number
 /// must match, and a number the bridge could not read leaves the window unproven.
 pub(crate) fn observes_recorded_window(recorded_id: &str, observed_number: Option<i64>) -> bool {
