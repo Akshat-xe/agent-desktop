@@ -364,6 +364,18 @@ mod basis_tests;
 #[path = "resolve_refusal_tests.rs"]
 mod refusal_tests;
 
+#[test]
+fn a_scoped_entry_is_refused_before_the_adapter_searches() {
+    use refusal_tests::{Registered, core_entry, resolve};
+    let registered = Registered::new(None);
+    let mut entry = core_entry(Some(agent_desktop_core::IdentityBasis::Name));
+    entry.scope.root_ref = Some("@e1".into());
+    let (result, out) = resolve(&registered, &entry);
+    assert_eq!(result, crate::error::AdResult::ErrStaleRef);
+    assert!(out.ptr.is_null());
+    assert_eq!(registered.resolves(), 0);
+}
+
 #[path = "resolve_effect_tests.rs"]
 mod effect_tests;
 

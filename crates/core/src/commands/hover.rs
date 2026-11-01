@@ -129,7 +129,7 @@ fn confirm_receiver(
     let Some(entry) = resolved.source_entry.as_ref() else {
         return Ok(());
     };
-    if entry.scope.root_ref.is_some() {
+    if entry.scope.root_ref.is_some() || entry.scope.census_depth.is_some() {
         let ref_id = ref_id.ok_or_else(|| {
             crate::AdapterError::stale_ref_because("Scoped pointer target has no source ref")
         })?;

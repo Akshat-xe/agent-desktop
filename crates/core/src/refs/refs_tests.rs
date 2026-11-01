@@ -105,6 +105,27 @@ fn test_remove_by_root_ref() {
 }
 
 #[test]
+fn repeated_drilling_keeps_the_whole_root_chain() {
+    let mut map = RefMap::new();
+    let mut allocate = |owner: Option<&str>| {
+        let mut value = entry("button", Some("Target"));
+        value.scope.path = [0].into_iter().collect();
+        value.scope.root_ref = owner.map(str::to_string);
+        value.scope.path_is_absolute = owner.is_some();
+        map.allocate(value)
+    };
+    let first = allocate(None);
+    let second = allocate(Some(&first));
+    let third = allocate(Some(&second));
+    let stale_child = allocate(Some(&third));
+    map.remove_by_root_ref(&third);
+    for kept in [&first, &second, &third] {
+        assert!(map.get(kept).is_some(), "chain ref {kept} was pruned");
+    }
+    assert!(map.get(&stale_child).is_none());
+}
+
+#[test]
 fn test_counter_continues_after_skeleton_into_drill_down() {
     let mut map = RefMap::new();
     let skeleton_entry = entry("button", Some("Skeleton"));

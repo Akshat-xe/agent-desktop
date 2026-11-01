@@ -107,8 +107,19 @@ impl RefMap {
 
     pub fn remove_by_root_ref(&mut self, root: &str) {
         let root_entry = self.inner.get(root).cloned();
+        let mut chain = vec![root.to_owned()];
+        while let Some(parent) = self
+            .inner
+            .get(chain.last().map_or("", String::as_str))
+            .and_then(|entry| entry.scope.root_ref.clone())
+        {
+            if chain.contains(&parent) {
+                break;
+            }
+            chain.push(parent);
+        }
         self.inner.retain(|ref_id, entry| {
-            if ref_id == root {
+            if chain.contains(ref_id) {
                 return true;
             }
             let owned = entry.scope.root_ref.as_deref() == Some(root);

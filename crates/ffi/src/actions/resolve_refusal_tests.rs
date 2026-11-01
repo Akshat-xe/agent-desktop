@@ -66,14 +66,14 @@ impl SystemOps for StubAdapter {
     }
 }
 
-struct Registered {
+pub(super) struct Registered {
     counters: Arc<Counters>,
     seen: Arc<Mutex<Option<RefEntry>>>,
     adapter: *mut AdAdapter,
 }
 
 impl Registered {
-    fn new(refusal: Option<AdapterError>) -> Self {
+    pub(super) fn new(refusal: Option<AdapterError>) -> Self {
         let counters = Arc::new(Counters::default());
         let seen = Arc::new(Mutex::new(None));
         let adapter = crate::adapter::register_adapter(AdAdapter {
@@ -93,7 +93,7 @@ impl Registered {
         }
     }
 
-    fn resolves(&self) -> u32 {
+    pub(super) fn resolves(&self) -> u32 {
         self.counters.resolves.load(Ordering::SeqCst)
     }
 
@@ -112,7 +112,7 @@ impl Drop for Registered {
     }
 }
 
-fn core_entry(basis: Option<IdentityBasis>) -> RefEntry {
+pub(super) fn core_entry(basis: Option<IdentityBasis>) -> RefEntry {
     RefEntry {
         process: RefProcess {
             pid: agent_desktop_core::ProcessId::new(42),
@@ -173,7 +173,7 @@ fn last_error_details() -> serde_json::Value {
     serde_json::from_str(unsafe { CStr::from_ptr(pointer) }.to_str().unwrap()).unwrap()
 }
 
-fn resolve(registered: &Registered, entry: &RefEntry) -> (AdResult, AdNativeHandle) {
+pub(super) fn resolve(registered: &Registered, entry: &RefEntry) -> (AdResult, AdNativeHandle) {
     let mut out = AdNativeHandle {
         ptr: std::ptr::null(),
     };

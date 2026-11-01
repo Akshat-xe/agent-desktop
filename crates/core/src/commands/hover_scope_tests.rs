@@ -41,3 +41,32 @@ fn drilled_hover_confirms_the_scoped_receiver_despite_an_outside_twin() {
     .unwrap_err();
     assert_eq!(error.code(), "ACTION_FAILED");
 }
+
+#[test]
+fn census_scoped_hover_confirms_the_receiver_despite_a_deeper_twin() {
+    let _home = crate::refs::refs_test_support::HomeGuard::new();
+    let (_, map) = save_map();
+    let adapter = DrillAdapter::new();
+    let mut twin_parent = node("group", "Inner");
+    twin_parent.children.push(node("button", "Save"));
+    adapter.tree.lock().unwrap().children[0]
+        .children
+        .push(twin_parent);
+    let mut entry = map.get("@e2").unwrap().clone();
+    entry.scope.root_ref = None;
+    entry.scope.census_depth = Some(2);
+    let point = ResolvedPoint {
+        point: crate::Point { x: 10.0, y: 10.0 },
+        focused: false,
+        source_entry: Some(entry),
+        bounds_hash: None,
+    };
+    confirm_receiver(
+        &point,
+        crate::Deadline::standard().unwrap(),
+        &adapter,
+        Some("@s1:e2"),
+        &CommandContext::default(),
+    )
+    .unwrap();
+}

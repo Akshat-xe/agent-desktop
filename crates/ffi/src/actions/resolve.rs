@@ -60,6 +60,12 @@ unsafe fn resolve_core_entry(
         error::set_last_error(&error);
         return error::last_error_code();
     }
+    if entry.scope.root_ref.is_some() {
+        error::set_last_error(&AdapterError::stale_ref_because(
+            "A scoped entry cannot be resolved without its source snapshot",
+        ));
+        return error::last_error_code();
+    }
     match adapter.inner.resolve_element_strict(entry, deadline) {
         Ok(handle) => {
             match crate::actions::native_handle::into_ffi_handle(adapter_id, handle, process) {
