@@ -76,20 +76,6 @@ fn a_retained_token_never_stands_in_for_a_recorded_identifier() {
 }
 
 #[test]
-fn an_entry_without_a_decided_basis_never_resolves() {
-    let entry = saved();
-    assert_eq!(
-        matches(
-            &entry,
-            &identifiers(Some("host-generation:object-1")),
-            "Alpha"
-        ),
-        IdentityMatch::NoMatch
-    );
-    assert!(!crate::refs::ref_identity::has_meaningful_identity(&entry));
-}
-
-#[test]
 fn snapshot_and_find_preserve_identical_private_identity_evidence() {
     let from_find = saved();
     let projected = observed().into_accessibility_tree().unwrap();

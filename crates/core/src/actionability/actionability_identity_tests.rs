@@ -1,6 +1,8 @@
 use super::*;
 
-struct RenamedLiveAdapter;
+struct RenamedLiveAdapter {
+    identifier: Option<&'static str>,
+}
 
 impl ObservationOps for RenamedLiveAdapter {
     fn get_live_element(
@@ -9,7 +11,21 @@ impl ObservationOps for RenamedLiveAdapter {
         _deadline: crate::Deadline,
     ) -> Result<LiveElement, AdapterError> {
         Ok(LiveElement {
-            identity: crate::adapter::live_identity("Renamed"),
+            identity: match self.identifier {
+                None => crate::adapter::live_identity("Renamed"),
+                Some(value) => crate::LiveIdentity {
+                    name: crate::LocatorField::Known("Delete".into()),
+                    description: crate::LocatorField::Absent,
+                    identifiers: crate::IdentifierEvidence::typed(
+                        [crate::ElementIdentifier {
+                            kind: crate::IdentifierKind::AxIdentifier,
+                            value: value.into(),
+                        }],
+                        Some(0),
+                        true,
+                    ),
+                },
+            },
             state: ElementState {
                 role: "button".into(),
                 states: Vec::new(),
@@ -33,51 +49,6 @@ impl ObservationOps for RenamedLiveAdapter {
 impl ActionOps for RenamedLiveAdapter {}
 impl InputOps for RenamedLiveAdapter {}
 impl SystemOps for RenamedLiveAdapter {}
-
-struct RenamedSameIdentifierAdapter;
-
-impl ObservationOps for RenamedSameIdentifierAdapter {
-    fn get_live_element(
-        &self,
-        _handle: &NativeHandle,
-        _deadline: crate::Deadline,
-    ) -> Result<LiveElement, AdapterError> {
-        Ok(LiveElement {
-            identity: crate::LiveIdentity {
-                name: crate::LocatorField::Known("Delete".into()),
-                description: crate::LocatorField::Absent,
-                identifiers: crate::IdentifierEvidence::typed(
-                    [crate::ElementIdentifier {
-                        kind: crate::IdentifierKind::AxIdentifier,
-                        value: "toolbar-action".into(),
-                    }],
-                    Some(0),
-                    true,
-                ),
-            },
-            state: ElementState {
-                role: "button".into(),
-                states: Vec::new(),
-                value: None,
-                enabled: Some(true),
-                hidden: Some(false),
-                offscreen: Some(false),
-            },
-            states_complete: true,
-            bounds: Some(crate::Rect {
-                x: 1.0,
-                y: 1.0,
-                width: 20.0,
-                height: 20.0,
-            }),
-            available_actions: vec![capability::CLICK.into()],
-        })
-    }
-}
-
-impl ActionOps for RenamedSameIdentifierAdapter {}
-impl InputOps for RenamedSameIdentifierAdapter {}
-impl SystemOps for RenamedSameIdentifierAdapter {}
 
 #[test]
 fn a_ref_without_a_unique_identity_is_refused_before_the_live_read() {
@@ -119,7 +90,7 @@ fn matching_bounds_cannot_confirm_an_identity_that_changed() {
     let error = check_live(
         &named,
         &NativeHandle::null(),
-        &RenamedLiveAdapter,
+        &RenamedLiveAdapter { identifier: None },
         &ActionRequest::headless(Action::Click),
     )
     .unwrap_err();
@@ -127,10 +98,7 @@ fn matching_bounds_cannot_confirm_an_identity_that_changed() {
     assert_eq!(error.code, ErrorCode::StaleRef);
     assert!(error.message.contains("changed identity"));
     assert_eq!(error.disposition, crate::DeliverySemantics::not_delivered());
-}
 
-#[test]
-fn the_live_check_requires_the_recorded_name_behind_a_shared_identifier() {
     let mut named = entry();
     named.identity.basis = Some(crate::IdentityBasis::NativeId);
     named.identity.native_id = Some(crate::ElementIdentifier {
@@ -142,7 +110,9 @@ fn the_live_check_requires_the_recorded_name_behind_a_shared_identifier() {
     let error = check_live(
         &named,
         &NativeHandle::null(),
-        &RenamedSameIdentifierAdapter,
+        &RenamedLiveAdapter {
+            identifier: Some("toolbar-action"),
+        },
         &ActionRequest::headless(Action::Click),
     )
     .unwrap_err();

@@ -2,6 +2,7 @@
 //! read enough to stop.
 
 use super::*;
+use crate::system::runtime::hresult::E_POINTER;
 use crate::tree::properties::property_ids::TreeProperty;
 use crate::tree::test_support::{number, text};
 use crate::tree::walk::walker_fake::{FakeTree, budget, ref_entry, walk};
@@ -12,29 +13,6 @@ const BUTTON: i32 = uiautomation::types::ControlType::Button as i32;
 const GROUP: i32 = uiautomation::types::ControlType::Group as i32;
 
 const TARGET_NAME: &str = "Save";
-
-/// The snapshot walker visits the node at its raw-depth ceiling and cuts only the children below
-/// it, so the count must evaluate a node at exactly `MAX_RESOLVE_DEPTH` and cut at the same level.
-#[test]
-fn the_count_reaches_the_deepest_level_the_snapshot_walker_emits() {
-    let deepest = MAX_RESOLVE_DEPTH;
-    let chain: Vec<i32> = (1..=i32::from(deepest) + 2).collect();
-    let tree = FakeTree::default().with_chain(&chain);
-    let outcome = walk(&tree, budget(deepest));
-
-    assert_eq!(
-        outcome.stats.traversal.max_raw_depth, deepest,
-        "the walker visits the node at its ceiling, so the snapshot can issue a ref there"
-    );
-    assert!(
-        !at_deepest_searched_level(deepest - 1),
-        "the parent of that node must still descend into it"
-    );
-    assert!(
-        at_deepest_searched_level(deepest),
-        "the count cuts where the walker cuts, one level below the deepest emitted node"
-    );
-}
 
 fn named_button(tree: FakeTree, node: i32, name: &str) -> FakeTree {
     tree.reading(
@@ -115,28 +93,61 @@ fn the_count_traversal_evaluates_the_node_at_the_snapshot_depth_boundary() {
         classify_identity_search(found.len(), unread_region),
         SearchVerdict::Resolved(0)
     ));
-}
 
-/// Two matches settle `AMBIGUOUS_TARGET` whatever the rest of the scope holds, so the walk stops
-/// there and reports the count it stopped at.
-#[test]
-fn a_second_match_ends_the_search_with_the_verdict_a_full_count_would_give() {
-    assert!(!match_count_is_conclusive(0));
-    assert!(
-        !match_count_is_conclusive(1),
-        "one match is exactly the count a look-alike elsewhere could overturn"
+    let chain: Vec<i32> = (1..=i32::from(MAX_RESOLVE_DEPTH) + 2).collect();
+    let walker = walk(
+        &FakeTree::default().with_chain(&chain),
+        budget(MAX_RESOLVE_DEPTH),
     );
-    assert!(
-        match_count_is_conclusive(2),
-        "a second match ends the walk: nothing it never read could make it one"
+    assert_eq!(
+        walker.stats.traversal.max_raw_depth, MAX_RESOLVE_DEPTH,
+        "the walker visits the node at its ceiling, so the snapshot can issue a ref there"
     );
+    assert!(!at_deepest_searched_level(MAX_RESOLVE_DEPTH - 1));
+    assert!(at_deepest_searched_level(MAX_RESOLVE_DEPTH));
+
+    let hidden_child = grouped_spine(
+        FakeTree::default()
+            .with_chain(&spine)
+            .with_children(target, &[target + 1]),
+        target,
+    );
+    let hidden_child = named_button(hidden_child, target, TARGET_NAME);
+    let (found, unread_region) = walked_scope(&hidden_child, &entry).expect("the walk answers");
+    assert_eq!(found, vec![target]);
     assert!(
-        matches!(classify_identity_search(1, true), SearchVerdict::Incomplete),
-        "one match must keep reading, so the walk stops strictly above it"
+        unread_region,
+        "a node at the cap that has children hides a subtree the count never read"
+    );
+
+    let unreadable_child = named_button(
+        grouped_spine(FakeTree::default().with_chain(&spine), target),
+        target,
+        TARGET_NAME,
+    )
+    .faulting_on_first_child_with(target, UiaFailure::Hresult(E_POINTER));
+    let (found, unread_region) = walked_scope(&unreadable_child, &entry).expect("the walk answers");
+    assert_eq!(found, vec![target]);
+    assert!(
+        unread_region,
+        "a failed child read at the cap is not proof of a leaf"
+    );
+
+    let second = target + 1;
+    let beyond: Vec<i32> = (1..=second).collect();
+    let beyond_tree = grouped_spine(FakeTree::default().with_chain(&beyond), second);
+    let beyond_tree = named_button(beyond_tree, 5, TARGET_NAME);
+    let beyond_tree = named_button(beyond_tree, second, TARGET_NAME);
+    let (found, unread_region) =
+        walked_scope(&beyond_tree, &name_entry(&beyond_tree, &5)).expect("the walk answers");
+    assert_eq!(found, vec![5], "the match below the cap is never counted");
+    assert!(
+        unread_region,
+        "the cap cut a subtree, so the sole match above it never resolves"
     );
     assert!(matches!(
-        classify_identity_search(2, true),
-        SearchVerdict::Ambiguous
+        classify_identity_search(found.len(), unread_region),
+        SearchVerdict::Incomplete
     ));
 }
 

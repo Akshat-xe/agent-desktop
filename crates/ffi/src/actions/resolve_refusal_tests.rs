@@ -1,16 +1,20 @@
 use super::super::resolve_core_entry;
-use super::{decode, test_ref_entry};
+use super::entry_tests::core_entry;
+use super::{core_ref_entry_from_exact, test_ref_entry};
 use crate::AdAdapter;
 use crate::actions::native_handle::ad_free_handle;
 use crate::error::AdResult;
-use crate::types::{AdDeliveryDisposition, AdDeliverySemantics, AdNativeHandle};
+use crate::types::exact_ref_entry::{AD_EXACT_REF_ENTRY_SIZE, AD_EXACT_REF_ENTRY_VERSION};
+use crate::types::{
+    AdDeliveryDisposition, AdDeliverySemantics, AdExactRefEntry, AdIdentifierKind, AdNativeHandle,
+    AdRefEntry,
+};
 use agent_desktop_core::refs::identity_basis_gate::{
     basis_gate, bounds_may_decide, requires_live_uniqueness,
 };
 use agent_desktop_core::{
     ActionOps, ActionRequest, ActionResult, AdapterError, Deadline, ErrorCode, IdentityBasis,
-    InputOps, InteractionLease, NativeHandle, ObservationOps, RefCapabilities, RefEntry,
-    RefEntryIdentity, RefGeometry, RefProcess, RefScope, RefSource, SnapshotSurface, SystemOps,
+    InputOps, InteractionLease, NativeHandle, ObservationOps, RefEntry, SystemOps,
 };
 use std::ffi::{CStr, CString};
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -69,7 +73,7 @@ impl SystemOps for StubAdapter {
 pub(super) struct Registered {
     counters: Arc<Counters>,
     seen: Arc<Mutex<Option<RefEntry>>>,
-    adapter: *mut AdAdapter,
+    pub(super) adapter: *mut AdAdapter,
 }
 
 impl Registered {
@@ -97,7 +101,7 @@ impl Registered {
         self.counters.resolves.load(Ordering::SeqCst)
     }
 
-    fn actions(&self) -> u32 {
+    pub(super) fn actions(&self) -> u32 {
         self.counters.actions.load(Ordering::SeqCst)
     }
 
@@ -109,46 +113,6 @@ impl Registered {
 impl Drop for Registered {
     fn drop(&mut self) {
         unsafe { crate::adapter::ad_adapter_destroy(self.adapter) };
-    }
-}
-
-pub(super) fn core_entry(basis: Option<IdentityBasis>) -> RefEntry {
-    RefEntry {
-        process: RefProcess {
-            pid: agent_desktop_core::ProcessId::new(42),
-            process_instance: Some("42:100".into()),
-        },
-        identity: RefEntryIdentity {
-            basis,
-            retained_object: None,
-            role: "button".into(),
-            name: Some("Save".into()),
-            value: None,
-            description: None,
-            native_id: None,
-        },
-        geometry: RefGeometry {
-            bounds_space: None,
-            bounds: None,
-            bounds_hash: None,
-        },
-        capabilities: RefCapabilities {
-            states: Vec::new(),
-            available_actions: Vec::new(),
-        },
-        source: RefSource {
-            source_app: None,
-            source_window_id: None,
-            source_window_title: None,
-            source_window_bounds_hash: None,
-            source_surface: SnapshotSurface::Window,
-        },
-        scope: RefScope {
-            root_ref: None,
-            path_is_absolute: false,
-            census_depth: None,
-            path: Default::default(),
-        },
     }
 }
 
@@ -173,7 +137,7 @@ fn last_error_details() -> serde_json::Value {
     serde_json::from_str(unsafe { CStr::from_ptr(pointer) }.to_str().unwrap()).unwrap()
 }
 
-pub(super) fn resolve(registered: &Registered, entry: &RefEntry) -> (AdResult, AdNativeHandle) {
+fn resolve(registered: &Registered, entry: &RefEntry) -> (AdResult, AdNativeHandle) {
     let mut out = AdNativeHandle {
         ptr: std::ptr::null(),
     };
@@ -181,86 +145,53 @@ pub(super) fn resolve(registered: &Registered, entry: &RefEntry) -> (AdResult, A
     (result, out)
 }
 
-#[test]
-fn a_legacy_entry_is_refused_before_the_adapter_searches() {
+fn exact_of(mut entry: AdRefEntry) -> AdExactRefEntry {
+    entry.process.pid = 42;
+    AdExactRefEntry {
+        version: AD_EXACT_REF_ENTRY_VERSION,
+        size: AD_EXACT_REF_ENTRY_SIZE as u32,
+        entry,
+        process_instance: c"42:100".as_ptr(),
+        identifier_kind: AdIdentifierKind::AxIdentifier as i32,
+    }
+}
+
+fn resolve_exact(registered: &Registered, exact: &AdExactRefEntry) -> (AdResult, AdNativeHandle) {
+    let mut out = AdNativeHandle {
+        ptr: std::ptr::null(),
+    };
+    let result = unsafe {
+        crate::actions::resolve::ad_resolve_element_exact(registered.adapter, exact, &mut out)
+    };
+    (result, out)
+}
+
+fn derive_and_resolve(entry: AdRefEntry) -> (RefEntry, RefEntry) {
     let registered = Registered::new(None);
+    let exact = exact_of(entry);
+    let decoded = unsafe { core_ref_entry_from_exact(&exact) }.unwrap();
+    assert!(basis_gate(&decoded.identity).is_ok());
+    assert!(decoded.identity.retained_object.is_none());
 
-    let (result, out) = resolve(&registered, &core_entry(None));
+    let (result, mut out) = resolve_exact(&registered, &exact);
 
-    assert_eq!(result, AdResult::ErrStaleRef);
-    assert!(out.ptr.is_null());
-    assert_eq!(registered.resolves(), 0);
+    assert_eq!(result, AdResult::Ok);
+    assert!(!out.ptr.is_null());
+    let seen = registered
+        .seen()
+        .expect("the adapter must receive the entry");
+    assert_eq!(seen.identity.basis, decoded.identity.basis);
+    assert!(seen.identity.retained_object.is_none());
     assert_eq!(registered.actions(), 0);
-    assert_eq!(
-        delivery_semantics().delivery,
-        AdDeliveryDisposition::NotDelivered as i32
-    );
-}
-
-#[test]
-fn an_ambiguous_entry_is_refused_before_the_adapter_searches() {
-    let registered = Registered::new(None);
-
-    let (result, out) = resolve(&registered, &core_entry(Some(IdentityBasis::Ambiguous)));
-
-    assert_eq!(result, AdResult::ErrAmbiguousTarget);
-    assert!(out.ptr.is_null());
-    assert_eq!(registered.resolves(), 0);
-    assert_eq!(registered.actions(), 0);
-    assert_eq!(last_error_details()["kind"], "identity_not_unique");
-    assert_eq!(
-        delivery_semantics().delivery,
-        AdDeliveryDisposition::NotDelivered as i32
-    );
-}
-
-#[test]
-fn an_unreadable_subtree_after_a_match_never_yields_a_handle() {
-    let refusal = AdapterError::new(
-        ErrorCode::AppUnresponsive,
-        "Strict element resolution observed an incomplete accessibility tree during depth_limit",
-    )
-    .with_details(serde_json::json!({
-        "kind": "resolution_traversal_incomplete",
-        "phase": "depth_limit",
-        "complete": false,
-        "retryable": true,
-    }));
-    let registered = Registered::new(Some(refusal));
-
-    let (result, out) = resolve(&registered, &core_entry(Some(IdentityBasis::Name)));
-
-    assert_eq!(result, AdResult::ErrAppUnresponsive);
-    assert!(out.ptr.is_null());
-    assert_eq!(registered.resolves(), 1);
-    assert_eq!(registered.actions(), 0);
-}
-
-#[test]
-fn a_timed_out_live_count_never_yields_a_handle() {
-    let refusal = AdapterError::new(
-        ErrorCode::Timeout,
-        "Strict resolution could not determine candidate identity from the live accessibility evidence",
-    )
-    .with_details(serde_json::json!({
-        "kind": "resolution_identity_unknown",
-        "complete": false,
-        "retryable": true,
-    }));
-    let registered = Registered::new(Some(refusal));
-
-    let (result, out) = resolve(&registered, &core_entry(Some(IdentityBasis::Name)));
-
-    assert_eq!(result, AdResult::ErrTimeout);
-    assert!(out.ptr.is_null());
-    assert_eq!(registered.resolves(), 1);
-    assert_eq!(registered.actions(), 0);
+    unsafe { ad_free_handle(registered.adapter, &mut out) };
+    (decoded, seen)
 }
 
 /// The C struct carries no basis field, so `identity_basis` derives one: identifier, then
 /// name, then description, and positional when none is present. It never derives `Ambiguous`.
+/// The stub adapter performs no uniqueness count; this checks derivation and routing only.
 #[test]
-fn a_derived_basis_always_requires_the_live_uniqueness_count() {
+fn exact_ref_derivation_reaches_strict_resolution() {
     let bounds = crate::types::AdRect {
         x: 1.0,
         y: 2.0,
@@ -310,11 +241,10 @@ fn a_derived_basis_always_requires_the_live_uniqueness_count() {
         entry.geometry.bounds = bounds;
         entry.geometry.has_bounds = true;
         entry.geometry.bounds_space = native_bounds_space();
-        let registered = Registered::new(None);
-        let decoded = decode(entry).unwrap();
+
+        let (decoded, seen) = derive_and_resolve(entry);
 
         assert_eq!(decoded.identity.basis, Some(expected_basis));
-        assert!(basis_gate(&decoded.identity).is_ok());
         if expected_basis == IdentityBasis::Positional {
             assert!(decoded.identity.native_id.is_none());
             assert!(decoded.identity.name.is_none());
@@ -325,71 +255,120 @@ fn a_derived_basis_always_requires_the_live_uniqueness_count() {
             assert!(requires_live_uniqueness(&decoded.identity));
             assert!(!bounds_may_decide(&decoded.identity));
         }
-
-        let (result, mut out) = resolve(&registered, &decoded);
-        assert_eq!(result, AdResult::Ok);
-        let seen = registered
-            .seen()
-            .expect("the adapter must receive the entry");
-        assert_eq!(seen.identity.basis, Some(expected_basis));
         assert_eq!(
             requires_live_uniqueness(&seen.identity),
             expected_basis != IdentityBasis::Positional
         );
-        unsafe { ad_free_handle(registered.adapter, &mut out) };
     }
-}
 
-#[test]
-fn the_c_entry_cannot_supply_a_retained_object_token() {
-    let mut named = test_ref_entry();
-    named.identity.role = c"button".as_ptr();
-    named.identity.name = c"Save".as_ptr();
-    let decoded = decode(named).unwrap();
-    assert!(decoded.identity.retained_object.is_none());
+    let mut mirrored = test_ref_entry();
+    mirrored.identity.role = c"textfield".as_ptr();
+    mirrored.identity.name = c"hello".as_ptr();
+    mirrored.identity.value = c"hello".as_ptr();
+    mirrored.identity.description = c"Billing".as_ptr();
+    let (decoded, _) = derive_and_resolve(mirrored);
+    assert_eq!(decoded.identity.basis, Some(IdentityBasis::Description));
 
-    let mut identified = test_ref_entry();
-    identified.identity.role = c"button".as_ptr();
-    identified.identity.native_id = c"row-7".as_ptr();
-    let decoded = decode(identified).unwrap();
-    assert!(decoded.identity.retained_object.is_none());
-}
-
-#[test]
-fn a_positional_entry_keeps_its_path_and_bounds() {
-    let registered = Registered::new(None);
     let path = [2_u32, 0];
-    let mut entry = test_ref_entry();
-    entry.identity.role = c"button".as_ptr();
-    entry.geometry.bounds = crate::types::AdRect {
-        x: 1.0,
-        y: 2.0,
-        width: 3.0,
-        height: 4.0,
-    };
-    entry.geometry.has_bounds = true;
-    entry.geometry.bounds_space = native_bounds_space();
-    entry.scope.path = path.as_ptr();
-    entry.scope.path_count = path.len();
-    entry.scope.path_is_absolute = true;
-
-    let decoded = decode(entry).unwrap();
-    assert_eq!(decoded.identity.basis, Some(IdentityBasis::Positional));
+    let mut positional = test_ref_entry();
+    positional.identity.role = c"button".as_ptr();
+    positional.geometry.bounds = bounds;
+    positional.geometry.has_bounds = true;
+    positional.geometry.bounds_space = native_bounds_space();
+    positional.scope.path = path.as_ptr();
+    positional.scope.path_count = path.len();
+    positional.scope.path_is_absolute = true;
+    let (decoded, seen) = derive_and_resolve(positional);
     let bounds_hash = decoded
         .geometry
         .bounds_hash
         .expect("a positional ref keeps its geometry");
-
-    let (result, mut out) = resolve(&registered, &decoded);
-
-    assert_eq!(result, AdResult::Ok);
-    assert!(!out.ptr.is_null());
-    let seen = registered
-        .seen()
-        .expect("the adapter must receive the entry");
     assert_eq!(seen.identity.basis, Some(IdentityBasis::Positional));
     assert_eq!(seen.scope.path.as_slice(), &[2_usize, 0]);
     assert!(seen.scope.path_is_absolute);
     assert_eq!(seen.geometry.bounds_hash, Some(bounds_hash));
-    unsafe { ad_free_handle(registered.adapter, &mut out) };
+}
+
+#[test]
+fn invalid_identity_or_scope_is_refused_before_resolution() {
+    let registered = Registered::new(None);
+
+    let (result, out) = resolve(&registered, &core_entry(None));
+
+    assert_eq!(result, AdResult::ErrStaleRef);
+    assert!(out.ptr.is_null());
+    assert_eq!(registered.resolves(), 0);
+    assert_eq!(registered.actions(), 0);
+    assert_eq!(
+        delivery_semantics().delivery,
+        AdDeliveryDisposition::NotDelivered as i32
+    );
+
+    let (result, out) = resolve(&registered, &core_entry(Some(IdentityBasis::Ambiguous)));
+
+    assert_eq!(result, AdResult::ErrAmbiguousTarget);
+    assert!(out.ptr.is_null());
+    assert_eq!(registered.resolves(), 0);
+    assert_eq!(registered.actions(), 0);
+    assert_eq!(last_error_details()["kind"], "identity_not_unique");
+    assert_eq!(
+        delivery_semantics().delivery,
+        AdDeliveryDisposition::NotDelivered as i32
+    );
+
+    let mut scoped = test_ref_entry();
+    scoped.identity.role = c"button".as_ptr();
+    scoped.identity.name = c"Save".as_ptr();
+    scoped.scope.root_ref = c"@e1".as_ptr();
+    let (result, out) = resolve_exact(&registered, &exact_of(scoped));
+
+    assert_eq!(result, AdResult::ErrStaleRef);
+    assert!(out.ptr.is_null());
+    assert_eq!(registered.resolves(), 0);
+    assert_eq!(registered.actions(), 0);
+}
+
+#[test]
+fn exact_resolver_preserves_live_refusal() {
+    let refusals = [
+        (
+            AdapterError::new(
+                ErrorCode::AppUnresponsive,
+                "Strict element resolution observed an incomplete accessibility tree during depth_limit",
+            )
+            .with_details(serde_json::json!({
+                "kind": "resolution_traversal_incomplete",
+                "phase": "depth_limit",
+                "complete": false,
+                "retryable": true,
+            })),
+            AdResult::ErrAppUnresponsive,
+        ),
+        (
+            AdapterError::new(
+                ErrorCode::Timeout,
+                "Strict resolution could not determine candidate identity from the live accessibility evidence",
+            )
+            .with_details(serde_json::json!({
+                "kind": "resolution_identity_unknown",
+                "complete": false,
+                "retryable": true,
+            })),
+            AdResult::ErrTimeout,
+        ),
+    ];
+
+    for (refusal, expected) in refusals {
+        let registered = Registered::new(Some(refusal));
+        let mut entry = test_ref_entry();
+        entry.identity.role = c"button".as_ptr();
+        entry.identity.name = c"Save".as_ptr();
+
+        let (result, out) = resolve_exact(&registered, &exact_of(entry));
+
+        assert_eq!(result, expected);
+        assert!(out.ptr.is_null());
+        assert_eq!(registered.resolves(), 1);
+        assert_eq!(registered.actions(), 0);
+    }
 }

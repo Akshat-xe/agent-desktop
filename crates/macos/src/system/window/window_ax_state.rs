@@ -191,34 +191,9 @@ fn focused_role_kind(role: Option<&str>) -> FocusedRoleKind {
 mod tests {
     use super::{
         FocusedRoleKind, focused_role_kind, is_transient_surface_role, label_accessibility,
-        observes_recorded_window,
     };
     use agent_desktop_core::{ProcessId, WindowInfo, WindowState};
     use rustc_hash::FxHashSet;
-
-    #[test]
-    fn a_focused_surface_in_another_window_is_refused_for_the_recorded_window() {
-        assert!(
-            !observes_recorded_window("w-11", Some(12)),
-            "window w-12 holds focus, so capturing it as w-11 would pin every ref in \
-             w-12's tree to a window those elements were never read from"
-        );
-    }
-
-    #[test]
-    fn the_focused_surface_of_the_recorded_window_is_captured() {
-        assert!(observes_recorded_window("w-11", Some(11)));
-    }
-
-    #[test]
-    fn an_unproven_focused_window_is_refused() {
-        assert!(
-            !observes_recorded_window("w-11", None),
-            "a window number the bridge could not read cannot prove which window was observed"
-        );
-        assert!(!observes_recorded_window("", Some(11)));
-        assert!(!observes_recorded_window("desktop", Some(11)));
-    }
 
     #[test]
     fn modal_surfaces_can_temporarily_own_focused_window() {

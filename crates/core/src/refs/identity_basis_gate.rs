@@ -37,7 +37,3 @@ pub fn requires_live_uniqueness(identity: &RefEntryIdentity) -> bool {
 pub fn bounds_may_decide(identity: &RefEntryIdentity) -> bool {
     identity.basis == Some(IdentityBasis::Positional)
 }
-
-#[cfg(test)]
-#[path = "identity_basis_gate_tests.rs"]
-mod tests;

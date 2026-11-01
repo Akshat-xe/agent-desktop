@@ -74,37 +74,25 @@ fn a_unique_identifier_is_the_native_id_basis() {
         Some("save-button"),
         None,
     )]);
-
     let (tree, refmap) = run(root, &allocation(None));
-
     assert_eq!(
         basis_of(&tree, &refmap, &[0]),
         Some(IdentityBasis::NativeId)
     );
-}
 
-#[test]
-fn a_shared_identifier_with_a_unique_name_is_the_name_basis() {
     let root = window_with(vec![
         entry("button", Some("Save"), Some("shared"), None),
         entry("button", Some("Cancel"), Some("shared"), None),
     ]);
-
     let (tree, refmap) = run(root, &allocation(None));
-
     assert_eq!(basis_of(&tree, &refmap, &[0]), Some(IdentityBasis::Name));
     assert_eq!(basis_of(&tree, &refmap, &[1]), Some(IdentityBasis::Name));
-}
 
-#[test]
-fn a_shared_identifier_with_a_unique_description_is_the_description_basis() {
     let root = window_with(vec![
         entry("button", None, Some("shared"), Some("Saves the file")),
         entry("button", None, Some("shared"), Some("Discards changes")),
     ]);
-
     let (tree, refmap) = run(root, &allocation(None));
-
     assert_eq!(
         basis_of(&tree, &refmap, &[0]),
         Some(IdentityBasis::Description)
@@ -113,20 +101,12 @@ fn a_shared_identifier_with_a_unique_description_is_the_description_basis() {
         basis_of(&tree, &refmap, &[1]),
         Some(IdentityBasis::Description)
     );
-}
 
-/// A control value changes as the user interacts, so two entries that differ
-/// only in value are look-alikes, not a name and a native identifier.
-#[test]
-fn a_shared_identifier_differing_only_in_value_is_ambiguous() {
     let mut first = entry("button", None, Some("shared"), None);
     first.identity.value = Some("On".into());
     let mut second = entry("button", None, Some("shared"), None);
     second.identity.value = Some("Off".into());
-    let root = window_with(vec![first, second]);
-
-    let (tree, refmap) = run(root, &allocation(None));
-
+    let (tree, refmap) = run(window_with(vec![first, second]), &allocation(None));
     assert_eq!(
         basis_of(&tree, &refmap, &[0]),
         Some(IdentityBasis::Ambiguous)
@@ -135,17 +115,12 @@ fn a_shared_identifier_differing_only_in_value_is_ambiguous() {
         basis_of(&tree, &refmap, &[1]),
         Some(IdentityBasis::Ambiguous)
     );
-}
 
-#[test]
-fn an_entry_with_no_identifier_and_no_text_is_positional() {
     let root = window_with(vec![
         entry("button", None, None, None),
         entry("button", None, None, None),
     ]);
-
     let (tree, refmap) = run(root, &allocation(None));
-
     assert_eq!(
         basis_of(&tree, &refmap, &[0]),
         Some(IdentityBasis::Positional)
@@ -154,10 +129,7 @@ fn an_entry_with_no_identifier_and_no_text_is_positional() {
         basis_of(&tree, &refmap, &[1]),
         Some(IdentityBasis::Positional)
     );
-}
 
-#[test]
-fn id_less_entries_are_ambiguous_by_shared_name_and_named_by_distinct_ones() {
     let shared = window_with(vec![
         entry("button", Some("Save"), None, None),
         entry("button", Some("Save"), None, None),
@@ -171,7 +143,6 @@ fn id_less_entries_are_ambiguous_by_shared_name_and_named_by_distinct_ones() {
         basis_of(&tree, &refmap, &[1]),
         Some(IdentityBasis::Ambiguous)
     );
-
     let distinct = window_with(vec![
         entry("button", Some("Save"), None, None),
         entry("button", Some("Cancel"), None, None),
@@ -179,102 +150,13 @@ fn id_less_entries_are_ambiguous_by_shared_name_and_named_by_distinct_ones() {
     let (tree, refmap) = run(distinct, &allocation(None));
     assert_eq!(basis_of(&tree, &refmap, &[0]), Some(IdentityBasis::Name));
     assert_eq!(basis_of(&tree, &refmap, &[1]), Some(IdentityBasis::Name));
-}
 
-/// Look-alikes can sit under separate parent rows, so uniqueness must be
-/// counted over the whole snapshot rather than among siblings.
-#[test]
-fn cousins_under_separate_rows_count_as_look_alikes() {
-    let mut first_row = node("group", Some("First row"));
-    first_row.children = vec![entry("button", Some("Save"), None, None)];
-    let mut second_row = node("group", Some("Second row"));
-    second_row.children = vec![entry("button", Some("Save"), None, None)];
-    let root = window_with(vec![first_row, second_row]);
-
-    let (tree, refmap) = run(root, &allocation(None));
-
-    assert_eq!(
-        basis_of(&tree, &refmap, &[0, 0]),
-        Some(IdentityBasis::Ambiguous)
-    );
-    assert_eq!(
-        basis_of(&tree, &refmap, &[1, 0]),
-        Some(IdentityBasis::Ambiguous)
-    );
-}
-
-#[test]
-fn a_truncated_tree_is_ambiguous_even_when_the_observed_subset_looks_unique() {
-    let mut cut_row = node("group", Some("Unread row"));
-    cut_row.subtree_truncated = true;
-    let root = window_with(vec![
-        entry("button", Some("Save"), Some("save-button"), None),
-        cut_row,
-    ]);
-
-    let (tree, refmap) = run(root, &allocation(None));
-
-    assert_eq!(
-        basis_of(&tree, &refmap, &[0]),
-        Some(IdentityBasis::Ambiguous)
-    );
-}
-
-#[test]
-fn a_complete_drill_proves_identity_but_an_incomplete_drill_does_not() {
-    let root = window_with(vec![
-        entry("button", Some("Save"), Some("save-button"), None),
-        entry("button", None, None, None),
-    ]);
-
-    let (tree, refmap) = run(root.clone(), &allocation(Some("@e3")));
-
-    assert_eq!(
-        basis_of(&tree, &refmap, &[0]),
-        Some(IdentityBasis::NativeId)
-    );
-    assert_eq!(
-        basis_of(&tree, &refmap, &[1]),
-        Some(IdentityBasis::Positional)
-    );
-    let (tree, refmap) = run(root, &allocation_with(Some("@e3"), false));
-    assert_eq!(
-        basis_of(&tree, &refmap, &[0]),
-        Some(IdentityBasis::Ambiguous)
-    );
-    assert_eq!(
-        basis_of(&tree, &refmap, &[1]),
-        Some(IdentityBasis::Positional)
-    );
-}
-
-#[test]
-fn an_incomplete_snapshot_is_ambiguous_even_when_the_tree_looks_whole() {
-    let root = window_with(vec![entry(
-        "button",
-        Some("Save"),
-        Some("save-button"),
-        None,
-    )]);
-
-    let (tree, refmap) = run(root, &allocation_with(None, false));
-
-    assert_eq!(
-        basis_of(&tree, &refmap, &[0]),
-        Some(IdentityBasis::Ambiguous)
-    );
-}
-
-#[test]
-fn identical_text_across_roles_never_becomes_ambiguous() {
     let root = window_with(vec![
         entry("button", Some("Save"), None, None),
         entry("cell", Some("Save"), None, None),
         entry("button", Some("Save"), None, None),
     ]);
-
     let (tree, refmap) = run(root, &allocation(None));
-
     assert_eq!(
         basis_of(&tree, &refmap, &[0]),
         Some(IdentityBasis::Ambiguous)
@@ -284,19 +166,14 @@ fn identical_text_across_roles_never_becomes_ambiguous() {
         basis_of(&tree, &refmap, &[2]),
         Some(IdentityBasis::Ambiguous)
     );
-}
 
-#[test]
-fn identical_text_across_identifier_groups_never_becomes_ambiguous() {
     let root = window_with(vec![
         entry("button", Some("Save"), Some("row-a"), None),
         entry("button", Some("Save"), Some("row-a"), None),
         entry("button", Some("Save"), Some("row-b"), None),
         entry("button", Some("Cancel"), Some("row-b"), None),
     ]);
-
     let (tree, refmap) = run(root, &allocation(None));
-
     assert_eq!(
         basis_of(&tree, &refmap, &[0]),
         Some(IdentityBasis::Ambiguous)
@@ -310,9 +187,24 @@ fn identical_text_across_identifier_groups_never_becomes_ambiguous() {
 }
 
 /// An inert group named Row is a look-alike of the actionable one, so counting only ref-able
-/// elements would let the surviving ref resolve onto the inert twin.
+/// elements would let the surviving ref resolve onto the inert twin. Look-alikes can also sit
+/// under separate parent rows, so uniqueness is counted over the whole snapshot.
 #[test]
 fn an_inert_look_alike_of_the_same_role_and_name_withdraws_the_name_proof() {
+    let mut first_row = node("group", Some("First row"));
+    first_row.children = vec![entry("button", Some("Save"), None, None)];
+    let mut second_row = node("group", Some("Second row"));
+    second_row.children = vec![entry("button", Some("Save"), None, None)];
+    let (tree, refmap) = run(window_with(vec![first_row, second_row]), &allocation(None));
+    assert_eq!(
+        basis_of(&tree, &refmap, &[0, 0]),
+        Some(IdentityBasis::Ambiguous)
+    );
+    assert_eq!(
+        basis_of(&tree, &refmap, &[1, 0]),
+        Some(IdentityBasis::Ambiguous)
+    );
+
     let mut actionable = node("group", Some("Row"));
     actionable.presentation.available_actions = vec![crate::actions::capability::CLICK.to_string()];
     let inert = node("group", Some("Row"));
@@ -339,6 +231,41 @@ fn an_inert_look_alike_of_the_same_role_and_name_withdraws_the_name_proof() {
 
 #[test]
 fn an_incomplete_capture_is_refused_with_ambiguous_target_before_any_live_search() {
+    let mut cut_row = node("group", Some("Unread row"));
+    cut_row.subtree_truncated = true;
+    let truncated = window_with(vec![
+        entry("button", Some("Save"), Some("save-button"), None),
+        cut_row,
+    ]);
+    let (tree, refmap) = run(truncated, &allocation(None));
+    assert_eq!(
+        basis_of(&tree, &refmap, &[0]),
+        Some(IdentityBasis::Ambiguous)
+    );
+
+    let drill = window_with(vec![
+        entry("button", Some("Save"), Some("save-button"), None),
+        entry("button", None, None, None),
+    ]);
+    let (tree, refmap) = run(drill.clone(), &allocation(Some("@e3")));
+    assert_eq!(
+        basis_of(&tree, &refmap, &[0]),
+        Some(IdentityBasis::NativeId)
+    );
+    assert_eq!(
+        basis_of(&tree, &refmap, &[1]),
+        Some(IdentityBasis::Positional)
+    );
+    let (tree, refmap) = run(drill, &allocation_with(Some("@e3"), false));
+    assert_eq!(
+        basis_of(&tree, &refmap, &[0]),
+        Some(IdentityBasis::Ambiguous)
+    );
+    assert_eq!(
+        basis_of(&tree, &refmap, &[1]),
+        Some(IdentityBasis::Positional)
+    );
+
     let root = window_with(vec![entry(
         "button",
         Some("Save"),

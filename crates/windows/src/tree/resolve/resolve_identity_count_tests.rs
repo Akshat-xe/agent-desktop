@@ -4,6 +4,8 @@
 use std::time::Duration;
 
 use super::*;
+use crate::system::runtime::hresult::E_POINTER;
+use crate::tree::automation::UiaFailure;
 use crate::tree::properties::PropertyOutcome;
 use crate::tree::properties::property_ids::TreeProperty;
 use crate::tree::resolve::resolve_search::{
@@ -111,35 +113,42 @@ fn a_second_match_past_the_sibling_cap_withholds_the_count() {
         matches!(classify_identity_search(1, cut), SearchVerdict::Incomplete),
         "one match with a look-alike past the cap is not a resolved count"
     );
-}
 
-/// The depth cap is the other node limit: a match below the deepest searched level is never
-/// counted, so a sole match above it is withheld. The fixture root is depth 0.
-#[test]
-fn a_second_match_beyond_the_depth_cap_withholds_the_count() {
-    let last = i32::from(MAX_RESOLVE_DEPTH) + 1;
-    let spine: Vec<i32> = (1..=last).collect();
-    let tree = FakeTree::default()
-        .with_chain(&spine)
-        .with_children(last, &[last + 1]);
-    let tree = button(tree, 5, TARGET_NAME);
-    let tree = button(tree, last + 1, TARGET_NAME);
+    let listed = |children: &[i32]| {
+        children.iter().fold(
+            grouped(FakeTree::default().with_children(1, children), 1),
+            |tree, node| match node {
+                2 => button(tree, 2, TARGET_NAME),
+                _ => grouped(tree, *node),
+            },
+        )
+    };
+    let cap = |siblings: usize| budget(10).with_max_siblings(siblings);
 
-    let entry = matching_entry(&tree, &5);
+    let hidden = listed(&[2, 3, 4]);
+    let entry = matching_entry(&hidden, &2);
     assert_eq!(
-        admit_identity_candidate(&entry, &evidence_at(&tree, &(last + 1))),
-        NodeAdmission::Collect,
-        "the element below the cap answers to the stored identity"
+        walked(&hidden, &entry, cap(2)),
+        (vec![2], true),
+        "a sibling past the cap cuts the count"
     );
-    let cut = boundary_hides_descendants(&tree, &last).expect("probe answers");
-    assert!(
-        cut,
-        "the node at the cap still has a child, so the depth budget cut the count"
+    assert_eq!(
+        walked(&hidden, &entry, cap(4)),
+        (vec![2], false),
+        "a list shorter than the cap was read to its end"
     );
-
-    assert!(
-        matches!(classify_identity_search(1, cut), SearchVerdict::Incomplete),
-        "one match above the cap is not a resolved count while the cap hid a subtree"
+    let at_cap = listed(&[2, 3]);
+    assert_eq!(
+        walked(&at_cap, &entry, cap(2)),
+        (vec![2], false),
+        "a list that ends exactly at the cap is whole"
+    );
+    let failing_probe =
+        listed(&[2, 3]).faulting_on_next_sibling_with(3, UiaFailure::Hresult(E_POINTER));
+    assert_eq!(
+        walked(&failing_probe, &entry, cap(2)),
+        (vec![2], true),
+        "a probe that fails without proving the end leaves the list unread"
     );
 }
 
@@ -179,11 +188,38 @@ fn a_read_that_times_out_after_the_first_match_withholds_the_count() {
     );
 }
 
+/// Runs the shipped count traversal over a fixture whose root is a known non-matching group, so
+/// only the nodes under test decide what is found and what stays unread.
+fn walked(tree: &FakeTree, entry: &RefEntry, budget: WalkBudget) -> (Vec<i32>, bool) {
+    let ctx = SearchContext {
+        source: tree,
+        entry,
+        budget: &budget,
+    };
+    let mut found = Vec::new();
+    let mut unread_region = false;
+    search_source_scope(&ctx, &1, 0, &mut found, &mut unread_region)
+        .expect("the fixture answers without surfacing");
+    (found, unread_region)
+}
+
+fn grouped(tree: FakeTree, node: i32) -> FakeTree {
+    tree.reading(
+        node,
+        &[number(
+            TreeProperty::ControlType,
+            uiautomation::types::ControlType::Group as i32,
+        )],
+    )
+}
+
 /// A region whose needed fields cannot be read is unread, not empty: the search cannot tell a
-/// look-alike from a node it merely failed to read.
+/// look-alike from a node it merely failed to read. A node of another role is refused outright,
+/// and a node whose recorded identifier could not be read is unread rather than refuted.
 #[test]
 fn an_unreadable_region_after_the_first_match_withholds_the_count() {
-    let tree = FakeTree::default().with_children(1, &[2, 3]);
+    let edit = uiautomation::types::ControlType::Edit as i32;
+    let tree = grouped(FakeTree::default().with_children(1, &[2, 3, 4]), 1);
     let tree = button(tree, 2, TARGET_NAME);
     let tree = tree.reading(
         3,
@@ -192,26 +228,62 @@ fn an_unreadable_region_after_the_first_match_withholds_the_count() {
             (TreeProperty::Name, PropertyOutcome::Unknown),
         ],
     );
-    let entry = matching_entry(&tree, &2);
-    assert_eq!(
-        admit_identity_candidate(&entry, &evidence_at(&tree, &2)),
-        NodeAdmission::Collect
+    let tree = tree.reading(
+        4,
+        &[
+            number(TreeProperty::ControlType, edit),
+            (TreeProperty::Name, text(TARGET_NAME)),
+        ],
     );
-
-    let unreadable = evidence_at(&tree, &3);
+    let entry = matching_entry(&tree, &2);
     assert!(
-        unreadable.role.is_unknown(),
+        evidence_at(&tree, &3).role.is_unknown(),
         "the fixture node must answer nothing for its role, or this case is not the unread one"
     );
-    assert_eq!(
-        admit_identity_candidate(&entry, &unreadable),
-        NodeAdmission::Unread,
-        "an unreadable field is never a refusal, so the count cannot exclude it"
+
+    let (found, unread_region) = walked(&tree, &entry, budget(10));
+    assert_eq!(found, vec![2]);
+    assert!(unread_region, "an unreadable role is never a refusal");
+    assert!(
+        matches!(
+            classify_identity_search(found.len(), unread_region),
+            SearchVerdict::Incomplete
+        ),
+        "one match with an unreadable region behind it never resolves"
     );
 
+    let tree = grouped(FakeTree::default().with_children(1, &[2, 4]), 1);
+    let tree = button(tree, 2, TARGET_NAME);
+    let tree = tree.reading(
+        4,
+        &[
+            number(TreeProperty::ControlType, edit),
+            (TreeProperty::Name, text(TARGET_NAME)),
+        ],
+    );
+    let (found, unread_region) = walked(&tree, &entry, budget(10));
+    assert_eq!(found, vec![2], "a different role is not a look-alike");
+    assert!(!unread_region, "a different role leaves nothing unread");
+
+    let tree = grouped(FakeTree::default().with_children(1, &[2]), 1);
+    let tree = tree.reading(
+        2,
+        &[
+            number(TreeProperty::ControlType, BUTTON),
+            (TreeProperty::AutomationId, PropertyOutcome::Unknown),
+        ],
+    );
+    let mut identifier_entry = ref_entry(&entry.identity.role);
+    identifier_entry.identity.basis = Some(IdentityBasis::NativeId);
+    identifier_entry.identity.native_id = Some(ElementIdentifier {
+        kind: IdentifierKind::AutomationId,
+        value: "row-77".to_string(),
+    });
+    let (found, unread_region) = walked(&tree, &identifier_entry, budget(10));
+    assert!(found.is_empty());
     assert!(
-        matches!(classify_identity_search(1, true), SearchVerdict::Incomplete),
-        "one match with an unreadable region behind it never resolves"
+        unread_region,
+        "an unreadable identifier is unread, never refuted"
     );
 }
 

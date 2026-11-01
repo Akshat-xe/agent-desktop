@@ -134,21 +134,6 @@ fn a_name_basis_ref_never_counts_or_matches_an_element_of_another_identifier_gro
     assert_eq!(error.disposition, DeliverySemantics::not_delivered());
 }
 
-#[test]
-fn an_entry_captured_from_an_incomplete_snapshot_is_refused_even_with_one_live_match() {
-    let mut fake = Fake::new();
-    fake.add(FRAME_PATH, "/back", node(PUSH_BUTTON, "Back", 30, 30));
-    let mut entry = fake.entry_of("/back", true);
-    assert_eq!(entry.identity.basis, Some(IdentityBasis::Name));
-    entry.identity.basis = Some(IdentityBasis::Ambiguous);
-    let error = refusal(&mut fake, &entry);
-    assert_eq!(error.code, ErrorCode::AmbiguousTarget);
-    assert_eq!(kind(&error), "identity_not_unique");
-    assert_eq!(error.disposition, DeliverySemantics::not_delivered());
-    assert_eq!(fake.reads.levels, 0);
-    assert_eq!(fake.reads.searches, 0);
-}
-
 fn replaced_object() -> (Fake, RefEntry) {
     let mut fake = Fake::new();
     fake.add(FRAME_PATH, "/first", node(LIST, "", 100, 40));
@@ -203,4 +188,24 @@ fn a_positional_ref_without_a_token_keeps_its_path_and_bounds_rule() {
     let error = refusal(&mut fake, &entry);
     assert_eq!(error.code, ErrorCode::StaleRef);
     assert_eq!(error.disposition, DeliverySemantics::not_delivered());
+
+    let mut fake = Fake::new();
+    fake.add(FRAME_PATH, "/panel", node(PANEL, "", 200, 100));
+    let entry = fake.entry_of("/panel", true);
+    assert_eq!(entry.identity.basis, Some(IdentityBasis::Positional));
+    assert_eq!(resolved(&mut fake, &entry), "/panel");
+    fake.nodes
+        .get_mut("/panel")
+        .expect("panel")
+        .read
+        .node
+        .extents = Field::Present(crate::tree::Extents {
+        x: 0,
+        y: 0,
+        width: 200,
+        height: 40,
+    });
+    let error = refusal(&mut fake, &entry);
+    assert_eq!(error.code, ErrorCode::StaleRef);
+    assert_eq!(kind(&error), "resolve_no_candidate");
 }

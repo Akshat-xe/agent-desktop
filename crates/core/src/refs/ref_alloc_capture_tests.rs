@@ -225,21 +225,14 @@ fn an_omitted_subtree_withdraws_the_identity_proof_of_a_visible_look_alike() {
         Some(IdentityBasis::Name),
         "a fully walked tree keeps the proof"
     );
-}
 
-/// The second Save's name read failed, so counting the first as unique would let it resolve
-/// onto the second once that one is readable.
-#[test]
-fn an_unreadable_name_on_a_look_alike_withdraws_the_other_name_proof() {
     let mut unreadable = evidence("button", None);
     unreadable.name = LocatorField::Unknown;
-    let observed = snapshot(vec![node(
+    let (tree, refmap) = capture(snapshot(vec![node(
         "window",
         "Fixture",
         vec![leaf(evidence("button", Some("Save"))), leaf(unreadable)],
-    )]);
-
-    let (tree, refmap) = capture(observed);
+    )]));
 
     assert_eq!(
         basis_of(&tree, &refmap, &[0]),
@@ -291,10 +284,7 @@ fn value_mirroring_names_still_count_as_capture_time_look_alikes() {
             ));
         }
     }
-}
 
-#[test]
-fn only_a_targets_stable_name_qualifies_for_a_name_basis() {
     for (value, expected) in [
         ("10", IdentityBasis::Positional),
         ("10.0", IdentityBasis::Positional),

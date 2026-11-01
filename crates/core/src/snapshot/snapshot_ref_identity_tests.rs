@@ -1,24 +1,7 @@
 use super::identity_test_support::*;
 use super::*;
+use crate::ErrorCode;
 use crate::refs::refs_test_support::HomeGuard;
-use crate::{ErrorCode, IdentityBasis};
-
-#[test]
-fn skeleton_anchor_can_be_drilled_and_its_child_acted_on() {
-    let _home = HomeGuard::new();
-    let (id, _) = save_map();
-    let adapter = DrillAdapter::new();
-    let result = run_from_ref(&adapter, &TreeOptions::default(), "@e1", Some(&id)).unwrap();
-    assert_eq!(result.snapshot_id.as_deref(), Some(id.as_str()));
-    let child = result.tree.children[0].ref_id.as_deref().unwrap();
-    let (_, local) = crate::refs::ref_token::resolve_ref_target(child).unwrap();
-    assert_eq!(
-        result.refmap.get(&local).unwrap().identity.basis,
-        Some(IdentityBasis::Name)
-    );
-    click(&adapter, child).unwrap();
-    assert_eq!(*adapter.actions.lock().unwrap(), vec![vec![0, 0]]);
-}
 
 #[test]
 fn drilled_ref_ignores_an_outside_twin_and_never_chooses_it() {
@@ -33,45 +16,16 @@ fn drilled_ref_ignores_an_outside_twin_and_never_chooses_it() {
         .push(node("button", "Save"));
     click(&adapter, &format!("@{id}:e2")).unwrap();
     assert_eq!(*adapter.actions.lock().unwrap(), vec![vec![0, 0]]);
-    adapter.tree.lock().unwrap().children[0].children.clear();
-    let error = click(&adapter, &format!("@{id}:e2")).unwrap_err();
-    assert_eq!(error.code(), "STALE_REF");
-    assert_eq!(adapter.actions.lock().unwrap().len(), 1);
-}
-
-#[test]
-fn drilled_ref_refuses_an_inside_twin() {
-    let _home = HomeGuard::new();
-    let (id, _) = save_map();
-    let adapter = DrillAdapter::new();
     adapter.tree.lock().unwrap().children[0]
         .children
         .push(node("button", "Save"));
     let error = click(&adapter, &format!("@{id}:e2")).unwrap_err();
     assert_eq!(error.code(), "AMBIGUOUS_TARGET");
-    assert!(adapter.actions.lock().unwrap().is_empty());
-}
-
-#[test]
-fn drilled_ref_refuses_a_removed_root_even_if_the_target_survives_elsewhere() {
-    let _home = HomeGuard::new();
-    let (id, _) = save_map();
-    let adapter = DrillAdapter::new();
-    adapter.tree.lock().unwrap().children = vec![node("button", "Save")];
+    assert_eq!(adapter.actions.lock().unwrap().len(), 1);
+    adapter.tree.lock().unwrap().children[0].children.clear();
     let error = click(&adapter, &format!("@{id}:e2")).unwrap_err();
     assert_eq!(error.code(), "STALE_REF");
-    assert!(adapter.actions.lock().unwrap().is_empty());
-}
-
-#[test]
-fn drilled_ref_refuses_an_incomplete_live_subtree() {
-    let _home = HomeGuard::new();
-    let (id, _) = save_map();
-    let adapter = DrillAdapter::new();
-    adapter.tree.lock().unwrap().children[0].subtree_truncated = true;
-    let error = click(&adapter, &format!("@{id}:e2")).unwrap_err();
-    assert_eq!(error.code(), "TIMEOUT");
-    assert!(adapter.actions.lock().unwrap().is_empty());
+    assert_eq!(adapter.actions.lock().unwrap().len(), 1);
 }
 
 #[test]
@@ -80,6 +34,9 @@ fn incomplete_drill_does_not_replace_saved_refs() {
     let (id, map) = save_map();
     let adapter = DrillAdapter::new();
     adapter.tree.lock().unwrap().children[0].subtree_truncated = true;
+    let error = click(&adapter, &format!("@{id}:e2")).unwrap_err();
+    assert_eq!(error.code(), "TIMEOUT");
+    assert!(adapter.actions.lock().unwrap().is_empty());
     let error = run_from_ref(&adapter, &TreeOptions::default(), "@e1", Some(&id))
         .err()
         .unwrap();
@@ -96,6 +53,13 @@ fn moved_root_cannot_redirect_hydration_to_a_twin_at_the_old_path() {
     let mut outside = node("group", "Other");
     outside.children.push(node("button", "Save"));
     adapter.tree.lock().unwrap().children.insert(0, outside);
+    let error = click(&adapter, &format!("@{id}:e2")).unwrap_err();
+    assert_eq!(error.code(), "STALE_REF");
+    assert!(adapter.actions.lock().unwrap().is_empty());
+    assert!(error.suggestion().unwrap().contains("Drill the root"));
+
+    let adapter = DrillAdapter::new();
+    adapter.tree.lock().unwrap().children = vec![node("button", "Save")];
     let error = click(&adapter, &format!("@{id}:e2")).unwrap_err();
     assert_eq!(error.code(), "STALE_REF");
     assert!(adapter.actions.lock().unwrap().is_empty());

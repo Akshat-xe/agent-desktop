@@ -4,7 +4,7 @@ use super::*;
 use crate::tree::Field;
 use crate::tree::resolve::resolve_errors::window_replaced;
 use crate::tree::resolve::resolve_fake::{FRAME_PATH, Fake, deadline, node};
-use crate::tree::vocabulary::role_numbers::{MENU_ITEM, PANEL, PUSH_BUTTON};
+use crate::tree::vocabulary::role_numbers::{MENU_ITEM, PUSH_BUTTON};
 
 fn kind(error: &AdapterError) -> &str {
     error
@@ -56,26 +56,7 @@ fn a_ref_written_before_bases_existed_is_refused_before_any_live_search() {
     assert_eq!(fake.reads.gate, 1);
     assert_eq!(fake.reads.levels, 0);
     assert_eq!(fake.reads.searches, 0);
-}
 
-#[test]
-fn an_ambiguous_basis_is_refused_before_any_live_search() {
-    let mut fake = named_twins();
-    let mut entry = fake.entry_of("/first", true);
-    entry.identity.basis = Some(IdentityBasis::Ambiguous);
-    let error = refusal(&mut fake, &entry);
-    assert_eq!(error.code, ErrorCode::AmbiguousTarget);
-    assert_eq!(kind(&error), "identity_not_unique");
-    assert_eq!(error.disposition, DeliverySemantics::not_delivered());
-    assert_eq!(fake.reads.levels, 0);
-    assert_eq!(fake.reads.searches, 0);
-}
-
-#[test]
-fn the_window_gate_answers_before_a_missing_basis_does() {
-    let mut fake = one_button();
-    let mut entry = fake.entry_of("/back", true);
-    entry.identity.basis = None;
     fake.faults.gate_error = Some(window_replaced());
     let error = refusal(&mut fake, &entry);
     assert_eq!(kind(&error), "resolve_window_replaced");
@@ -86,8 +67,20 @@ fn a_name_basis_ref_resolves_only_when_exactly_one_live_node_carries_it() {
     let mut fake = named_twins();
     let mut entry = fake.entry_of("/first", true);
     assert_eq!(entry.identity.basis, Some(IdentityBasis::Name));
+    let pathed = entry.clone();
     entry.scope.path.clear();
     let error = refusal(&mut fake, &entry);
+    assert_eq!(error.code, ErrorCode::AmbiguousTarget);
+    assert_eq!(candidate_count(&error), 2);
+
+    let mut second = fake.entry_of("/second", true);
+    assert_eq!(
+        second.geometry.bounds.map(|bounds| bounds.width),
+        Some(200.0)
+    );
+    assert_eq!(second.scope.path.as_slice(), [1]);
+    second.scope.path.clear();
+    let error = refusal(&mut fake, &second);
     assert_eq!(error.code, ErrorCode::AmbiguousTarget);
     assert_eq!(candidate_count(&error), 2);
 
@@ -99,13 +92,21 @@ fn a_name_basis_ref_resolves_only_when_exactly_one_live_node_carries_it() {
         .properties
         .name = Field::Present("Cancel".to_owned());
     assert_eq!(resolved(&mut fake, &entry), "/first");
-}
 
-#[test]
-fn a_name_basis_ref_is_stale_when_no_live_node_carries_its_name() {
-    let mut fake = named_twins();
-    let mut entry = fake.entry_of("/first", true);
-    entry.scope.path.clear();
+    fake.nodes
+        .get_mut("/first")
+        .expect("first")
+        .read
+        .node
+        .extents = Field::Present(crate::tree::Extents {
+        x: 400,
+        y: 300,
+        width: 90,
+        height: 40,
+    });
+    assert_eq!(resolved(&mut fake, &pathed), "/first");
+    assert_eq!(resolved(&mut fake, &entry), "/first");
+
     for path in ["/first", "/second"] {
         fake.nodes
             .get_mut(path)
@@ -119,35 +120,6 @@ fn a_name_basis_ref_is_stale_when_no_live_node_carries_its_name() {
     assert_eq!(error.code, ErrorCode::StaleRef);
     assert_eq!(kind(&error), "resolve_no_candidate");
     assert_eq!(error.disposition, DeliverySemantics::not_delivered());
-}
-
-#[test]
-fn stored_bounds_never_pick_between_two_nodes_that_carry_the_refs_name() {
-    let mut fake = named_twins();
-    let mut entry = fake.entry_of("/second", true);
-    assert_eq!(
-        entry.geometry.bounds.map(|bounds| bounds.width),
-        Some(200.0)
-    );
-    assert_eq!(entry.scope.path.as_slice(), [1]);
-    entry.scope.path.clear();
-    let error = refusal(&mut fake, &entry);
-    assert_eq!(error.code, ErrorCode::AmbiguousTarget);
-    assert_eq!(candidate_count(&error), 2);
-}
-
-#[test]
-fn bounds_never_confirm_a_lone_name_match() {
-    let mut fake = one_button();
-    let entry = fake.entry_of("/back", true);
-    fake.nodes.get_mut("/back").expect("back").read.node.extents =
-        Field::Present(crate::tree::Extents {
-            x: 400,
-            y: 300,
-            width: 90,
-            height: 40,
-        });
-    assert_eq!(resolved(&mut fake, &entry), "/back");
 }
 
 #[test]
@@ -187,10 +159,7 @@ fn an_identifier_basis_ref_resolves_on_its_unique_identifier() {
     let error = refusal(&mut fake, &entry);
     assert_eq!(error.code, ErrorCode::StaleRef);
     assert_eq!(kind(&error), "resolve_no_candidate");
-}
 
-#[test]
-fn two_nodes_that_share_the_identifier_and_its_recorded_name_are_ambiguous() {
     let mut fake = Fake::new();
     for path in ["/one", "/two"] {
         let mut read = node(PUSH_BUTTON, "Save", 40, 20);
@@ -212,6 +181,18 @@ fn two_nodes_that_share_the_identifier_and_its_recorded_name_are_ambiguous() {
         .properties
         .name = Field::Present("Delete".to_owned());
     assert_eq!(resolved(&mut fake, &entry), "/one");
+
+    fake.nodes
+        .get_mut("/one")
+        .expect("one")
+        .read
+        .node
+        .properties
+        .name = Field::Present("Remove".to_owned());
+    let error = refusal(&mut fake, &entry);
+    assert_eq!(error.code, ErrorCode::StaleRef);
+    assert_eq!(kind(&error), "resolve_no_candidate");
+    assert_eq!(error.disposition, DeliverySemantics::not_delivered());
 }
 
 #[test]
@@ -250,10 +231,7 @@ fn a_description_basis_ref_resolves_on_its_description_alone() {
     let error = refusal(&mut fake, &entry);
     assert_eq!(error.code, ErrorCode::StaleRef);
     assert_eq!(kind(&error), "resolve_no_candidate");
-}
 
-#[test]
-fn a_description_that_cannot_be_read_withholds_the_answer() {
     let mut fake = Fake::new();
     let mut first = node(PUSH_BUTTON, "Save", 40, 20);
     first.node.properties.description = Field::Present("first row".to_owned());
@@ -267,6 +245,26 @@ fn a_description_that_cannot_be_read_withholds_the_answer() {
     let error = refusal(&mut fake, &entry);
     assert_eq!(error.code, ErrorCode::StaleRef);
     assert!(is_incomplete(&error));
+
+    let mut fake = Fake::new();
+    let mut save = node(PUSH_BUTTON, "Save", 40, 20);
+    save.node.properties.description = Field::Present("primary action".to_owned());
+    fake.add(FRAME_PATH, "/save", save);
+    let mut entry = fake.entry_of("/save", true);
+    entry.identity.description = Some("primary action".to_owned());
+    entry.identity.basis = Some(IdentityBasis::Description);
+    entry.scope.path.clear();
+    assert_eq!(resolved(&mut fake, &entry), "/save");
+    fake.nodes
+        .get_mut("/save")
+        .expect("save")
+        .read
+        .node
+        .properties
+        .name = Field::Present("Delete".to_owned());
+    let error = refusal(&mut fake, &entry);
+    assert_eq!(error.code, ErrorCode::StaleRef);
+    assert_eq!(kind(&error), "resolve_no_candidate");
 }
 
 fn open_item(description: &str) -> crate::tree::ObservedRead {
@@ -343,34 +341,28 @@ fn duplicate_offscreen_controls_are_ambiguous_even_without_usable_bounds() {
     let error = refusal(&mut fake, &entry);
     assert_eq!(error.code, ErrorCode::AmbiguousTarget);
     assert_eq!(kind(&error), "identity_not_unique");
+    assert_eq!(error.disposition, DeliverySemantics::not_delivered());
     assert_eq!(fake.reads.gate + fake.reads.levels + fake.reads.searches, 0);
 
     entry.identity.basis = None;
     let error = refusal(&mut fake, &entry);
     assert_eq!(error.code, ErrorCode::StaleRef);
     assert_eq!(kind(&error), "resolve_unverifiable_entry");
-}
 
-#[test]
-fn a_positional_basis_ref_keeps_its_stored_bounds_behavior() {
-    let mut fake = Fake::new();
-    fake.add(FRAME_PATH, "/panel", node(PANEL, "", 200, 100));
-    let entry = fake.entry_of("/panel", true);
-    assert_eq!(entry.identity.basis, Some(IdentityBasis::Positional));
-    assert_eq!(resolved(&mut fake, &entry), "/panel");
-
-    fake.nodes
-        .get_mut("/panel")
-        .expect("panel")
-        .read
-        .node
-        .extents = Field::Present(crate::tree::Extents {
-        x: 0,
-        y: 0,
-        width: 200,
-        height: 40,
-    });
-    let error = refusal(&mut fake, &entry);
-    assert_eq!(error.code, ErrorCode::StaleRef);
-    assert_eq!(kind(&error), "resolve_no_candidate");
+    for mut fake in [named_twins(), one_button()] {
+        let path = if fake.nodes.contains_key("/first") {
+            "/first"
+        } else {
+            "/back"
+        };
+        let mut entry = fake.entry_of(path, true);
+        assert!(entry.geometry.bounds.is_some());
+        entry.identity.basis = Some(IdentityBasis::Ambiguous);
+        let error = refusal(&mut fake, &entry);
+        assert_eq!(error.code, ErrorCode::AmbiguousTarget);
+        assert_eq!(kind(&error), "identity_not_unique");
+        assert_eq!(error.disposition, DeliverySemantics::not_delivered());
+        assert_eq!(fake.reads.levels, 0);
+        assert_eq!(fake.reads.searches, 0);
+    }
 }

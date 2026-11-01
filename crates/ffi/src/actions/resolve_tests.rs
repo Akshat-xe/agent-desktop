@@ -358,37 +358,11 @@ fn exact_ref_entry_refuses_the_version_that_predates_the_geometry_frame() {
     assert!(error.message.contains("version or size"));
 }
 
-#[path = "resolve_basis_tests.rs"]
-mod basis_tests;
+#[path = "resolve_entry_tests.rs"]
+mod entry_tests;
 
 #[path = "resolve_refusal_tests.rs"]
 mod refusal_tests;
 
-#[test]
-fn a_scoped_entry_is_refused_before_the_adapter_searches() {
-    use refusal_tests::{Registered, core_entry, resolve};
-    let registered = Registered::new(None);
-    let mut entry = core_entry(Some(agent_desktop_core::IdentityBasis::Name));
-    entry.scope.root_ref = Some("@e1".into());
-    let (result, out) = resolve(&registered, &entry);
-    assert_eq!(result, crate::error::AdResult::ErrStaleRef);
-    assert!(out.ptr.is_null());
-    assert_eq!(registered.resolves(), 0);
-}
-
 #[path = "resolve_effect_tests.rs"]
 mod effect_tests;
-
-#[test]
-fn exact_ref_with_value_mirroring_name_derives_description_basis() {
-    let mut entry = test_ref_entry();
-    entry.identity.role = c"textfield".as_ptr();
-    entry.identity.name = c"hello".as_ptr();
-    entry.identity.value = c"hello".as_ptr();
-    entry.identity.description = c"Billing".as_ptr();
-    let decoded = decode(entry).unwrap();
-    assert_eq!(
-        decoded.identity.basis,
-        Some(agent_desktop_core::IdentityBasis::Description)
-    );
-}

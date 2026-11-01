@@ -68,3 +68,23 @@ fn ax_only_and_dom_only_identifiers_resolve_deterministically() {
         );
     }
 }
+
+#[test]
+fn a_positional_anchor_with_an_identifier_is_matched_on_that_identifier() {
+    let mut anchor = entry();
+    anchor.identity.basis = Some(crate::IdentityBasis::Positional);
+    anchor.identity.native_id = Some(identifier("click-status"));
+    anchor.identity.name = None;
+    let live = |value: &str| IdentifierEvidence::typed([identifier(value)], Some(0), true);
+    let matched = |value: &str| {
+        identity_match(
+            &anchor,
+            &LocatorField::Absent,
+            &LocatorField::Absent,
+            &LocatorField::Absent,
+            &live(value),
+        )
+    };
+    assert_eq!(matched("click-status"), IdentityMatch::Match);
+    assert_eq!(matched("other-status"), IdentityMatch::NoMatch);
+}

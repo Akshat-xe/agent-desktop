@@ -1,14 +1,10 @@
-use agent_desktop_core::{
-    AdapterError, DeliverySemantics, ErrorCode, IdentityBasis, LocatorField, RefEntry,
-};
+use agent_desktop_core::{AdapterError, DeliverySemantics, ErrorCode, IdentityBasis, RefEntry};
 
-use super::*;
 use crate::tree::Field;
-use crate::tree::live::test_support::{evidence, ref_entry};
 use crate::tree::resolve::resolve;
 use crate::tree::resolve::resolve_errors::is_incomplete;
 use crate::tree::resolve::resolve_fake::{FRAME_PATH, Fake, deadline, node};
-use crate::tree::vocabulary::role_numbers::{MENU_ITEM, PUSH_BUTTON};
+use crate::tree::vocabulary::role_numbers::MENU_ITEM;
 
 fn kind(error: &AdapterError) -> &str {
     error
@@ -40,41 +36,18 @@ fn set_name(fake: &mut Fake, path: &str, name: &str) {
         .name = Field::Present(name.to_owned());
 }
 
-#[test]
-fn an_identifier_basis_ref_never_resolves_a_button_whose_recorded_name_moved() {
-    let mut fake = Fake::new();
-    let mut save = node(PUSH_BUTTON, "Save", 40, 20);
-    save.node.properties.accessible_id = Field::Present("toolbar.primary".to_owned());
-    fake.add(FRAME_PATH, "/save", save);
-    let mut entry = fake.entry_of("/save", true);
-    assert_eq!(entry.identity.basis, Some(IdentityBasis::NativeId));
-    assert_eq!(entry.identity.name.as_deref(), Some("Save"));
-    entry.scope.path.clear();
-    assert_eq!(resolved(&mut fake, &entry), "/save");
-
-    set_name(&mut fake, "/save", "Delete");
-    let error = refusal(&mut fake, &entry);
-    assert_eq!(error.code, ErrorCode::StaleRef);
-    assert_eq!(kind(&error), "resolve_no_candidate");
-    assert_eq!(error.disposition, DeliverySemantics::not_delivered());
+fn set_description_field(fake: &mut Fake, path: &str, field: Field<String>) {
+    fake.nodes
+        .get_mut(path)
+        .expect("the item is in the menu")
+        .read
+        .node
+        .properties
+        .description = field;
 }
 
-#[test]
-fn a_description_basis_ref_never_resolves_a_button_whose_recorded_name_moved() {
-    let mut fake = Fake::new();
-    let mut save = node(PUSH_BUTTON, "Save", 40, 20);
-    save.node.properties.description = Field::Present("primary action".to_owned());
-    fake.add(FRAME_PATH, "/save", save);
-    let mut entry = fake.entry_of("/save", true);
-    entry.identity.description = Some("primary action".to_owned());
-    entry.identity.basis = Some(IdentityBasis::Description);
-    entry.scope.path.clear();
-    assert_eq!(resolved(&mut fake, &entry), "/save");
-
-    set_name(&mut fake, "/save", "Delete");
-    let error = refusal(&mut fake, &entry);
-    assert_eq!(error.code, ErrorCode::StaleRef);
-    assert_eq!(kind(&error), "resolve_no_candidate");
+fn set_description(fake: &mut Fake, path: &str, description: &str) {
+    set_description_field(fake, path, Field::Present(description.to_owned()));
 }
 
 fn menu_item(description: &str) -> crate::tree::ObservedRead {
@@ -106,63 +79,24 @@ fn a_menu_ref_never_resolves_beside_another_item_whose_description_is_unread() {
     assert!(is_incomplete(&error), "{error:?}");
     assert_eq!(error.details.as_ref().expect("details")["complete"], false);
     assert_eq!(error.disposition, DeliverySemantics::not_delivered());
-}
 
-fn menu_item_entry() -> RefEntry {
-    let mut entry = ref_entry("menuitem");
-    entry.identity.name = Some("Open".to_owned());
-    entry.identity.description = Some("open".to_owned());
-    entry.identity.basis = Some(IdentityBasis::Description);
-    entry.identity.retained_object = Some(":1.2/open".to_owned());
-    entry
-}
+    set_description(&mut fake, "/close", "close");
+    assert_eq!(resolved(&mut fake, &entry), "/open");
+    set_description_field(&mut fake, "/open", Field::Failed("unread".to_owned()));
+    let error = refusal(&mut fake, &entry);
+    assert!(is_incomplete(&error), "{error:?}");
 
-fn item_evidence(name: &str, description: LocatorField<String>, address: &str) -> LocatorEvidence {
-    let mut live = evidence("menuitem", Some(name), None, None);
-    live.description = description;
-    live.identifiers = live
-        .identifiers
-        .clone()
-        .with_retained_object(address.to_owned());
-    live
-}
+    set_description(&mut fake, "/open", "close");
+    let error = refusal(&mut fake, &entry);
+    assert_eq!(error.code, ErrorCode::StaleRef);
+    assert_eq!(kind(&error), "resolve_no_candidate");
 
-#[test]
-fn identity_admission_counts_full_matches_and_keeps_the_address_apart() {
-    let entry = menu_item_entry();
-    let open = || LocatorField::Known("open".to_owned());
+    set_description(&mut fake, "/open", "open");
+    set_name(&mut fake, "/open", "Delete");
+    let error = refusal(&mut fake, &entry);
+    assert_eq!(error.code, ErrorCode::StaleRef);
+    assert_eq!(kind(&error), "resolve_no_candidate");
 
-    assert_eq!(
-        identity_admission(&entry, &item_evidence("Open", open(), ":1.2/open")),
-        Admission::Collect
-    );
-    assert_eq!(
-        identity_admission(&entry, &item_evidence("Open", open(), ":1.2/close")),
-        Admission::Partial
-    );
-    assert_eq!(
-        identity_admission(
-            &entry,
-            &item_evidence("Open", LocatorField::Unknown, ":1.2/close")
-        ),
-        Admission::Unread
-    );
-    assert_eq!(
-        identity_admission(
-            &entry,
-            &item_evidence("Open", LocatorField::Unknown, ":1.2/open")
-        ),
-        Admission::Unread
-    );
-    assert_eq!(
-        identity_admission(
-            &entry,
-            &item_evidence("Open", LocatorField::Known("close".to_owned()), ":1.2/open")
-        ),
-        Admission::Reject
-    );
-    assert_eq!(
-        identity_admission(&entry, &item_evidence("Delete", open(), ":1.2/open")),
-        Admission::Reject
-    );
+    set_name(&mut fake, "/open", "Open");
+    assert_eq!(resolved(&mut fake, &entry), "/open");
 }

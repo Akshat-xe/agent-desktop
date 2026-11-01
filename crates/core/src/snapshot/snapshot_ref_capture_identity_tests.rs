@@ -91,12 +91,7 @@ fn removed_twin_never_lets_a_drill_select_the_survivor() {
         .err()
         .unwrap();
     assert_eq!(error.code(), "AMBIGUOUS_TARGET");
-}
 
-#[test]
-fn skeleton_twin_refuses_the_drill_while_both_exist() {
-    let _home = HomeGuard::new();
-    let (id, _) = capture_skeleton(&["Panel", "Panel"]);
     let adapter = adapter_with(&["Panel", "Panel"]);
     let error = run_from_ref(&adapter, &TreeOptions::default(), "@e2", Some(&id))
         .err()
@@ -114,7 +109,13 @@ fn unique_skeleton_anchor_drills_and_its_child_acts_on_the_right_element() {
     );
     let adapter = adapter_with(&["Panel", "Other"]);
     let result = run_from_ref(&adapter, &TreeOptions::default(), "@e1", Some(&id)).unwrap();
+    assert_eq!(result.snapshot_id.as_deref(), Some(id.as_str()));
     let child = result.tree.children[0].ref_id.clone().unwrap();
+    let (_, local) = crate::refs::ref_token::resolve_ref_target(&child).unwrap();
+    assert_eq!(
+        result.refmap.get(&local).unwrap().identity.basis,
+        Some(IdentityBasis::Name)
+    );
     click(&adapter, &child).unwrap();
     assert_eq!(*adapter.actions.lock().unwrap(), vec![vec![0, 0]]);
 }
@@ -136,6 +137,12 @@ fn a_twin_below_the_skeleton_depth_cannot_stand_in_for_a_removed_anchor() {
     let _home = HomeGuard::new();
     let (id, map) = capture_skeleton(&["Panel", "Other"]);
     assert_eq!(map.get("@e1").unwrap().scope.census_depth, Some(3));
+    let present = adapter_with(&["Panel", "Other"]);
+    with_deep_twin_at(&present, 1);
+    click(&present, &format!("@{id}:e1")).unwrap();
+    assert_eq!(*present.actions.lock().unwrap(), vec![vec![0]]);
+    let result = run_from_ref(&present, &TreeOptions::default(), "@e1", Some(&id)).unwrap();
+    assert!(result.tree.children[0].ref_id.is_some());
     let adapter = adapter_with(&["Other"]);
     adapter.tree.lock().unwrap().children[0].children.clear();
     with_deep_twin_at(&adapter, 0);
@@ -144,18 +151,6 @@ fn a_twin_below_the_skeleton_depth_cannot_stand_in_for_a_removed_anchor() {
     let error = click(&adapter, &format!("@{id}:e1")).unwrap_err();
     assert_eq!(error.code(), "STALE_REF");
     assert!(adapter.actions.lock().unwrap().is_empty());
-}
-
-#[test]
-fn a_twin_below_the_skeleton_depth_does_not_stop_the_present_anchor() {
-    let _home = HomeGuard::new();
-    let (id, _) = capture_skeleton(&["Panel", "Other"]);
-    let adapter = adapter_with(&["Panel", "Other"]);
-    with_deep_twin_at(&adapter, 1);
-    click(&adapter, &format!("@{id}:e1")).unwrap();
-    assert_eq!(*adapter.actions.lock().unwrap(), vec![vec![0]]);
-    let result = run_from_ref(&adapter, &TreeOptions::default(), "@e1", Some(&id)).unwrap();
-    assert!(result.tree.children[0].ref_id.is_some());
 }
 
 #[test]

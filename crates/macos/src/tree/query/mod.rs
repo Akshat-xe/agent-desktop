@@ -349,29 +349,4 @@ mod tests {
         assert_eq!(error.code, ErrorCode::StaleRef);
         assert_eq!(error.details.unwrap()["kind"], "locator_root_invalid");
     }
-
-    #[test]
-    fn a_focused_surface_owned_by_another_window_is_refused_before_it_is_captured() {
-        let error = admit_focused_owner("w-11", Some(12))
-            .expect_err("window w-12 holds focus, so its tree is not window w-11's surface");
-        assert_eq!(error.code, ErrorCode::WindowNotFound);
-        assert!(
-            error.message.contains("w-11"),
-            "the error names the recorded window: {}",
-            error.message
-        );
-    }
-
-    #[test]
-    fn a_focused_surface_of_the_recorded_window_is_captured() {
-        assert!(admit_focused_owner("w-11", Some(11)).is_ok());
-    }
-
-    #[test]
-    fn a_focused_surface_with_no_readable_owner_is_refused() {
-        assert!(
-            admit_focused_owner("w-11", None).is_err(),
-            "an unreadable owner number cannot prove the captured surface belongs to w-11"
-        );
-    }
 }

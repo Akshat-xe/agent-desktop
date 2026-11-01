@@ -46,7 +46,7 @@ fn materialized_bases(nodes: Vec<ObservedNode>, complete: bool) -> Vec<Option<Id
 }
 
 #[test]
-fn a_unique_identifier_is_recorded_as_the_native_id_basis() {
+fn complete_surveys_record_basis_for_refmaps_and_selected_matches() {
     let button = with_identifier(evidence("button", Some("Save")), "save-button");
     let bases = materialized_bases(
         vec![
@@ -55,12 +55,8 @@ fn a_unique_identifier_is_recorded_as_the_native_id_basis() {
         ],
         true,
     );
-
     assert_eq!(bases, [Some(IdentityBasis::NativeId)]);
-}
 
-#[test]
-fn a_shared_identifier_with_distinct_names_is_recorded_as_the_name_basis() {
     let first = with_identifier(evidence("button", Some("Save")), "shared");
     let second = with_identifier(evidence("button", Some("Cancel")), "shared");
     let bases = materialized_bases(
@@ -71,15 +67,11 @@ fn a_shared_identifier_with_distinct_names_is_recorded_as_the_name_basis() {
         ],
         true,
     );
-
     assert_eq!(
         bases,
         [Some(IdentityBasis::Name), Some(IdentityBasis::Name)]
     );
-}
 
-#[test]
-fn an_entry_without_identifier_or_text_is_recorded_as_positional() {
     let bases = materialized_bases(
         vec![
             node(0, evidence("window", Some("Fixture")), vec![1], &[]),
@@ -87,31 +79,98 @@ fn an_entry_without_identifier_or_text_is_recorded_as_positional() {
         ],
         true,
     );
-
     assert_eq!(bases, [Some(IdentityBasis::Positional)]);
+
+    let bases = materialized_bases(
+        vec![
+            node(0, evidence("window", Some("Fixture")), vec![1, 2], &[]),
+            node(1, evidence("button", Some("Save")), vec![], &[0]),
+            node(2, evidence("link", Some("Save")), vec![], &[1]),
+        ],
+        true,
+    );
+    assert_eq!(
+        bases,
+        [Some(IdentityBasis::Name), Some(IdentityBasis::Name)],
+        "identical text in another role is not a look-alike"
+    );
+
+    let save = with_identifier(evidence("button", Some("Save")), "shared");
+    let cancel = with_identifier(evidence("button", Some("Cancel")), "shared");
+    let elsewhere = with_identifier(evidence("button", Some("Save")), "elsewhere");
+    let bases = materialized_bases(
+        vec![
+            node(0, evidence("window", Some("Fixture")), vec![1, 2, 3], &[]),
+            node(1, save, vec![], &[0]),
+            node(2, cancel, vec![], &[1]),
+            node(3, elsewhere, vec![], &[1]),
+        ],
+        true,
+    );
+    assert_eq!(
+        bases,
+        [
+            Some(IdentityBasis::Name),
+            Some(IdentityBasis::Name),
+            Some(IdentityBasis::NativeId)
+        ],
+        "identical text under another identifier is not a look-alike"
+    );
+
+    let query = LocatorQuery {
+        identity: crate::IdentityPredicate {
+            role: Some("button".into()),
+            name: Some("primary-button".into()),
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let resolution = evaluate_locator_tree(
+        tree(
+            vec![
+                node(0, evidence("window", Some("Fixture")), vec![1, 2], &[]),
+                node(1, evidence("button", Some("primary-button")), vec![], &[0]),
+                node(
+                    2,
+                    evidence("button", Some("secondary-button")),
+                    vec![],
+                    &[1],
+                ),
+            ],
+            vec![0],
+            true,
+        ),
+        &query,
+        &LocatorResolveRequest {
+            materialization: LocatorMaterialization::None,
+            ..request()
+        },
+    )
+    .unwrap();
+    assert_eq!(resolution.matches.len(), 1);
+    assert_eq!(
+        resolution.matches[0].entry.identity.basis,
+        Some(IdentityBasis::Name)
+    );
 }
 
 #[test]
-fn an_incomplete_observation_records_ambiguous_even_for_a_unique_identifier() {
+fn unread_or_partial_surveys_withhold_only_unsupported_proofs() {
+    use crate::LocatorField;
     let button = with_identifier(evidence("button", Some("Save")), "save-button");
+
     let bases = materialized_bases(
         vec![
             node(0, evidence("window", Some("Fixture")), vec![1], &[]),
-            node(1, button, vec![], &[0]),
+            node(1, button.clone(), vec![], &[0]),
         ],
         false,
     );
-
     assert_eq!(bases, [Some(IdentityBasis::Ambiguous)]);
-}
 
-#[test]
-fn an_unread_field_withdraws_only_the_proofs_that_rest_on_it() {
-    use crate::LocatorField;
     let mut unread_value_and_description = evidence("button", Some("Other"));
     unread_value_and_description.value = LocatorField::Unknown;
     unread_value_and_description.description = LocatorField::Unknown;
-    let button = with_identifier(evidence("button", Some("Save")), "save-button");
     let bases = materialized_bases(
         vec![
             node(0, evidence("window", Some("Fixture")), vec![1, 2], &[]),
@@ -140,11 +199,7 @@ fn an_unread_field_withdraws_only_the_proofs_that_rest_on_it() {
         [Some(IdentityBasis::Name), Some(IdentityBasis::Name)],
         "unread identifiers withdraw the identifier proof; each name is still unique across the role"
     );
-}
 
-#[test]
-fn an_unread_field_on_another_role_leaves_proofs_intact() {
-    use crate::LocatorField;
     let mut other_role = evidence("checkbox", None);
     other_role.name = LocatorField::Unknown;
     other_role.identifiers = IdentifierEvidence::typed([], None, false);
@@ -157,10 +212,7 @@ fn an_unread_field_on_another_role_leaves_proofs_intact() {
         true,
     );
     assert_eq!(bases.last().copied().flatten(), Some(IdentityBasis::Name));
-}
 
-#[test]
-fn with_identifiers_unread_a_name_repeated_in_the_role_stays_ambiguous() {
     let mut first = evidence("button", Some("Delete"));
     first.identifiers = IdentifierEvidence::typed([], None, false);
     let second = with_identifier(evidence("button", Some("Delete")), "row-2-delete");
@@ -179,11 +231,7 @@ fn with_identifiers_unread_a_name_repeated_in_the_role_stays_ambiguous() {
             Some(IdentityBasis::Ambiguous)
         ]
     );
-}
 
-#[test]
-fn an_unread_description_blocks_only_a_description_basis() {
-    use crate::LocatorField;
     let mut described = with_identifier(evidence("button", None), "shared");
     described.description = LocatorField::Known("Archive".into());
     let mut unread = with_identifier(evidence("button", None), "shared");
@@ -203,56 +251,9 @@ fn an_unread_description_blocks_only_a_description_basis() {
             Some(IdentityBasis::Ambiguous)
         ]
     );
-}
 
-#[test]
-fn identical_text_in_different_roles_earns_the_name_basis_in_both() {
-    let bases = materialized_bases(
-        vec![
-            node(0, evidence("window", Some("Fixture")), vec![1, 2], &[]),
-            node(1, evidence("button", Some("Save")), vec![], &[0]),
-            node(2, evidence("link", Some("Save")), vec![], &[1]),
-        ],
-        true,
-    );
-
-    assert_eq!(
-        bases,
-        [Some(IdentityBasis::Name), Some(IdentityBasis::Name)],
-        "identical text in another role is not a look-alike"
-    );
-}
-
-#[test]
-fn identical_text_in_different_identifier_groups_is_not_ambiguous() {
-    let save = with_identifier(evidence("button", Some("Save")), "shared");
-    let cancel = with_identifier(evidence("button", Some("Cancel")), "shared");
-    let elsewhere = with_identifier(evidence("button", Some("Save")), "elsewhere");
-    let bases = materialized_bases(
-        vec![
-            node(0, evidence("window", Some("Fixture")), vec![1, 2, 3], &[]),
-            node(1, save, vec![], &[0]),
-            node(2, cancel, vec![], &[1]),
-            node(3, elsewhere, vec![], &[1]),
-        ],
-        true,
-    );
-
-    assert_eq!(
-        bases,
-        [
-            Some(IdentityBasis::Name),
-            Some(IdentityBasis::Name),
-            Some(IdentityBasis::NativeId)
-        ],
-        "identical text under another identifier is not a look-alike"
-    );
-}
-
-#[test]
-fn an_unread_name_on_another_element_leaves_a_unique_identifier_proven() {
     let mut unreadable = evidence("button", Some("Cancel"));
-    unreadable.name = crate::LocatorField::Unknown;
+    unreadable.name = LocatorField::Unknown;
     let bases = materialized_bases(
         vec![
             node(0, evidence("window", Some("Fixture")), vec![1, 2], &[]),
@@ -266,12 +267,47 @@ fn an_unread_name_on_another_element_leaves_a_unique_identifier_proven() {
         ],
         true,
     );
-
     assert_eq!(
         bases[0],
         Some(IdentityBasis::NativeId),
         "a look-alike whose identifiers were read cannot share this identifier"
     );
+
+    let mut unreadable = evidence("button", Some("Save"));
+    unreadable.role = LocatorField::Unknown;
+    let bases = materialized_bases(
+        vec![
+            node(0, evidence("window", Some("Fixture")), vec![1, 2], &[]),
+            node(1, evidence("button", Some("Save")), vec![], &[0]),
+            node(2, unreadable, vec![], &[1]),
+        ],
+        true,
+    );
+    assert_eq!(
+        bases,
+        [Some(IdentityBasis::Ambiguous)],
+        "a node with an unread role withdraws the proofs of its look-alikes"
+    );
+
+    let omitted_descendants = |children_count: Option<u32>| {
+        let mut window = node(0, evidence("window", Some("Fixture")), vec![1, 2], &[]);
+        window.children_count = None;
+        let mut deep = node(2, evidence("group", Some("Deep")), vec![], &[1]);
+        deep.children_count = children_count;
+        materialized_bases(
+            vec![
+                window,
+                node(1, evidence("button", Some("Save")), vec![], &[0]),
+                deep,
+            ],
+            true,
+        )
+    };
+    assert_eq!(
+        omitted_descendants(Some(3)),
+        [Some(IdentityBasis::Ambiguous)]
+    );
+    assert_eq!(omitted_descendants(None), [Some(IdentityBasis::Name)]);
 }
 
 /// The survey counts every element a saved ref can still match, since live resolution
@@ -329,60 +365,4 @@ fn an_element_rooted_survey_proves_uniqueness_only_under_a_scope_root() {
     };
     assert_eq!(bases(Some("@e4")), [Some(IdentityBasis::Name)]);
     assert_eq!(bases(None), [Some(IdentityBasis::Ambiguous)]);
-}
-
-/// A node whose role could not be read may be a look-alike of any role, so it withdraws
-/// the proofs of every role, including that of a readable Save button.
-#[test]
-fn a_node_with_an_unread_role_withdraws_the_uniqueness_of_its_look_alikes() {
-    let mut unreadable = evidence("button", Some("Save"));
-    unreadable.role = crate::LocatorField::Unknown;
-    let bases = materialized_bases(
-        vec![
-            node(0, evidence("window", Some("Fixture")), vec![1, 2], &[]),
-            node(1, evidence("button", Some("Save")), vec![], &[0]),
-            node(2, unreadable, vec![], &[1]),
-        ],
-        true,
-    );
-    assert_eq!(bases, [Some(IdentityBasis::Ambiguous)]);
-}
-
-#[test]
-fn a_selected_match_carries_the_basis_its_survey_proved() {
-    let query = LocatorQuery {
-        identity: crate::IdentityPredicate {
-            role: Some("button".into()),
-            name: Some("primary-button".into()),
-            ..Default::default()
-        },
-        ..Default::default()
-    };
-    let resolution = evaluate_locator_tree(
-        tree(
-            vec![
-                node(0, evidence("window", Some("Fixture")), vec![1, 2], &[]),
-                node(1, evidence("button", Some("primary-button")), vec![], &[0]),
-                node(
-                    2,
-                    evidence("button", Some("secondary-button")),
-                    vec![],
-                    &[1],
-                ),
-            ],
-            vec![0],
-            true,
-        ),
-        &query,
-        &LocatorResolveRequest {
-            materialization: LocatorMaterialization::None,
-            ..request()
-        },
-    )
-    .unwrap();
-    assert_eq!(resolution.matches.len(), 1);
-    assert_eq!(
-        resolution.matches[0].entry.identity.basis,
-        Some(IdentityBasis::Name)
-    );
 }

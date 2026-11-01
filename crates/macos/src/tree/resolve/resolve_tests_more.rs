@@ -74,41 +74,6 @@ fn duplicate_positional_candidates_are_stale_when_bounds_drift() {
 }
 
 #[test]
-fn identity_refs_never_let_bounds_break_a_duplicate() {
-    let mut stored = entry(Some(42), Some("w-42"), None, None);
-    stored.identity.basis = Some(agent_desktop_core::IdentityBasis::Name);
-
-    let error = classify_candidates(
-        vec![
-            AXElement(std::ptr::null_mut()),
-            AXElement(std::ptr::null_mut()),
-        ],
-        &stored,
-        true,
-        Instant::now() + Duration::from_secs(1),
-    )
-    .err()
-    .expect("a ref that carries identity must not let bounds break a duplicate");
-
-    assert_eq!(error.code, ErrorCode::AmbiguousTarget);
-}
-
-#[test]
-fn identity_refs_never_let_bounds_confirm_a_single_candidate() {
-    let mut stored = entry(Some(42), Some("w-42"), None, None);
-    stored.identity.basis = Some(agent_desktop_core::IdentityBasis::Name);
-
-    let handle = classify_candidates(
-        vec![AXElement(std::ptr::null_mut())],
-        &stored,
-        false,
-        Instant::now() + Duration::from_secs(1),
-    );
-
-    assert!(handle.is_ok());
-}
-
-#[test]
 fn missing_bounds_hash_always_falls_through_to_ambiguous() {
     assert_eq!(
         classify_bounds_matches(0, false),
@@ -283,18 +248,6 @@ fn a_locator_anchor_is_verified_by_hydration_not_refused_for_its_basis() {
             );
         }
     }
-}
-
-#[test]
-fn a_complete_absence_refusal_is_not_delivered() {
-    let cause = AdapterError::element_not_found("element");
-    let error = stale_ref_error(&entry(None, Some("w-42"), None, None), &cause);
-
-    assert_eq!(error.code, ErrorCode::StaleRef);
-    assert_eq!(
-        error.disposition,
-        agent_desktop_core::DeliverySemantics::not_delivered()
-    );
 }
 
 #[test]

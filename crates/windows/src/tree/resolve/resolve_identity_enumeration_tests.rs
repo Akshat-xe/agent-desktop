@@ -120,18 +120,10 @@ fn a_panel_whose_first_child_faults_never_settles_a_unique_name() {
             "{failure:#x}: one match beside a subtree the walk could not read must never resolve"
         );
     }
-}
 
-/// The other direction on the same fixture: the identically named button behind the panel is there
-/// to be counted, so a scope read whole settles `AMBIGUOUS_TARGET` rather than a resolution. Without
-/// this the case above could pass on a tree that holds no look-alike at all.
-#[test]
-fn the_same_scope_read_whole_counts_the_look_alike_behind_the_panel() {
     let tree = captured_save_beside_a_panel();
     let entry = save_entry(&tree);
-
     let (found, unread_region) = counted_scope(&tree, &entry);
-
     assert_eq!(
         found,
         vec![SAVE_A, SAVE_B],

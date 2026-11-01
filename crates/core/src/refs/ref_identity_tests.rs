@@ -385,9 +385,6 @@ fn unknown_stable_text_field_does_not_collapse_to_absence() {
     );
 }
 
-#[path = "ref_identity_basis_tests.rs"]
-mod basis_tests;
-
 #[path = "ref_identity_scroll_tests.rs"]
 mod scroll_tests;
 

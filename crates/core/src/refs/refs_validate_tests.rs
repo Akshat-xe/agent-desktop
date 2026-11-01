@@ -13,21 +13,13 @@ fn legacy_ref_entry_json() -> String {
     .to_string()
 }
 
-/// A refmap written before identity bases existed carries no `basis` field and must stay
-/// loadable with `None`, so resolution refuses it as stale instead of guessing.
-#[test]
-fn a_ref_entry_without_a_basis_loads_with_basis_none() {
-    let entry: RefEntry = serde_json::from_str(&legacy_ref_entry_json()).unwrap();
-
-    assert_eq!(entry.identity.basis, None);
-    assert!(validate_ref_entry(&entry).is_ok());
-}
-
 /// Writing a positional entry back must keep `basis` out of the JSON only when
 /// no basis was recorded; a recorded one survives the round trip.
 #[test]
 fn a_recorded_basis_round_trips_while_a_legacy_entry_stays_absent() {
     let mut entry: RefEntry = serde_json::from_str(&legacy_ref_entry_json()).unwrap();
+    assert_eq!(entry.identity.basis, None);
+    assert!(validate_ref_entry(&entry).is_ok());
     let legacy_json = serde_json::to_string(&entry).unwrap();
     assert!(!legacy_json.contains("basis"), "json={legacy_json}");
 

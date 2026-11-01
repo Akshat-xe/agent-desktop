@@ -122,5 +122,9 @@ fn focused_capture_walks_the_verified_owner_not_a_title_lookup_result() {
 
     let refused = verified_focused_owner("w-11", Some("window-b"), |_| Ok(Some(12))).unwrap_err();
     assert_eq!(refused.code, ErrorCode::WindowNotFound);
+    assert!(refused.message.contains("w-11"));
+    assert!(verified_focused_owner("w-11", Some("window-c"), |_| Ok(None)).is_err());
     assert!(verified_focused_owner::<&str>("w-11", None, |_| Ok(None)).is_err());
+    assert!(verified_focused_owner("", Some("window-a"), |_| Ok(Some(11))).is_err());
+    assert!(verified_focused_owner("desktop", Some("window-a"), |_| Ok(Some(11))).is_err());
 }
