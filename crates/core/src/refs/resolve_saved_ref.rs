@@ -75,6 +75,11 @@ pub(crate) fn observe_saved_ref(
         lease,
     )?;
     let index = saved_ref_node(entry, token, &observed)?;
+    let node = observed
+        .nodes
+        .get(index)
+        .ok_or_else(|| AdapterError::internal("saved ref match is missing from the observation"))?;
+    adapter.validate_saved_ref_context(entry, node.evidence.identifiers.retained_object())?;
     Ok((window, observed, index))
 }
 

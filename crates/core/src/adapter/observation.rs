@@ -135,6 +135,18 @@ pub trait ObservationOps: Send + Sync {
         Err(AdapterError::not_supported("resolve_element_strict"))
     }
 
+    /// Checks platform-specific context that the saved ref's identity predicate
+    /// does not encode, against the token from the same observation that matched
+    /// it. This must not take a second live read: rooted finds and drills publish
+    /// refs from that observation. Adapters without extra context accept it.
+    fn validate_saved_ref_context(
+        &self,
+        _entry: &RefEntry,
+        _observed_token: Option<&str>,
+    ) -> Result<(), AdapterError> {
+        Ok(())
+    }
+
     fn resolve_locator_anchor(
         &self,
         _entry: &RefEntry,
