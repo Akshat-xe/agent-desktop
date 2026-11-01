@@ -4,7 +4,8 @@
 //! also focuses the target's window. The burst then keeps that element for the
 //! remaining units and takes the interaction lease only while each unit is
 //! delivered, so other callers act between keystrokes and per-keystroke
-//! resolution cannot make the rhythm uneven. Each unit still goes through the
+//! resolution cannot make the rhythm uneven. Each unit re-runs the live identity
+//! check under that lease. Each unit still goes through the
 //! adapter's own delivery checks, which for physical keystrokes confirm that the
 //! target's process and focused element are unchanged before a key is posted.
 //! The result is verified against the field as the last keystroke left it, and
@@ -133,9 +134,10 @@ fn next_due(slot: Instant, now: Instant, interval: Duration) -> Instant {
     (slot + interval).max(now + interval / 2)
 }
 
-/// The element the first keystroke resolved, and the process instance it
-/// belongs to, which every later keystroke must still reach.
+/// The saved ref, its resolved element and process instance, which every later
+/// keystroke must still reach.
 struct Burst {
+    entry: crate::RefEntry,
     handle: crate::NativeHandle,
     process: Option<crate::ProcessIdentity>,
 }
@@ -156,7 +158,11 @@ fn resolve_for_burst(
         .as_deref()
         .filter(|instance| !instance.is_empty())
         .map(|instance| crate::ProcessIdentity::new(entry.process.pid, instance));
-    Ok(Burst { handle, process })
+    Ok(Burst {
+        entry,
+        handle,
+        process,
+    })
 }
 
 fn deliver(
@@ -165,13 +171,34 @@ fn deliver(
     request: crate::ActionRequest,
     timeout_ms: u64,
 ) -> Result<crate::ActionResult, AppError> {
+    let deadline = crate::Deadline::after(timeout_ms)?;
+    let lease = adapter.acquire_interaction_lease(deadline)?;
+    confirm_target(adapter, burst, &request, deadline)?;
     let request = match &burst.process {
         Some(process) => request.with_expected_process(process.clone()),
         None => request,
     };
-    let deadline = crate::Deadline::after(timeout_ms)?;
-    let lease = adapter.acquire_interaction_lease(deadline)?;
     Ok(adapter.execute_action(&burst.handle, request, &lease)?)
+}
+
+/// Re-runs the first keystroke's live check so a replacement element is refused.
+fn confirm_target(
+    adapter: &dyn PlatformAdapter,
+    burst: &Burst,
+    request: &crate::ActionRequest,
+    deadline: crate::Deadline,
+) -> Result<(), AppError> {
+    crate::actionability::check_live_with_stability(
+        &crate::actionability::LiveCheckTarget {
+            entry: &burst.entry,
+            handle: &burst.handle,
+            adapter,
+            deadline,
+        },
+        request,
+        crate::actionability::StabilityExpectation::permissive(burst.entry.geometry.bounds_hash),
+    )?;
+    Ok(())
 }
 
 /// Splits text into the units one keystroke produces: a character together

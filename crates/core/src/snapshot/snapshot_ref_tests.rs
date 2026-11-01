@@ -363,6 +363,35 @@ fn test_run_from_ref_re_drill_replaces_drill_refs_only() {
     );
 }
 
+#[test]
+fn a_tokenless_drill_refuses_a_depth_no_walk_supports() {
+    use crate::snapshot::tokenless_capture_support as tokenless;
+
+    let _guard = HomeGuard::new();
+    let adapter = tokenless::CaptureAdapter::new(tokenless::anchored_window());
+    let captured = tokenless::snapshot(&adapter);
+    let (anchor_ref, _) = tokenless::named(&captured.refmap, "Sidebar");
+    let snapshot_id = tokenless::save(&captured.refmap);
+    let too_deep = TreeOptions {
+        max_depth: 51,
+        ..drill_opts()
+    };
+    let walks_before = adapter.captures();
+
+    let drill = run_from_ref(&adapter, &too_deep, &anchor_ref, Some(&snapshot_id));
+
+    match drill {
+        Ok(_) => panic!("a depth no snapshotted walk reaches must be refused"),
+        Err(AppError::Adapter(error)) => assert_eq!(error.code, crate::ErrorCode::InvalidArgs),
+        Err(other) => panic!("expected Adapter(InvalidArgs), got {other:?}"),
+    }
+    assert_eq!(
+        adapter.captures(),
+        walks_before,
+        "the refusal must land before the drill observes anything"
+    );
+}
+
 #[path = "snapshot_ref_window_tests.rs"]
 mod window_tests;
 

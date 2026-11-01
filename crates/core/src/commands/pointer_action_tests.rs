@@ -7,7 +7,8 @@ use crate::{
     AdapterError, DeliverySemantics, ErrorCode, Rect, actions::capability,
     adapter::hit_test::HitTestResult,
 };
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 #[test]
 fn unstable_bounds_are_retryable() {
@@ -305,3 +306,6 @@ fn an_unchanged_bounds_hash_after_scroll_stops_the_scroll_retries() {
 
 #[path = "pointer_action_focus_tests.rs"]
 mod focus_tests;
+
+#[path = "pointer_lease_reuse_tests.rs"]
+mod lease_reuse_tests;

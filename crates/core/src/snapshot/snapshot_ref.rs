@@ -150,6 +150,7 @@ fn drill_capture(
     local_root_ref: &str,
     deadline: crate::Deadline,
 ) -> Result<DrillCapture, AppError> {
+    ObservationRequest::snapshot(opts, deadline).validate()?;
     if crate::refs::ref_identity::element_token(entry).is_some() {
         return token_capture(adapter, opts, entry, local_root_ref, deadline);
     }
