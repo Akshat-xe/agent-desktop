@@ -10,13 +10,27 @@ use super::{
     selection_completeness::first_is_authoritative,
     validate::{validate_query, validate_request},
 };
-use crate::{AdapterError, locator::LocatorQuery};
-use std::collections::BTreeSet;
+use crate::{AdapterError, locator::LocatorQuery, refs::RefPath};
+use std::collections::{BTreeSet, HashSet};
 
 pub fn evaluate_locator_tree(
-    mut tree: ObservedTree,
+    tree: ObservedTree,
     query: &LocatorQuery,
     request: &LocatorResolveRequest,
+) -> Result<LocatorResolution, AdapterError> {
+    let unique = crate::refs::ref_alloc_unique::unique_capture_nodes(&tree);
+    evaluate_locator_tree_in(tree, None, query, request, &unique)
+}
+
+/// `evaluate_locator_tree` over one complete observation, with the matches drawn
+/// from the subtree at `scope` alone. `unique` is that same observation's capture
+/// census, so the refs a match records are proven by the read that found it.
+pub(super) fn evaluate_locator_tree_in(
+    mut tree: ObservedTree,
+    scope: Option<&RefPath>,
+    query: &LocatorQuery,
+    request: &LocatorResolveRequest,
+    unique: &HashSet<usize>,
 ) -> Result<LocatorResolution, AdapterError> {
     validate_query(query)?;
     validate_request(request)?;
@@ -59,6 +73,9 @@ pub fn evaluate_locator_tree(
     let mut matched_indices = Vec::new();
     let mut unknown = false;
     for index in 0..tree.nodes.len() {
+        if !in_scope(&tree.nodes[index].path, scope) {
+            continue;
+        }
         match matches[cell(index, root_clause, clauses.len())] {
             MatchVerdict::Match => matched_indices.push(index),
             MatchVerdict::Unknown => unknown = true,
@@ -72,13 +89,13 @@ pub fn evaluate_locator_tree(
         LocatorMaterialization::None => None,
         LocatorMaterialization::SelectedMatches => {
             let (refmap, materialization_complete) =
-                materialize_refmap(&mut tree, &normalized, Some(&selected))?;
+                materialize_refmap(&mut tree, unique, &normalized, Some(&selected))?;
             complete &= materialization_complete;
             Some(refmap)
         }
         LocatorMaterialization::FullRefMap => {
             let (refmap, materialization_complete) =
-                materialize_refmap(&mut tree, &normalized, None)?;
+                materialize_refmap(&mut tree, unique, &normalized, None)?;
             complete &= materialization_complete;
             Some(refmap)
         }
@@ -91,7 +108,8 @@ pub fn evaluate_locator_tree(
             .nodes
             .get(index)
             .ok_or_else(|| AdapterError::internal("selected locator node is out of bounds"))?;
-        let entry = ref_entry(node, &tree.source, &normalized);
+        let mut entry = ref_entry(node, &tree.source, &normalized);
+        entry.identity.unique_at_capture = unique.contains(&index);
         selected_matches.push(LocatorMatch {
             data,
             document_order: node.document_order,
@@ -106,6 +124,7 @@ pub fn evaluate_locator_tree(
     let roles_present = if matched_indices.is_empty() {
         tree.nodes
             .iter()
+            .filter(|node| in_scope(&node.path, scope))
             .filter_map(|node| match &node.evidence.role {
                 LocatorField::Known(role) => Some(role.clone()),
                 LocatorField::Absent | LocatorField::Unknown => None,
@@ -260,4 +279,11 @@ fn aggregate_subtree(
 
 fn cell(node: usize, clause: usize, clause_count: usize) -> usize {
     node * clause_count + clause
+}
+
+/// Whether a node sits inside the subtree a rooted query is scoped to. The scope
+/// is the matched root's own path in the same observation, so the root itself and
+/// its descendants are in and nothing else is.
+fn in_scope(path: &RefPath, scope: Option<&RefPath>) -> bool {
+    scope.is_none_or(|scope| path.starts_with(scope.as_slice()))
 }

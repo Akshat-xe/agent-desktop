@@ -49,8 +49,15 @@ impl MenuContext {
         self.complete && other.complete && self == other
     }
 
+    /// The entry scoped to this popup. A captured menu ref carries the popup
+    /// context it was taken in, and a popup that reads differently cannot answer
+    /// for it. The locator anchor a resolution lands carries none: core has
+    /// already proved one live element matches the stored predicate in this
+    /// popup, so there is no earlier context to disagree with.
     pub(crate) fn entry_for(&self, entry: &RefEntry) -> Option<RefEntry> {
-        let token = entry.identity.retained_object.as_deref()?;
+        let Some(token) = entry.identity.retained_object.as_deref() else {
+            return Some(entry.clone());
+        };
         let (expected, object) = Self::decode(token)?;
         if !expected.matches(self) || object.is_empty() {
             return None;

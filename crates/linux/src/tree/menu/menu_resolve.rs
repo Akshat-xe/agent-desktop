@@ -69,7 +69,7 @@ impl Source for MenuSource<'_> {
 
     fn evidence(&mut self, element: &AtspiElement) -> Result<LocatorEvidence, AdapterError> {
         let connection = &self.connection;
-        let mut read = within(
+        let read = within(
             self.deadline,
             read_evidence(
                 connection,
@@ -77,10 +77,6 @@ impl Source for MenuSource<'_> {
                 crate::tree::properties::read_purpose::ReadPurpose::Identity,
             ),
         )?;
-        read.evidence.identifiers = read
-            .evidence
-            .identifiers
-            .with_retained_object(element.object_identity());
         match read.liveness {
             Liveness::TimedOut => Err(unanswered()),
             _ => Ok(read.evidence),

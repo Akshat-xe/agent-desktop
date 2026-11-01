@@ -37,6 +37,7 @@ mod observation_request;
 mod observation_root;
 mod observation_source;
 mod observed_node;
+mod observed_observation;
 mod observed_subtree;
 mod observed_tree;
 mod predicate;
@@ -78,10 +79,12 @@ pub use observation_request::{ObservationMode, ObservationRequest};
 pub use observation_root::ObservationRoot;
 pub use observation_source::ObservationSource;
 pub use observed_node::ObservedNode;
+pub(crate) use observed_observation::ObservedObservation;
 pub use observed_subtree::ObservedSubtree;
 pub use observed_tree::ObservedTree;
 pub use ref_evidence_requirements::RefEvidenceRequirements;
 pub use resolve::resolve_query;
+pub(crate) use resolve::resolve_query_from;
 pub use validate::{validate_query, validate_request};
 
 #[cfg(test)]

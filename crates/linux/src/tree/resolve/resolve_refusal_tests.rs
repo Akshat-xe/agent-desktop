@@ -321,6 +321,7 @@ fn a_retained_object_ref_refuses_a_replacement_at_the_old_rectangle() {
     fake.add(FRAME_PATH, "/first", window_field(0, 38, 420, 34));
     fake.add(FRAME_PATH, "/second", window_field(0, 80, 420, 34));
     let mut entry = fake.entry_of("/first", true);
+    entry.identity.name = Some("First".to_owned());
     entry.identity.retained_object = Some(":1.2/first".to_owned());
 
     let children = &mut fake.nodes.get_mut(FRAME_PATH).expect("frame").children;

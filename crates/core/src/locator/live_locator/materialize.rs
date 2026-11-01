@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use super::{LocatorEvidence, LocatorField, ObservationSource, ObservedTree};
 use crate::{
     adapter::SnapshotSurface,
@@ -8,10 +10,10 @@ use crate::{
 
 pub(crate) fn materialize_refmap(
     tree: &mut ObservedTree,
+    unique: &HashSet<usize>,
     query: &LocatorQuery,
     selected: Option<&[usize]>,
 ) -> Result<(RefMap, bool), crate::AdapterError> {
-    let unique = crate::refs::ref_alloc_unique::unique_capture_nodes(tree);
     let source = &tree.source;
     let nodes = &mut tree.nodes;
     let mut refmap = RefMap::new();

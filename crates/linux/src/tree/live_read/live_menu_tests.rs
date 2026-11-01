@@ -138,11 +138,22 @@ fn menu_live_identity_uses_the_fresh_context_and_actual_live_object_path() {
     let live =
         element_via(&mut reader, &menu_handle("/menu/open"), deadline()).expect("live menu item");
 
-    assert_eq!(verdict(&menu_ref(&captured), &live), IdentityMatch::Match);
-    let expected = captured.encode(":1.1/menu/open");
+    let token = live
+        .identity
+        .identifiers
+        .retained_object()
+        .expect("a menu item reports the popup it was read in");
+    let (context, object) = MenuContext::decode(token).expect("a popup context token");
+    assert!(
+        captured.matches(&context),
+        "the context read now, not the stored one"
+    );
+    assert_eq!(object, ":1.1/menu/open");
+    assert_eq!(token, captured.encode(":1.1/menu/open"));
     assert_eq!(
-        live.identity.identifiers.retained_object(),
-        Some(expected.as_str())
+        verdict(&menu_ref(&captured), &live),
+        IdentityMatch::NoMatch,
+        "a popup context and an object path are a place, never the element's identity"
     );
 }
 
