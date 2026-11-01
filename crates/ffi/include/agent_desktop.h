@@ -1146,7 +1146,9 @@ AdResult ad_execute_ref_action_exact_with_policy(const struct AdAdapter *adapter
 AdResult ad_free_handle(const struct AdAdapter *adapter, struct AdNativeHandle *handle);
 
 /**
- * Resolves an element using process-generation and typed native-id evidence.
+ * Resolves an element using process-generation and typed native-id evidence. Only an entry
+ * with a native id can resolve: name or description evidence alone is refused as ambiguous,
+ * because the caller supplies no capture-time uniqueness proof.
  *
  * # Safety
  *
