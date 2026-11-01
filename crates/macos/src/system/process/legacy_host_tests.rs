@@ -1,4 +1,4 @@
-use super::environment_has_marker;
+use super::{environment_has_marker, process_start_time};
 
 const MARKER: &str = "AGENT_DESKTOP_INTERNAL_COMMAND_HOST=1";
 
@@ -45,4 +45,15 @@ fn malformed_argument_blocks_fail_closed() {
     let mut truncated = procargs(&["agent-desktop"], &[MARKER]);
     truncated.pop();
     assert!(!environment_has_marker(&truncated));
+}
+
+#[test]
+fn process_start_time_requires_the_process_owner() {
+    let uid = unsafe { libc::geteuid() };
+    let pid = std::process::id() as libc::pid_t;
+    assert!(process_start_time(pid, uid).is_some());
+    assert!(process_start_time(pid, uid ^ 1).is_none());
+    if uid != 0 {
+        assert!(process_start_time(1, uid).is_none());
+    }
 }

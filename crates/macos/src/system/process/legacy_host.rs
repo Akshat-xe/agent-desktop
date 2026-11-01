@@ -10,16 +10,17 @@ const PROC_UID_ONLY: u32 = 4;
 pub fn stop_legacy_command_hosts() {
     let uid = unsafe { libc::geteuid() };
     let own_pid = std::process::id() as libc::pid_t;
+    let Some(mut buffer) = argument_buffer() else {
+        return;
+    };
     for pid in user_processes(uid) {
-        if pid <= 0 || pid == own_pid {
+        if pid <= 0 || pid == own_pid || !has_marker(pid, &mut buffer) {
             continue;
         }
         let Some(started_at) = process_start_time(pid, uid) else {
             continue;
         };
-        if process_arguments(pid).is_some_and(|args| environment_has_marker(&args))
-            && process_start_time(pid, uid) == Some(started_at)
-        {
+        if has_marker(pid, &mut buffer) && process_start_time(pid, uid) == Some(started_at) {
             unsafe { libc::kill(pid, libc::SIGKILL) };
         }
     }
@@ -89,6 +90,12 @@ fn user_processes(uid: libc::uid_t) -> Vec<libc::pid_t> {
 }
 
 fn process_start_time(pid: libc::pid_t, uid: libc::uid_t) -> Option<(u64, u64)> {
+    let info = process_info(pid)?;
+    (info.pbi_pid == pid as u32 && info.pbi_uid == uid && info.pbi_status != libc::SZOMB)
+        .then_some((info.pbi_start_tvsec, info.pbi_start_tvusec))
+}
+
+fn process_info(pid: libc::pid_t) -> Option<libc::proc_bsdinfo> {
     let mut info = MaybeUninit::<libc::proc_bsdinfo>::zeroed();
     let size = size_of::<libc::proc_bsdinfo>() as i32;
     let read = unsafe {
@@ -100,36 +107,46 @@ fn process_start_time(pid: libc::pid_t, uid: libc::uid_t) -> Option<(u64, u64)> 
             size,
         )
     };
-    if read != size {
-        return None;
-    }
-    let info = unsafe { info.assume_init() };
-    (info.pbi_pid == pid as u32 && info.pbi_uid == uid && info.pbi_status != libc::SZOMB)
-        .then_some((info.pbi_start_tvsec, info.pbi_start_tvusec))
+    (read == size).then(|| unsafe { info.assume_init() })
 }
 
-fn process_arguments(pid: libc::pid_t) -> Option<Vec<u8>> {
-    let mut mib = [libc::CTL_KERN, libc::KERN_PROCARGS2, pid];
-    let mut size: libc::size_t = 0;
-    let null = std::ptr::null_mut();
-    if unsafe { libc::sysctl(mib.as_mut_ptr(), 3, null, &mut size, null, 0) } != 0 {
+fn argument_buffer() -> Option<Vec<u8>> {
+    let mut mib = [libc::CTL_KERN, libc::KERN_ARGMAX];
+    let mut max: libc::c_int = 0;
+    let mut size = size_of::<libc::c_int>();
+    let read = unsafe {
+        libc::sysctl(
+            mib.as_mut_ptr(),
+            2,
+            (&mut max as *mut libc::c_int).cast(),
+            &mut size,
+            std::ptr::null_mut(),
+            0,
+        )
+    };
+    if read != 0 {
         return None;
     }
-    let mut buffer = vec![0u8; size];
+    usize::try_from(max)
+        .ok()
+        .filter(|max| *max > 0)
+        .map(|max| vec![0u8; max])
+}
+
+fn has_marker(pid: libc::pid_t, buffer: &mut [u8]) -> bool {
+    let mut mib = [libc::CTL_KERN, libc::KERN_PROCARGS2, pid];
+    let mut size = buffer.len();
     let read = unsafe {
         libc::sysctl(
             mib.as_mut_ptr(),
             3,
             buffer.as_mut_ptr().cast(),
             &mut size,
-            null,
+            std::ptr::null_mut(),
             0,
         )
     };
-    (read == 0).then(|| {
-        buffer.truncate(size);
-        buffer
-    })
+    read == 0 && size <= buffer.len() && environment_has_marker(&buffer[..size])
 }
 
 #[cfg(test)]

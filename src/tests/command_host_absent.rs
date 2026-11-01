@@ -45,12 +45,13 @@ fn run(args: &[&str], tmpdir: &Path) -> Output {
     output
 }
 
-fn spawn_renamed_copy(tmpdir: &Path, name: &str, marked: bool) -> KilledOnDrop {
+fn spawn_renamed_copy(tmpdir: &Path, name: &str, marked: bool, args: &[&str]) -> KilledOnDrop {
     let executable = tmpdir.join(name);
     std::fs::copy(env!("CARGO_BIN_EXE_agent-desktop"), &executable).expect("copy binary");
     let mut command = Command::new(&executable);
     command
-        .args(["wait", "10000"])
+        .args(args)
+        .env("TMPDIR", tmpdir)
         .env("AGENT_DESKTOP_HOME", tmpdir.join("home"))
         .env_remove(MARKER)
         .stdin(Stdio::null())
@@ -96,6 +97,11 @@ fn commands_never_reach_or_remove_a_command_host_socket() {
         "a command connected to the host socket"
     );
     assert!(socket.exists(), "a command removed the socket file");
+    let entries: Vec<_> = std::fs::read_dir(&host_dir)
+        .expect("read host dir")
+        .map(|entry| entry.expect("read host entry").path())
+        .collect();
+    assert_eq!(entries, vec![socket], "a command created host files");
     let _ = std::fs::remove_dir_all(&tmpdir);
 }
 
@@ -103,8 +109,8 @@ fn commands_never_reach_or_remove_a_command_host_socket() {
 fn a_call_stops_marked_processes_under_any_name_and_leaves_others_running() {
     let _lock = HOST_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let tmpdir = private_dir("marker");
-    let mut marked = spawn_renamed_copy(&tmpdir, "renamed-host", true);
-    let mut unmarked = spawn_renamed_copy(&tmpdir, "ordinary-copy", false);
+    let mut marked = spawn_renamed_copy(&tmpdir, "renamed-host", true, &["wait", "10000"]);
+    let mut unmarked = spawn_renamed_copy(&tmpdir, "ordinary-copy", false, &["wait", "10000"]);
 
     run(&["version"], &tmpdir);
 
@@ -114,5 +120,18 @@ fn a_call_stops_marked_processes_under_any_name_and_leaves_others_running() {
         exit_within(&mut unmarked, Duration::from_secs(1)).is_none(),
         "a process without the marker was stopped"
     );
+    let _ = std::fs::remove_dir_all(&tmpdir);
+}
+
+#[test]
+fn a_marked_copy_running_version_exits_successfully() {
+    let _lock = HOST_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let tmpdir = private_dir("self");
+    let mut marked = spawn_renamed_copy(&tmpdir, "agent-desktop", true, &["version"]);
+
+    let status =
+        exit_within(&mut marked, Duration::from_secs(3)).expect("marked version copy did not exit");
+    assert!(status.success(), "marked version copy failed: {status}");
+    assert_eq!(status.signal(), None, "marked version copy was killed");
     let _ = std::fs::remove_dir_all(&tmpdir);
 }
