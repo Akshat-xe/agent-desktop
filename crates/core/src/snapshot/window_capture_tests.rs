@@ -60,6 +60,19 @@ fn a_cut_capture_whose_refs_carry_tokens_needs_no_second_walk() {
     assert!(!needs_whole_window(&observed));
 }
 
+/// A cut boundary with nothing a later resolve could re-identify it by is not a
+/// drill target, so it is not an entry the census would prove: the capture keeps
+/// its single walk even though that boundary omits descendants.
+#[test]
+fn a_cut_boundary_that_cannot_anchor_a_drill_needs_no_second_walk() {
+    let observed = observed(cut_window(
+        node("group", ""),
+        tokened("button", "Save", "save"),
+    ));
+
+    assert!(!needs_whole_window(&observed));
+}
+
 #[test]
 fn a_capture_that_reached_the_whole_window_needs_no_second_walk() {
     let mut save = node("button", "Save");

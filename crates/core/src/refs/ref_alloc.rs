@@ -176,7 +176,11 @@ pub(crate) fn allocate_refs<'a>(
     refmap: &mut RefMap,
     config: &'a RefAllocConfig<'a>,
 ) -> Result<AccessibilityNode, crate::AppError> {
-    let plan = AllocationPlan::new(&node, config);
+    let plan = AllocationPlan::new(
+        &node,
+        config.scope.root_ref_id.is_some(),
+        config.unique_entries,
+    );
     allocate_refs_at_path(
         node,
         refmap,
@@ -184,6 +188,38 @@ pub(crate) fn allocate_refs<'a>(
         &mut config.scope.path_prefix.to_vec(),
         &plan,
     )
+}
+
+/// Whether allocation over this presentation selects an entry that cannot
+/// re-identify itself on its own: a ref-able node, or a boundary container
+/// offered as a skeleton drill target, whose identity carries no element token.
+/// A presentation whose selected entries all carry a token resolves through
+/// those tokens and needs no capture census, so a caller can ask this before
+/// paying for the observation a census needs.
+pub(crate) fn selects_tokenless_entry(node: &AccessibilityNode) -> bool {
+    let plan = AllocationPlan::new(node, false, None);
+    selects_tokenless_at(node, &mut Vec::new(), &plan)
+}
+
+fn selects_tokenless_at(
+    node: &AccessibilityNode,
+    path: &mut Vec<usize>,
+    plan: &AllocationPlan<'_>,
+) -> bool {
+    let tokenless = !node
+        .identity
+        .retained_object
+        .as_deref()
+        .is_some_and(crate::refs::ref_identity::is_element_token);
+    if tokenless && (is_ref_able(node) || plan.skeleton_anchors.contains(path.as_slice())) {
+        return true;
+    }
+    node.children.iter().enumerate().any(|(index, child)| {
+        path.push(index);
+        let selected = selects_tokenless_at(child, path, plan);
+        path.pop();
+        selected
+    })
 }
 
 /// What one allocation decides once for every node it visits: which boundary
@@ -195,14 +231,18 @@ struct AllocationPlan<'a> {
 }
 
 impl<'a> AllocationPlan<'a> {
-    fn new(node: &AccessibilityNode, config: &'a RefAllocConfig<'a>) -> Self {
+    fn new(
+        node: &AccessibilityNode,
+        scoped_to_root: bool,
+        unique_entries: Option<&'a HashSet<Vec<usize>>>,
+    ) -> Self {
         let mut skeleton_anchors = HashSet::new();
-        if config.scope.root_ref_id.is_none() {
+        if !scoped_to_root {
             plan_skeleton_anchors(node, &mut Vec::new(), &mut skeleton_anchors);
         }
         Self {
             skeleton_anchors,
-            unique_entries: config.unique_entries,
+            unique_entries,
         }
     }
 

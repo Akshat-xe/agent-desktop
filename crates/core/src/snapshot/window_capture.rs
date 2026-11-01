@@ -1,9 +1,7 @@
 use crate::{
     AppError, WindowInfo,
     adapter::{PlatformAdapter, TreeOptions},
-    locator::live_locator::{
-        ObservationRequest, ObservationRoot, ObservedNode, ObservedTree, addressability,
-    },
+    locator::live_locator::{ObservationRequest, ObservationRoot, ObservedNode, ObservedTree},
 };
 
 /// One window capture: the observation every ref is counted against, plus the
@@ -83,20 +81,19 @@ fn observe_window(
     )
 }
 
-/// Whether the observation leaves a ref that cannot re-identify itself without
-/// the capture census: a node that will carry a ref - ref-able, or a container
-/// cut short that a skeleton offers as a drill target - whose evidence carries
-/// no element token, in a tree that stopped before the whole window.
+/// Whether the presentation allocation builds from this observation keeps an
+/// entry that can only re-identify itself through the capture census: a ref or
+/// a skeleton drill anchor whose identity carries no element token. Only the
+/// census proves such an entry unique, and the census needs the whole window,
+/// so a capture that would present one is re-observed. A presentation whose
+/// selected entries all carry a token resolves through the tokens and keeps its
+/// single shallow walk.
 fn needs_whole_window(observed: &ObservedTree) -> bool {
     let cut = !observed.is_complete() || observed.nodes.iter().any(ObservedNode::omits_descendants);
-    cut && observed.nodes.iter().any(|node| {
-        let token = node
-            .evidence
-            .identifiers
-            .retained_object()
-            .is_some_and(crate::refs::ref_identity::is_element_token);
-        !token && (addressability(&node.evidence).0 || node.omits_descendants())
-    })
+    cut && observed
+        .clone()
+        .into_accessibility_tree_partial()
+        .is_ok_and(|(presented, _, _)| crate::refs::ref_alloc::selects_tokenless_entry(&presented))
 }
 
 #[cfg(test)]

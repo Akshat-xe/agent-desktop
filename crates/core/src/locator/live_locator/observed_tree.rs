@@ -110,13 +110,18 @@ impl ObservedTree {
     }
 
     /// Projects the subtree rooted at an observed node, cut the same way.
+    ///
+    /// The matched node is the subtree's depth zero, as it is for a walk that
+    /// starts at an element, so the requested limit counts from there rather
+    /// than from the window the node happened to sit deep inside.
     pub(crate) fn into_accessibility_subtree(
         mut self,
         index: usize,
         max_logical_depth: u8,
     ) -> Result<AccessibilityNode, AdapterError> {
         let depths = std::mem::take(&mut self.logical_depths);
-        self.project_shallow(index, &depths, max_logical_depth)
+        let root_depth = depths.get(index).copied().unwrap_or(0);
+        self.project_shallow(index, &depths, root_depth.saturating_add(max_logical_depth))
     }
 
     fn append(
@@ -183,6 +188,9 @@ impl ObservedTree {
         Ok(projected)
     }
 
+    /// Projects the node at `index`, cutting every descendant whose logical
+    /// depth in the whole observation reaches past `max_logical_depth`; a cut
+    /// node keeps its `children_count` and stays complete.
     fn project_shallow(
         &mut self,
         index: usize,

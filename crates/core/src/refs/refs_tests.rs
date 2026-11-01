@@ -197,6 +197,38 @@ fn a_nested_drill_is_pruned_through_ownership_after_its_root_moved() {
 }
 
 #[test]
+fn a_drill_keeps_the_entries_of_another_capture_whose_paths_enclose_it() {
+    let mut map = RefMap::new();
+    let mut allocate = |path: &[usize], owner: Option<&str>| {
+        let mut value = entry("button", Some("Target"));
+        value.scope.path = path.iter().copied().collect();
+        value.scope.root_ref = owner.map(str::to_string);
+        value.scope.path_is_absolute = owner.is_some();
+        map.allocate(value)
+    };
+    let original = allocate(&[0, 0, 0], None);
+    let drilled = allocate(&[0, 0], Some(&original));
+    let neighbouring = allocate(&[1, 1], None);
+    let neighbouring_drill = allocate(&[0, 0, 0, 1], Some(&neighbouring));
+
+    map.remove_by_root_ref(&drilled);
+
+    assert!(
+        map.get(&original).is_some(),
+        "an entry of the window walk is not this drill's to remove"
+    );
+    assert!(
+        map.get(&neighbouring_drill).is_some(),
+        "another region's drill ref is not this drill's to remove"
+    );
+    assert!(
+        map.get(&drilled).is_some(),
+        "the selected root must survive"
+    );
+    assert!(map.get(&neighbouring).is_some());
+}
+
+#[test]
 fn test_save_load_roundtrip_with_home_override() {
     let _guard = HomeGuard::new();
     let mut map = RefMap::new();

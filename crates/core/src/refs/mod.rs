@@ -105,14 +105,10 @@ impl RefMap {
     }
 
     /// Removes the refs a drill-down replaces: the entries rooted at `root`, the
-    /// entries recorded below the root's own path in the capture that recorded
-    /// it, and - transitively - everything those entries rooted, so a re-drill
-    /// of an ancestor leaves no ref of a nested drill behind.
-    ///
-    /// Only the root's own capture shares its path coordinates. A drilled ref
-    /// carries the path of the node it was projected from, so it is found
-    /// through its root instead of being compared against another capture's
-    /// path.
+    /// entries the same capture recorded below the root's own path, and -
+    /// transitively - everything those entries rooted, so a re-drill of an
+    /// ancestor leaves no ref of a nested drill behind. The selected root always
+    /// survives.
     pub fn remove_by_root_ref(&mut self, root: &str) {
         let root_entry = self.inner.get(root);
         let mut removed: HashSet<String> = HashSet::new();
@@ -121,16 +117,8 @@ impl RefMap {
                 continue;
             }
             let owned = entry.scope.root_ref.as_deref() == Some(root);
-            let descendant = root_entry.is_some_and(|parent| {
-                entry.process == parent.process
-                    && entry.source == parent.source
-                    && (parent.scope.root_ref.is_none() || parent.scope.path_is_absolute)
-                    && (entry.scope.root_ref.is_none() || entry.scope.path_is_absolute)
-                    && entry.scope.path.starts_with(&parent.scope.path)
-                    && (entry.scope.path.len() > parent.scope.path.len()
-                        || entry.scope.root_ref.is_some())
-            });
-            if owned || descendant {
+            let replaced = root_entry.is_some_and(|parent| same_capture_descendant(entry, parent));
+            if owned || replaced {
                 removed.insert(ref_id.clone());
             }
         }
@@ -138,6 +126,7 @@ impl RefMap {
         while let Some(owner) = pending.pop() {
             for (ref_id, entry) in &self.inner {
                 if removed.contains(ref_id)
+                    || ref_id == root
                     || entry.scope.root_ref.as_deref() != Some(owner.as_str())
                 {
                     continue;
@@ -206,6 +195,22 @@ impl Default for RefMap {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// Whether `entry` sits below `parent` within one capture's path coordinates.
+///
+/// The ref that allocated a set of entries names that capture: the window walk
+/// records none, and a drill records the ref it drilled, which also makes its
+/// paths absolute. An entry another capture observed - another region's drill,
+/// or a node the tree has since moved under these coordinates - never compares
+/// equal however its path reads.
+fn same_capture_descendant(entry: &RefEntry, parent: &RefEntry) -> bool {
+    entry.process == parent.process
+        && entry.source == parent.source
+        && entry.scope.root_ref == parent.scope.root_ref
+        && entry.scope.path_is_absolute == parent.scope.path_is_absolute
+        && entry.scope.path.len() > parent.scope.path.len()
+        && entry.scope.path.starts_with(&parent.scope.path)
 }
 
 fn refmap_path() -> Result<PathBuf, AppError> {

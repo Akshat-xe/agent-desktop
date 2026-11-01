@@ -71,7 +71,6 @@ pub use locator_selection::LocatorSelection;
 pub use locator_semantic_read_stats::LocatorSemanticReadStats;
 pub use locator_stats::LocatorStats;
 pub use locator_traversal_stats::LocatorTraversalStats;
-pub(crate) use materialize::addressability;
 pub(crate) use materialize::ref_entry as materialize_ref_entry;
 pub use observation_budget::ObservationBudget;
 pub(crate) use observation_completeness::ObservationCompleteness;

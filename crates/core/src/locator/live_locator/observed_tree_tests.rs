@@ -176,6 +176,39 @@ fn a_shallow_presentation_cuts_at_the_logical_depth_of_the_walks() {
 }
 
 #[test]
+fn a_drilled_subtree_counts_its_depth_from_the_matched_node() {
+    let mut node = subtree("button", "Save", Vec::new());
+    for (role, name) in [
+        ("group", "C"),
+        ("group", "B"),
+        ("group", "A"),
+        ("window", "Fixture"),
+    ] {
+        node = subtree(role, name, vec![node]);
+    }
+    let tree = ObservedTree::from_roots(vec![node], source(), Default::default(), true).unwrap();
+
+    let drilled = tree.clone().into_accessibility_subtree(3, 1).unwrap();
+    assert_eq!(
+        drilled.identity.name.as_deref(),
+        Some("C"),
+        "the drilled node is the subtree root"
+    );
+    assert_eq!(
+        drilled
+            .children
+            .first()
+            .and_then(|child| child.identity.name.as_deref()),
+        Some("Save"),
+        "a limit of one reaches one level below a node at window depth 3"
+    );
+
+    let cut = tree.into_accessibility_subtree(3, 0).unwrap();
+    assert_eq!(cut.children_count, Some(1), "a cut keeps its count");
+    assert!(cut.children.is_empty());
+}
+
+#[test]
 fn source_child_indices_survive_omitted_siblings() {
     let target = subtree("scrollarea", "Nested", Vec::new()).with_source_child_index(0);
     let retained = subtree("group", "Wrapper", vec![target])
