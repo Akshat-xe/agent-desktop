@@ -1,12 +1,7 @@
 use crate::AccessibilityNode;
-use crate::IdentifierKind;
 use crate::refs::ref_alloc::is_ref_able;
 use crate::refs::ref_full_predicate::FullPredicate;
 use std::collections::{HashMap, HashSet};
-
-const NATIVE_ID: u8 = 0b001;
-const NAME: u8 = 0b010;
-const DESCRIPTION: u8 = 0b100;
 
 /// The structural paths whose full predicate a complete observation found
 /// exactly one element for, counted over every observed node rather than over
@@ -31,7 +26,7 @@ pub(crate) fn unique_capture_paths(root: &AccessibilityNode) -> HashSet<Vec<usiz
 fn needed_masks(node: &AccessibilityNode) -> u8 {
     let mut needed = 0;
     if is_ref_able(node) {
-        needed |= 1 << recorded_mask(&FullPredicate::of_node(node));
+        needed |= 1 << FullPredicate::of_node(node).mask();
     }
     for child in &node.children {
         needed |= needed_masks(child);
@@ -50,16 +45,14 @@ fn omits_descendants(node: &AccessibilityNode) -> bool {
 fn count_buckets<'a>(
     node: &'a AccessibilityNode,
     needed: u8,
-    counts: &mut HashMap<PredicateBucket<'a>, usize>,
+    counts: &mut HashMap<FullPredicate<'a>, usize>,
 ) {
     let predicate = FullPredicate::of_node(node);
-    let recorded = recorded_mask(&predicate);
+    let recorded = predicate.mask();
     let mut mask = recorded;
     loop {
         if needed & (1 << mask) != 0 {
-            *counts
-                .entry(PredicateBucket::masked(&predicate, mask))
-                .or_default() += 1;
+            *counts.entry(predicate.masked(mask)).or_default() += 1;
         }
         if mask == 0 {
             break;
@@ -74,68 +67,17 @@ fn count_buckets<'a>(
 fn collect_unique<'a>(
     node: &'a AccessibilityNode,
     path: &mut Vec<usize>,
-    counts: &HashMap<PredicateBucket<'a>, usize>,
+    counts: &HashMap<FullPredicate<'a>, usize>,
     unique: &mut HashSet<Vec<usize>>,
 ) {
     let predicate = FullPredicate::of_node(node);
-    if is_ref_able(node) && counts.get(&recorded_bucket(&predicate)) == Some(&1) {
+    if is_ref_able(node) && counts.get(&predicate) == Some(&1) {
         unique.insert(path.clone());
     }
     for (index, child) in node.children.iter().enumerate() {
         path.push(index);
         collect_unique(child, path, counts, unique);
         path.pop();
-    }
-}
-
-fn recorded_bucket<'a>(predicate: &FullPredicate<'a>) -> PredicateBucket<'a> {
-    PredicateBucket::masked(predicate, recorded_mask(predicate))
-}
-
-fn recorded_mask(predicate: &FullPredicate<'_>) -> u8 {
-    let mut mask = 0;
-    if predicate.native_id.is_some() {
-        mask |= NATIVE_ID;
-    }
-    if predicate.name.is_some() {
-        mask |= NAME;
-    }
-    if predicate.description.is_some() {
-        mask |= DESCRIPTION;
-    }
-    mask
-}
-
-/// A predicate narrowed to the fields the entry recorded: an unrecorded field
-/// matches any value a candidate presents.
-#[derive(Hash, PartialEq, Eq)]
-struct PredicateBucket<'a> {
-    role: &'a str,
-    native_id: Option<(IdentifierKind, &'a str)>,
-    name: Option<&'a str>,
-    description: Option<&'a str>,
-}
-
-impl<'a> PredicateBucket<'a> {
-    fn masked(predicate: &FullPredicate<'a>, mask: u8) -> Self {
-        Self {
-            role: predicate.role,
-            native_id: if mask & NATIVE_ID != 0 {
-                predicate.native_id
-            } else {
-                None
-            },
-            name: if mask & NAME != 0 {
-                predicate.name
-            } else {
-                None
-            },
-            description: if mask & DESCRIPTION != 0 {
-                predicate.description
-            } else {
-                None
-            },
-        }
     }
 }
 

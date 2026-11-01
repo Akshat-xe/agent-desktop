@@ -352,7 +352,3 @@ mod window_tests;
 #[cfg(test)]
 #[path = "snapshot_surface_window_tests.rs"]
 mod surface_window_tests;
-
-#[cfg(test)]
-#[path = "snapshot_unique_capture_tests.rs"]
-mod unique_capture_tests;

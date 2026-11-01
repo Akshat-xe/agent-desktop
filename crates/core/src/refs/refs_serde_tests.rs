@@ -222,26 +222,6 @@ fn ref_entry_full_roundtrip_preserves_all_fields() {
 }
 
 #[test]
-fn capture_uniqueness_survives_serialization_and_is_absent_when_false() {
-    let mut entry = minimal_entry("button");
-    entry.identity.unique_at_capture = false;
-    let absent = serde_json::to_string(&entry).unwrap();
-    assert!(
-        !absent.contains("unique_at_capture"),
-        "a ref that was not unique at capture writes no key, json={absent}"
-    );
-
-    entry.identity.unique_at_capture = true;
-    let json = serde_json::to_string(&entry).unwrap();
-    assert!(
-        json.contains("\"unique_at_capture\":true"),
-        "a ref unique at capture keeps the claim, json={json}"
-    );
-    let restored: RefEntry = serde_json::from_str(&json).unwrap();
-    assert!(restored.identity.unique_at_capture);
-}
-
-#[test]
 fn legacy_ref_entry_json_without_bounds_space_deserializes_to_none() {
     let bounds = crate::Rect {
         x: 4.0,

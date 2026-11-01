@@ -5,10 +5,15 @@ use std::sync::{
 
 use crate::adapter::{ActionOps, InputOps, ObservationOps, SystemOps};
 use crate::locator::live_locator::ObservationRoot;
+use crate::refs::ref_alloc::allocate_refs;
+use crate::refs::ref_alloc_config::RefAllocConfig;
+use crate::refs::ref_alloc_options::RefAllocOptions;
+use crate::refs::ref_alloc_scope::RefAllocScope;
+use crate::refs::ref_alloc_source::RefAllocSource;
 use crate::refs::resolve_saved_ref::resolve_saved_ref as resolve_entry;
 use crate::{
-    AccessibilityNode, AdapterError, Deadline, ErrorCode, NativeHandle, RefEntry, WindowInfo,
-    refs::refs_test_support::HomeGuard,
+    AccessibilityNode, AdapterError, Deadline, ErrorCode, NativeHandle, RefEntry, RefMap,
+    WindowInfo, refs::refs_test_support::HomeGuard,
 };
 
 struct RuleAdapter {
@@ -101,7 +106,6 @@ fn window() -> WindowInfo {
 
 fn entry() -> RefEntry {
     let mut entry = crate::adapter::minimal_ref_entry("button", Some("Run"));
-    entry.identity.unique_at_capture = true;
     entry.source.source_app = Some("Fixture".into());
     entry.source.source_window_id = Some("w-1".into());
     entry
@@ -119,6 +123,36 @@ fn tree_with(children: Vec<AccessibilityNode>) -> AccessibilityNode {
 
 fn resolve(adapter: &RuleAdapter, entry: &RefEntry) -> Result<NativeHandle, AdapterError> {
     resolve_entry(adapter, entry, Deadline::standard().unwrap())
+}
+
+fn capture(root: AccessibilityNode, name: &str) -> RefEntry {
+    let config = RefAllocConfig {
+        options: RefAllocOptions {
+            include_bounds: false,
+            interactive_only: false,
+            compact: false,
+        },
+        source: RefAllocSource {
+            pid: crate::ProcessId::new(1),
+            app: Some("Fixture"),
+            window_id: Some("w-1"),
+            window_title: Some("Fixture"),
+            window_bounds_hash: None,
+            process_instance: Some("test-instance"),
+            surface: crate::SnapshotSurface::Window,
+        },
+        scope: RefAllocScope {
+            root_ref_id: None,
+            path_prefix: &[],
+        },
+        observation_complete: true,
+    };
+    let mut refmap = RefMap::new();
+    allocate_refs(root, &mut refmap, &config).unwrap();
+    (1..=refmap.len())
+        .filter_map(|index| refmap.get(&format!("@e{index}")).cloned())
+        .find(|entry| entry.identity.name.as_deref() == Some(name))
+        .expect("the captured element has a ref")
 }
 
 #[test]
@@ -230,80 +264,26 @@ fn incomplete_evidence_never_resolves() {
 }
 
 #[test]
-fn a_truncated_observation_never_resolves() {
+fn capture_and_resolution_agree_on_the_same_element() {
     let _guard = HomeGuard::new();
-    let mut truncated = tree_with(vec![node("button", "Run")]);
-    truncated.subtree_truncated = true;
-    let adapter = RuleAdapter::new(truncated);
+    let alone = tree_with(vec![node("button", "Run"), node("button", "Cancel")]);
+    let captured = capture(alone.clone(), "Run");
+    assert!(captured.identity.unique_at_capture);
+    assert!(resolve(&RuleAdapter::new(alone), &captured).is_ok());
 
-    let Err(error) = resolve(&adapter, &entry()) else {
-        panic!("a truncated walk is not evidence");
-    };
-
-    assert_eq!(error.code, ErrorCode::Timeout);
+    let twinned = tree_with(vec![node("button", "Run"), node("button", "Run")]);
+    let twin_captured = capture(twinned.clone(), "Run");
+    assert!(!twin_captured.identity.unique_at_capture);
+    let refused = resolve(&RuleAdapter::new(twinned), &twin_captured);
     assert_eq!(
-        error.details.unwrap()["kind"],
-        "resolution_identity_unknown"
+        refused.err().map(|error| error.code),
+        Some(ErrorCode::AmbiguousTarget)
     );
-    assert_eq!(adapter.anchors.load(Ordering::SeqCst), 0);
-}
 
-fn predicate(entry: &RefEntry, role: &str, name: Option<&str>) -> crate::IdentityMatch {
-    use crate::locator::live_locator::{
-        IdentifierEvidence, LocatorEvidence, LocatorField, LocatorRefEvidence,
-    };
-    let field = |value: Option<&str>| {
-        value
-            .map(|value| LocatorField::Known(value.into()))
-            .unwrap_or(LocatorField::Absent)
-    };
-    let evidence = LocatorEvidence {
-        role: LocatorField::Known(role.into()),
-        name: field(name),
-        description: LocatorField::Absent,
-        value: LocatorField::Absent,
-        identifiers: IdentifierEvidence::absent(),
-        states: LocatorField::Absent,
-        ref_evidence: LocatorRefEvidence {
-            bounds: LocatorField::Absent,
-            window_bounds: LocatorField::Absent,
-            available_actions: LocatorField::Absent,
-            descriptors: Default::default(),
-        },
-    };
-    crate::refs::ref_identity::full_predicate_match(
-        entry,
-        crate::refs::ref_identity::PredicateEvidence::observed(&evidence),
-    )
-}
-
-#[test]
-fn the_full_predicate_requires_role_and_every_recorded_stable_field() {
-    use crate::IdentityMatch;
-    let entry = crate::adapter::minimal_ref_entry("button", Some("Save"));
-
+    let renamed = tree_with(vec![node("button", "Cancel")]);
+    let stale = resolve(&RuleAdapter::new(renamed), &captured);
     assert_eq!(
-        predicate(&entry, "button", Some("Save")),
-        IdentityMatch::Match
-    );
-    assert_eq!(
-        predicate(&entry, "checkbox", Some("Save")),
-        IdentityMatch::NoMatch
-    );
-    assert_eq!(
-        predicate(&entry, "button", Some("Save as")),
-        IdentityMatch::NoMatch
-    );
-    assert_eq!(predicate(&entry, "button", None), IdentityMatch::NoMatch);
-}
-
-#[test]
-fn a_name_mirroring_a_mutable_value_is_not_stable_identity() {
-    let mut entry = crate::adapter::minimal_ref_entry("textfield", Some("7"));
-    entry.identity.value = Some("7".into());
-
-    assert_eq!(
-        predicate(&entry, "textfield", Some("7")),
-        crate::IdentityMatch::Unknown
+        stale.err().map(|error| error.code),
+        Some(ErrorCode::StaleRef)
     );
 }

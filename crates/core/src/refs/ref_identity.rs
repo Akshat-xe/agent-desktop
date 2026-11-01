@@ -1,6 +1,6 @@
 use crate::{
     IdentityMatch,
-    locator::live_locator::{IdentifierEvidence, LocatorEvidence, LocatorField},
+    locator::live_locator::{IdentifierEvidence, LocatorField},
     refs::RefEntry,
     tree::roles::is_mutable_value_role,
 };
@@ -28,59 +28,6 @@ fn recorded_native_id(entry: &RefEntry) -> Option<&crate::ElementIdentifier> {
     entry.identity.native_id.as_ref().filter(|identifier| {
         crate::tree::accname::non_blank(Some(identifier.value.as_str())).is_some()
     })
-}
-
-/// The live evidence a predicate check reads. Bounds and control values are
-/// absent on purpose: neither survives a snapshot, so neither may decide
-/// whether two elements are the same element.
-pub struct PredicateEvidence<'a> {
-    pub role: &'a LocatorField<String>,
-    pub name: &'a LocatorField<String>,
-    pub value: &'a LocatorField<String>,
-    pub description: &'a LocatorField<String>,
-    pub identifiers: &'a IdentifierEvidence,
-}
-
-impl<'a> PredicateEvidence<'a> {
-    pub fn observed(evidence: &'a LocatorEvidence) -> Self {
-        Self {
-            role: &evidence.role,
-            name: &evidence.name,
-            value: &evidence.value,
-            description: &evidence.description,
-            identifiers: &evidence.identifiers,
-        }
-    }
-}
-
-/// The one predicate capture and resolution share: the recorded role and every
-/// recorded stable field must equal the live evidence, and a field the live
-/// read could not answer leaves the verdict unknown instead of matching.
-pub fn full_predicate_match(entry: &RefEntry, live: PredicateEvidence<'_>) -> IdentityMatch {
-    let role = match live.role {
-        LocatorField::Known(role) => equality_match(&entry.identity.role, role),
-        LocatorField::Unknown => IdentityMatch::Unknown,
-        LocatorField::Absent => IdentityMatch::NoMatch,
-    };
-    let native_id = match recorded_native_id(entry) {
-        Some(_) => native_id_match(entry, live.identifiers),
-        None => IdentityMatch::Match,
-    };
-    conjunction([
-        role,
-        native_id,
-        stable_text_match(entry, live.name, live.value, live.description),
-    ])
-}
-
-fn conjunction(parts: [IdentityMatch; 3]) -> IdentityMatch {
-    if parts.contains(&IdentityMatch::NoMatch) {
-        return IdentityMatch::NoMatch;
-    }
-    if parts.contains(&IdentityMatch::Unknown) {
-        return IdentityMatch::Unknown;
-    }
-    IdentityMatch::Match
 }
 
 pub fn has_stable_text_identity(entry: &RefEntry) -> bool {
@@ -250,7 +197,7 @@ fn match_primary_identity(
     }
 }
 
-fn equality_match(expected: &str, actual: &str) -> IdentityMatch {
+pub(crate) fn equality_match(expected: &str, actual: &str) -> IdentityMatch {
     if actual == expected {
         IdentityMatch::Match
     } else {
@@ -280,9 +227,9 @@ fn option_field(value: Option<&str>) -> LocatorField<String> {
         .unwrap_or(LocatorField::Absent)
 }
 
-fn meaningful_field(field: &LocatorField<String>) -> LocatorField<&str> {
+pub(crate) fn meaningful_field<T: AsRef<str>>(field: &LocatorField<T>) -> LocatorField<&str> {
     match field {
-        LocatorField::Known(value) => crate::tree::accname::non_blank(Some(value.as_str()))
+        LocatorField::Known(value) => crate::tree::accname::non_blank(Some(value.as_ref()))
             .map(LocatorField::Known)
             .unwrap_or(LocatorField::Absent),
         LocatorField::Absent => LocatorField::Absent,
@@ -290,10 +237,10 @@ fn meaningful_field(field: &LocatorField<String>) -> LocatorField<&str> {
     }
 }
 
-fn stable_name_field<'a>(
+pub(crate) fn stable_name_field<'a, T: AsRef<str>>(
     role: &str,
-    name: &'a LocatorField<String>,
-    value: &LocatorField<String>,
+    name: &'a LocatorField<T>,
+    value: &LocatorField<T>,
 ) -> LocatorField<&'a str> {
     let name = meaningful_field(name);
     if !is_mutable_value_role(role) {

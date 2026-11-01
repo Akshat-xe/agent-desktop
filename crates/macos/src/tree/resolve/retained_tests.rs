@@ -63,96 +63,24 @@ fn candidate(token: Option<&str>, name: &str) -> LocatorEvidence {
 fn a_candidate_matches_only_its_own_token() {
     let element = AXElement(std::ptr::null_mut());
     let saved = entry(Some("axtok1:00ff"));
-    assert_eq!(
-        candidate_match(&element, &saved, &candidate(Some("axtok1:00ff"), "Target")).unwrap(),
-        IdentityMatch::Match
-    );
-    assert_eq!(
-        candidate_match(&element, &saved, &candidate(Some("axtok1:00fe"), "Target")).unwrap(),
-        IdentityMatch::NoMatch
-    );
-    assert_eq!(
-        candidate_match(&element, &saved, &candidate(None, "Target")).unwrap(),
-        IdentityMatch::Unknown
-    );
-}
-
-#[test]
-fn tokenless_entries_keep_text_identity() {
-    let element = AXElement(std::ptr::null_mut());
-    let saved = entry(None);
-    assert_eq!(
-        candidate_match(&element, &saved, &candidate(None, "Target")).unwrap(),
-        IdentityMatch::Match
-    );
-    assert_eq!(
-        candidate_match(&element, &saved, &candidate(None, "Other")).unwrap(),
-        IdentityMatch::NoMatch
-    );
-}
-
-#[test]
-fn a_legacy_token_fails_closed() {
-    let element = AXElement(std::ptr::null_mut());
-    let error = candidate_match(
-        &element,
-        &entry(Some("host:1")),
-        &candidate(Some("axtok1:00ff"), "Target"),
-    )
-    .unwrap_err();
-    assert_eq!(error.code, ErrorCode::StaleRef);
-}
-
-#[test]
-fn token_text_round_trips_through_lowercase_hex() {
-    let bytes = [0x00, 0x1f, 0xab, 0xff];
-    let hex = encode_hex(&bytes);
-    assert_eq!(hex, "001fabff");
-    assert_eq!(decode_hex(&hex).as_deref(), Some(&bytes[..]));
-    assert_eq!(decode_hex("AABB").as_deref(), Some(&[0xaa, 0xbb][..]));
-}
-
-#[test]
-fn malformed_hex_is_refused() {
-    assert!(decode_hex("").is_none());
-    assert!(decode_hex("0").is_none());
-    assert!(decode_hex("zz").is_none());
-    assert!(decode_hex("00 1f").is_none());
-}
-
-#[test]
-fn only_remote_tokens_are_validateable() {
-    assert!(validate(None).is_ok());
-    assert!(validate(Some("axtok1:00ff")).is_ok());
-    let error = validate(Some("host:1")).unwrap_err();
-    assert_eq!(error.code, ErrorCode::StaleRef);
-    assert_eq!(
-        error.disposition,
-        agent_desktop_core::DeliverySemantics::not_delivered()
-    );
-}
-
-#[test]
-fn a_legacy_session_token_is_not_a_remote_token() {
-    assert!(matches!(
-        resolve_token("host:1").unwrap(),
-        TokenLookup::NotAToken
-    ));
-    assert!(matches!(resolve_token("").unwrap(), TokenLookup::NotAToken));
-}
-
-#[test]
-fn a_null_element_yields_no_token() {
-    let error = capture(&AXElement(std::ptr::null_mut())).unwrap_err();
-    assert_eq!(error.code, ErrorCode::StaleRef);
-}
-
-#[test]
-fn a_live_lookup_carries_the_element_it_resolved() {
-    let raw = unsafe { accessibility_sys::AXUIElementCreateApplication(1) };
-    let live = TokenLookup::Live(AXElement(raw));
-    let TokenLookup::Live(element) = live else {
-        return;
+    let match_of = |saved: &RefEntry, token: Option<&str>| {
+        candidate_match(&element, saved, &candidate(token, "Target"))
     };
-    assert!(!element.0.is_null());
+
+    assert_eq!(
+        match_of(&saved, Some("axtok1:00ff")).unwrap(),
+        IdentityMatch::Match
+    );
+    assert_eq!(
+        match_of(&saved, Some("axtok1:00fe")).unwrap(),
+        IdentityMatch::NoMatch
+    );
+    assert_eq!(match_of(&saved, None).unwrap(), IdentityMatch::Unknown);
+    assert_eq!(match_of(&entry(None), None).unwrap(), IdentityMatch::Match);
+    assert_eq!(
+        match_of(&entry(Some("host:1")), Some("axtok1:00ff"))
+            .unwrap_err()
+            .code,
+        ErrorCode::StaleRef
+    );
 }

@@ -44,12 +44,8 @@ fn bounds_only_entry(retained_object: Option<&str>) -> RefEntry {
 }
 
 #[test]
-fn bounds_alone_may_stand_in_for_a_ref_without_identity() {
+fn bounds_stand_in_for_an_identityless_ref_but_never_replace_a_token() {
     assert!(provisional_geometry_candidate(&bounds_only_entry(None)));
-}
-
-#[test]
-fn a_recorded_token_is_never_replaced_by_bounds() {
     assert!(!provisional_geometry_candidate(&bounds_only_entry(Some(
         "axtok1:0000000000000000"
     ))));
