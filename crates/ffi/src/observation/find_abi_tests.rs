@@ -45,6 +45,14 @@ impl ObservationOps for CardinalityAdapter {
             self.complete,
         )
     }
+
+    fn resolve_locator_anchor(
+        &self,
+        _entry: &agent_desktop_core::RefEntry,
+        _deadline: agent_desktop_core::Deadline,
+    ) -> Result<agent_desktop_core::NativeHandle, agent_desktop_core::AdapterError> {
+        Ok(agent_desktop_core::NativeHandle::null())
+    }
 }
 
 fn subtree(complete: bool) -> ObservedSubtree {
@@ -137,4 +145,32 @@ fn strict_incomplete_observation_times_out_at_the_c_boundary() {
         }),
         AdResult::ErrTimeout
     );
+}
+
+/// A find lands the entry its observation materialized through the adapter's
+/// locator anchor, the landing every platform shares, rather than through a
+/// saved-ref search. The stub implements the anchor and nothing else, so a
+/// regression back to strict resolution fails here instead of on a desktop.
+#[test]
+fn a_found_element_lands_through_the_locator_anchor() {
+    let adapter = crate::adapter::register_adapter(AdAdapter {
+        inner: Box::new(CardinalityAdapter {
+            duplicate: false,
+            complete: true,
+        }),
+        session_id: None,
+        _session_lease: None,
+    })
+    .unwrap();
+    let mut out = AdNativeHandle {
+        ptr: std::ptr::null(),
+    };
+
+    let result = unsafe { ad_find_exact(adapter, &ffi_window(), &query(), &mut out) };
+    let freed = unsafe { crate::actions::native_handle::ad_free_handle(adapter, &mut out) };
+
+    assert_eq!(result, AdResult::Ok);
+    assert!(out.ptr.is_null(), "freeing the handle must zero it");
+    assert_eq!(freed, AdResult::Ok);
+    unsafe { crate::adapter::ad_adapter_destroy(adapter) };
 }

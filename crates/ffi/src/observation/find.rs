@@ -113,7 +113,7 @@ unsafe fn find_in_window(
     let process = agent_desktop_core::ProcessIdentity::new(entry.process.pid, process_instance);
     match adapter
         .inner
-        .resolve_element_strict(&entry, request.deadline)
+        .resolve_locator_anchor(&entry, request.deadline)
     {
         Ok(handle) => {
             match crate::actions::native_handle::into_ffi_handle(adapter_id, handle, process) {
