@@ -17,6 +17,8 @@ A dense app, such as an Electron client or an IDE, can expose thousands of acces
 5. Verify with `wait` or `get` on a ref from the drill, or re-read the region with the same `snapshot --root`. If the action result lists a menu, sheet, or alert in `data.surfaces`, read that [surface](/desktop/surfaces) next.
 6. If another region matters, drill it. If the layout changed, or the root ref itself is `STALE_REF`, take a new skeleton.
 
+`-i` keeps only interactive nodes, so a row's static text is dropped. To tell which row a repeated button belongs to, drill that row's container with `--root` and leave out `-i`, then match the button to the label beside it.
+
 Two shortcuts skip the loop: a small app needs only `snapshot -i`, and a known target needs only `find`. See [When to skip the skeleton](#when-to-skip-the-skeleton).
 
 ## Take a skeleton

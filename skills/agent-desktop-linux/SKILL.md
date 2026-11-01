@@ -81,15 +81,17 @@ Observation and semantic actions need no helper tool.
   requested depth cut. A shell with no document yet stays incomplete when the
   budget ends. A `--timeout` shorter than the first read returns `TIMEOUT`,
   never a partial tree.
-- **Geometry-only refs require unchanged geometry.** Position and size must
-  both match, in the ref's recorded coordinate frame; a one-pixel change breaks
-  identity. After a layout change or a window move, take a fresh snapshot
-  instead of retrying the old ref. Indistinguishable siblings stay
-  `AMBIGUOUS_TARGET`: in a Text Editor window with three tabs, the text views
-  share one rectangle and one state, so a ref to any of them answers
-  `AMBIGUOUS_TARGET` with `candidate_count` 3 until the extra tabs close. A ref
-  belongs to the window it was taken in, so two windows with the same title each
-  resolve their own refs.
+- **A ref must have been unique.** Linux stores no element address, so a ref
+  resolves only when it was the only element in its snapshot with its role,
+  native id, name and description, and exactly one live element still matches.
+  Position, size and value never count as identity, so a layout change does not
+  by itself stale a ref, but a twin does: identical buttons, or views that share
+  a role and carry no other field, refuse with `AMBIGUOUS_TARGET`,
+  `details.kind: identity_not_unique`, before anything reaches the app, and an
+  element that is gone is `STALE_REF`, `saved_ref_absent`. Take a
+  fresh snapshot after a list changes, and use `--headed mouse-click --xy` when
+  you must pick one of two identical controls. A ref belongs to the window it
+  was taken in, so two windows with the same title each resolve their own refs.
 - **Chromium and Qt apps need a launch flag or variable** to appear on the bus;
   Electron apps need none, only `--no-sandbox` where `chrome-sandbox` is not
   setuid. See `references/troubleshooting.md`.

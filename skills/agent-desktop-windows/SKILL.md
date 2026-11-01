@@ -91,6 +91,7 @@ observation, actions and capture there fail or return nothing.
 ## What differs on Windows
 
 - Ref actions are semantic UI Automation calls in headless and `--headed` mode, except `right-click`, `double-click`, `triple-click`, `type` and `focus`, which are physical or take focus and need `--headed`.
+- A ref resolves only when it was the only element in its snapshot with its role, native id, name and description, and exactly one live element still matches. Identical twins, such as several identical `Delete` buttons, are refused with `AMBIGUOUS_TARGET`, `details.kind: identity_not_unique`, before anything reaches the app; a live second match is `saved_ref_ambiguous`, and a removed element is `STALE_REF`, `saved_ref_absent`. Take a fresh snapshot after a list changes, and use `--headed mouse-click --xy` when you must pick one of two identical controls.
 - The cursor overlay plays its per-action travel only for headless semantic actions. A `--headed` action moves the real cursor instead.
 
 ## References
