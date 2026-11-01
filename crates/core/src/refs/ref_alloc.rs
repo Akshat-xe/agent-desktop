@@ -271,7 +271,7 @@ fn allocate_refs_at_path(
             path,
         );
         entry.scope.path_is_absolute = config.scope.root_ref_id.is_some();
-        entry.identity.basis = Some(plan.basis(&entry.identity));
+        plan.record_basis(&mut entry, config.options.skeleton_depth);
         if !config.options.include_bounds && has_meaningful_identity(&entry) {
             entry.geometry.bounds = None;
         }
@@ -283,14 +283,7 @@ fn allocate_refs_at_path(
     if is_skeleton_anchor {
         let mut entry = ref_entry_from_node(&node, &config.source, None, path);
         entry.capabilities.available_actions = vec![];
-        if let Some(depth) = config.options.skeleton_depth {
-            entry.identity.basis = Some(plan.anchor_basis(&entry.identity));
-            if crate::refs::identity_basis_gate::requires_live_uniqueness(&entry.identity) {
-                entry.scope.census_depth = Some(depth);
-            }
-        } else {
-            entry.identity.basis = Some(plan.basis(&entry.identity));
-        }
+        plan.record_basis(&mut entry, config.options.skeleton_depth);
         if !config.options.include_bounds && has_meaningful_identity(&entry) {
             entry.geometry.bounds = None;
         }

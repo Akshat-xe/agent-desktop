@@ -78,6 +78,7 @@ pub(crate) fn resolve_by_census(
         super::materialize::ref_entry(selected, &tree.source, &crate::LocatorQuery::default());
     anchor.identity = entry.identity.clone();
     anchor.geometry = entry.geometry.clone();
+    anchor.scope.census_depth = entry.scope.census_depth;
     resolve_anchor(adapter, &anchor, deadline)
 }
 
@@ -173,6 +174,7 @@ fn resolve_anchor(
     let options = crate::TreeOptions {
         max_depth: 0,
         include_bounds: true,
+        skeleton: entry.scope.census_depth.is_some(),
         surface: entry.source.source_surface,
         ..Default::default()
     };

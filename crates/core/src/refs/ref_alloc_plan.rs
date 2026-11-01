@@ -1,9 +1,9 @@
 //! The plan snapshot allocation follows: which nodes receive a ref, and the identity basis each
 //! ref records. The census counts every element a live search could match.
 
+use crate::AccessibilityNode;
 use crate::refs::identity_basis_counts::IdentityBasisCounts;
 use crate::refs::ref_alloc::{can_receive_observed_ref, identity_from_node};
-use crate::{AccessibilityNode, IdentityBasis, RefEntryIdentity};
 use std::collections::HashSet;
 
 pub(crate) struct RefAllocPlan {
@@ -36,15 +36,20 @@ impl RefAllocPlan {
         self.skeleton_anchors.contains(path)
     }
 
-    pub(crate) fn basis(&self, identity: &RefEntryIdentity) -> IdentityBasis {
-        self.counts.basis(identity)
-    }
-
-    /// The basis for a skeleton anchor, counted over the observed nodes only. Anchors resolve
-    /// by a window-wide live count, so an unobserved deeper twin refuses at resolution
-    /// instead of being chosen.
-    pub(crate) fn anchor_basis(&self, identity: &RefEntryIdentity) -> IdentityBasis {
-        self.anchor_counts.basis(identity)
+    /// Records the entry's basis. In a skeleton snapshot, an entry whose look-alikes were
+    /// counted only over the observed depth keeps that basis and the depth, so it resolves by
+    /// a live count over the same depth instead of window-wide.
+    pub(crate) fn record_basis(&self, entry: &mut crate::RefEntry, skeleton_depth: Option<u8>) {
+        let basis = self.counts.basis(&entry.identity);
+        entry.identity.basis = Some(basis);
+        let Some(depth) = skeleton_depth else { return };
+        let observed = self.anchor_counts.basis(&entry.identity);
+        entry.identity.basis = Some(observed);
+        if observed != basis
+            && crate::refs::identity_basis_gate::requires_live_uniqueness(&entry.identity)
+        {
+            entry.scope.census_depth = Some(depth);
+        }
     }
 
     fn count_look_alikes(

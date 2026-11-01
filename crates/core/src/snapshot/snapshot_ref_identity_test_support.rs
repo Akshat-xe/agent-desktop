@@ -8,6 +8,7 @@ pub(crate) struct DrillAdapter {
     pub actions: Mutex<Vec<Vec<usize>>>,
     pub replace_outer_on_target: std::sync::atomic::AtomicBool,
     pub hit_unknown: std::sync::atomic::AtomicBool,
+    pub derived_names: std::sync::atomic::AtomicBool,
 }
 
 pub(crate) fn node(role: &str, name: &str) -> AccessibilityNode {
@@ -44,6 +45,7 @@ impl DrillAdapter {
             actions: Mutex::new(Vec::new()),
             replace_outer_on_target: std::sync::atomic::AtomicBool::new(false),
             hit_unknown: std::sync::atomic::AtomicBool::new(false),
+            derived_names: std::sync::atomic::AtomicBool::new(false),
         }
     }
 
@@ -101,7 +103,14 @@ impl ObservationOps for DrillAdapter {
                 tree
             }
             ObservationRoot::Element { handle, .. } => {
-                self.at(handle.downcast_ref::<Vec<usize>>().unwrap())?
+                let mut node = self.at(handle.downcast_ref::<Vec<usize>>().unwrap())?;
+                if self.derived_names.load(std::sync::atomic::Ordering::SeqCst)
+                    && !request.observation_mode.skeleton
+                    && node.role == "treeitem"
+                {
+                    node.identity.name = None;
+                }
+                node
             }
         };
         crate::adapter::observed_tree(&root, node)

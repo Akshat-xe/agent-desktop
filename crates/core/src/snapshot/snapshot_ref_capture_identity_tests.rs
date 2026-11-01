@@ -19,12 +19,19 @@ impl crate::InputOps for UngatedAdapter {}
 impl crate::SystemOps for UngatedAdapter {}
 
 fn capture_skeleton(names: &[&str]) -> (String, crate::refs::RefMap) {
+    capture_items("group", names)
+}
+
+fn capture_items(role: &str, names: &[&str]) -> (String, crate::refs::RefMap) {
     let mut window = node("window", "Test");
     window.children = names
         .iter()
         .map(|name| {
-            let mut anchor = node("group", name);
+            let mut anchor = node(role, name);
             anchor.children_count = Some(3);
+            if role == "treeitem" {
+                anchor.presentation.available_actions = vec!["Click".into()];
+            }
             anchor
         })
         .collect();
@@ -167,4 +174,40 @@ fn legacy_basisless_entry_is_stale_through_the_shared_resolver() {
     .err()
     .unwrap();
     assert_eq!(error.code, crate::ErrorCode::StaleRef);
+}
+
+#[test]
+fn actionable_skeleton_item_drills_like_an_anchor_and_refuses_a_deeper_twin() {
+    let _home = HomeGuard::new();
+    let (id, map) = capture_items("treeitem", &["Recents", "Shared"]);
+    let entry = map.get("@e1").unwrap();
+    assert_eq!(entry.identity.basis, Some(IdentityBasis::Name));
+    assert_eq!(entry.scope.census_depth, Some(3));
+    let adapter = DrillAdapter::new();
+    adapter
+        .derived_names
+        .store(true, std::sync::atomic::Ordering::SeqCst);
+    let mut window = node("window", "Test");
+    window.children = ["Recents", "Shared"]
+        .iter()
+        .map(|name| {
+            let mut item = node("treeitem", name);
+            item.children.push(node("button", "Save"));
+            item
+        })
+        .collect();
+    *adapter.tree.lock().unwrap() = window;
+    run_from_ref(&adapter, &TreeOptions::default(), "@e1", Some(&id)).unwrap();
+    adapter.tree.lock().unwrap().children.remove(0);
+    let mut deep = node("treeitem", "Recents");
+    for _ in 0..3 {
+        let mut parent = node("group", "Wrap");
+        parent.children.push(deep);
+        deep = parent;
+    }
+    adapter.tree.lock().unwrap().children[0].children.push(deep);
+    let error = run_from_ref(&adapter, &TreeOptions::default(), "@e1", Some(&id))
+        .err()
+        .unwrap();
+    assert_eq!(error.code(), "STALE_REF");
 }
