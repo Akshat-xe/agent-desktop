@@ -246,3 +246,45 @@ fn a_name_anchor_is_refuted_by_a_look_alike_in_another_identifier_group() {
         crate::BoundsSpace::Screen
     ));
 }
+
+fn hydrated_field(role: &str, value_known: bool) -> (RefEntry, ObservedNode) {
+    use crate::{ElementIdentifier, IdentifierEvidence, IdentifierKind};
+    let mut observed = node(0, evidence(role, Some("draft")), vec![], &[]);
+    observed.evidence.identifiers = IdentifierEvidence::typed(
+        [ElementIdentifier {
+            kind: IdentifierKind::AxIdentifier,
+            value: "field-1".into(),
+        }],
+        Some(0),
+        true,
+    );
+    observed.evidence.value = if value_known {
+        crate::LocatorField::Known("other".into())
+    } else {
+        crate::LocatorField::Unknown
+    };
+    let tree = tree(vec![observed.clone()], vec![0], true);
+    let mut preliminary =
+        super::super::materialize::ref_entry(&observed, &tree.source, &LocatorQuery::default());
+    preliminary.identity.basis = Some(crate::IdentityBasis::Positional);
+    let mut hydrated = preliminary.clone();
+    preserve_verified_identity(&preliminary, &observed, &mut hydrated);
+    (hydrated, observed)
+}
+
+#[test]
+fn an_unverified_mutable_name_is_not_saved_and_a_mirrored_read_still_resolves() {
+    let (entry, observed) = hydrated_field("textfield", false);
+    assert_eq!(entry.identity.name, None);
+    let mut later = observed.clone();
+    later.evidence.value = crate::LocatorField::Known("draft".into());
+    assert_eq!(anchor_matches(&entry, &later), IdentityMatch::Match);
+}
+
+#[test]
+fn a_mutable_name_confirmed_by_a_read_value_is_kept() {
+    let (entry, _) = hydrated_field("textfield", true);
+    assert_eq!(entry.identity.name.as_deref(), Some("draft"));
+    let (button, _) = hydrated_field("button", false);
+    assert_eq!(button.identity.name.as_deref(), Some("draft"));
+}

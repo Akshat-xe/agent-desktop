@@ -245,13 +245,19 @@ fn preserve_verified_identity(preliminary: &RefEntry, node: &ObservedNode, entry
                 | crate::IdentityBasis::Description
         )
     );
+    let name_unverified = node.evidence.value.is_unknown()
+        && crate::tree::roles::is_mutable_value_role(&entry.identity.role)
+        && preliminary.identity.basis != Some(crate::IdentityBasis::Name);
+    if name_unverified {
+        entry.identity.name = None;
+    }
     entry.identity.basis = match preliminary.identity.basis {
         Some(crate::IdentityBasis::Positional) => Some(
             crate::refs::identity_basis_counts::unproven_basis(&entry.identity),
         ),
         basis => basis,
     };
-    if node.evidence.name.is_unknown() {
+    if node.evidence.name.is_unknown() && !name_unverified {
         entry.identity.name.clone_from(&preliminary.identity.name);
     }
     if node.evidence.description.is_unknown() {
