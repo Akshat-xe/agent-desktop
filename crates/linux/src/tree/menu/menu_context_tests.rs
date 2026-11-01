@@ -156,8 +156,6 @@ fn observed_menu_context_is_validated_through_the_adapter_without_a_live_read() 
     let mut entry = ref_entry("menuitem");
     entry.source.source_surface = SnapshotSurface::Menu;
     entry.identity.retained_object = Some(complete.clone());
-    // Context is not element identity: a different object within the same
-    // proven popup is still judged by core's full predicate.
     let same_popup = context.encode("/other-item");
     assert!(
         adapter
