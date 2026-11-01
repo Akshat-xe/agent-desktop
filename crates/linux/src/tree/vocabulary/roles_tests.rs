@@ -203,3 +203,31 @@ fn a_push_button_number_refutes_a_checkbox_and_a_checkbox_number_admits_a_switch
     assert!(super::may_resolve_to(7, "switch"));
     assert!(!super::may_resolve_to(7, "button"));
 }
+
+fn failed<T>() -> Field<T> {
+    Field::Failed("gone".to_owned())
+}
+
+#[test]
+fn a_failed_refinement_read_leaves_the_role_unknown() {
+    let unread = LocatorField::Unknown;
+    let mut button = traits_of(43, "push button");
+    button.states = failed();
+    assert_eq!(role_token(&button, &[]), unread);
+    let mut text = traits_of(61, "text");
+    text.states = failed();
+    assert_eq!(role_token(&text, &[]), unread);
+    let mut list = traits_of(31, "list");
+    list.interfaces = failed();
+    assert_eq!(role_token(&list, &[]), unread);
+    let landmark = traits_of(110, "landmark");
+    assert_eq!(resolve_role(&landmark, &failed()), unread);
+    let mut check = traits_of(7, "check box");
+    check.role_name = failed();
+    assert_eq!(role_token(&check, &[]), unread);
+    assert_eq!(resolve_role(&traits_of(7, "switch"), &failed()), unread);
+    assert_eq!(
+        resolve_role(&traits_of(7, "check box"), &failed()),
+        LocatorField::Known("checkbox".to_owned())
+    );
+}

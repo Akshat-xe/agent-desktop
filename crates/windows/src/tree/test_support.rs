@@ -17,6 +17,28 @@ pub(crate) fn flag(property: TreeProperty, value: bool) -> (TreeProperty, Proper
     (property, PropertyOutcome::Known(PropertyValue::Flag(value)))
 }
 
+/// Adds a closed answer for every pattern read a role refinement depends on and the read set does
+/// not name, so a fixture that does not care about refinement reads as a fully read element.
+pub(crate) fn with_refinement_reads(
+    mut reads: Vec<(TreeProperty, PropertyOutcome)>,
+) -> Vec<(TreeProperty, PropertyOutcome)> {
+    for property in [
+        TreeProperty::ToggleAvailable,
+        TreeProperty::ExpandCollapseAvailable,
+        TreeProperty::SelectionAvailable,
+        TreeProperty::ValueAvailable,
+        TreeProperty::GridItemAvailable,
+        TreeProperty::TableItemAvailable,
+        TreeProperty::WindowAvailable,
+        TreeProperty::IsDialog,
+    ] {
+        if !reads.iter().any(|(read, _)| *read == property) {
+            reads.push(flag(property, false));
+        }
+    }
+    reads
+}
+
 pub(crate) fn number(property: TreeProperty, value: i32) -> (TreeProperty, PropertyOutcome) {
     (
         property,

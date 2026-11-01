@@ -73,7 +73,7 @@ fn control_type_props(
         PropertyOutcome::Known(PropertyValue::Number(control_type as i32)),
     )];
     reads.extend(extra);
-    ElementProperties::from_reads(reads)
+    ElementProperties::from_reads(crate::tree::test_support::with_refinement_reads(reads))
 }
 
 #[cfg(target_os = "windows")]
@@ -207,17 +207,15 @@ fn checkbox_advertising_toggle_stays_checkbox_not_switch() {
 
 #[cfg(target_os = "windows")]
 #[test]
-fn a_failed_read_only_read_resolves_document_not_textfield() {
-    assert_eq!(
-        role_of(
-            ControlType::Document,
-            vec![
-                flag(TreeProperty::ValueAvailable, true),
-                (TreeProperty::ValueIsReadOnly, PropertyOutcome::Unknown),
-            ]
-        ),
-        "document"
+fn a_failed_read_only_read_leaves_a_document_role_unread() {
+    let unread = control_type_props(
+        ControlType::Document,
+        vec![
+            flag(TreeProperty::ValueAvailable, true),
+            (TreeProperty::ValueIsReadOnly, PropertyOutcome::Unknown),
+        ],
     );
+    assert_eq!(resolve_role(&unread), LocatorField::Unknown);
     assert_eq!(
         role_of(
             ControlType::Document,
@@ -227,6 +225,55 @@ fn a_failed_read_only_read_resolves_document_not_textfield() {
             ]
         ),
         "textfield"
+    );
+}
+
+#[cfg(target_os = "windows")]
+#[test]
+fn a_failed_pattern_read_leaves_a_refined_role_unread() {
+    let unread = |control_type, reads| resolve_role(&control_type_props(control_type, reads));
+    let failed = |property| (property, PropertyOutcome::Unknown);
+    assert_eq!(
+        unread(
+            ControlType::Button,
+            vec![failed(TreeProperty::ExpandCollapseAvailable)]
+        ),
+        LocatorField::Unknown
+    );
+    assert_eq!(
+        unread(
+            ControlType::Button,
+            vec![failed(TreeProperty::ToggleAvailable)]
+        ),
+        LocatorField::Unknown
+    );
+    assert_eq!(
+        unread(
+            ControlType::List,
+            vec![failed(TreeProperty::SelectionAvailable)]
+        ),
+        LocatorField::Unknown
+    );
+    assert_eq!(
+        unread(ControlType::Pane, vec![failed(TreeProperty::IsDialog)]),
+        LocatorField::Unknown
+    );
+    assert_eq!(
+        unread(
+            ControlType::DataItem,
+            vec![failed(TreeProperty::GridItemAvailable)]
+        ),
+        LocatorField::Unknown
+    );
+    assert_eq!(
+        unread(
+            ControlType::Button,
+            vec![
+                flag(TreeProperty::ToggleAvailable, true),
+                failed(TreeProperty::ExpandCollapseAvailable),
+            ]
+        ),
+        LocatorField::Known("switch".to_owned())
     );
 }
 

@@ -49,6 +49,15 @@ pub(crate) const OCCLUDER_EVIDENCE_PROPERTIES: &[TreeProperty] = &[
     TreeProperty::HelpText,
     TreeProperty::FullDescription,
     TreeProperty::ControlType,
+    TreeProperty::ToggleAvailable,
+    TreeProperty::ExpandCollapseAvailable,
+    TreeProperty::SelectionAvailable,
+    TreeProperty::ValueAvailable,
+    TreeProperty::ValueIsReadOnly,
+    TreeProperty::GridItemAvailable,
+    TreeProperty::TableItemAvailable,
+    TreeProperty::WindowAvailable,
+    TreeProperty::IsDialog,
     TreeProperty::BoundingRectangle,
 ];
 

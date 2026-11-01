@@ -173,8 +173,15 @@ impl TreeSource for FakeTree {
     }
 
     fn evidence(&self, node: &i32) -> (ElementProperties, LocatorEvidence, u64) {
-        let properties =
-            ElementProperties::from_reads(self.reads.get(node).cloned().unwrap_or_default());
+        let reads = self.reads.get(node).cloned().unwrap_or_default();
+        let has_control_type = reads
+            .iter()
+            .any(|(property, _)| *property == TreeProperty::ControlType);
+        let properties = ElementProperties::from_reads(if has_control_type {
+            crate::tree::test_support::with_refinement_reads(reads)
+        } else {
+            reads
+        });
         let vocabulary = walk_vocabulary(&properties, &LabelOutcome::Unlabelled);
         (
             properties.clone(),

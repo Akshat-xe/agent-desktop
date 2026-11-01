@@ -1,5 +1,6 @@
 use agent_desktop_core::{LocatorField, Role};
 
+use super::gtk_switch::GTK_SWITCH_ROLE_NAME;
 use super::gtk_switch::is_gtk_switch;
 use super::role_numbers::{CHECK_BOX, LANDMARK, LIST, PUSH_BUTTON, TERMINAL, TEXT};
 use super::role_table::base_role;
@@ -100,7 +101,27 @@ pub(crate) fn may_resolve_to(number: u32, token: &str) -> bool {
     reachable.iter().any(|role| role.as_str() == token)
 }
 
-/// The role token of a node, or unknown when the role read failed. That is
+/// Whether a read the node's role refinement depends on failed, so the refined role cannot be told
+/// from the unrefined one.
+fn refinement_unread(traits: &NodeTraits, attributes: &AttributeRead) -> bool {
+    let Some(number) = traits.role.present() else {
+        return false;
+    };
+    match *number {
+        TEXT | TERMINAL | PUSH_BUTTON => traits.states.is_failed(),
+        LIST => traits.interfaces.is_failed(),
+        LANDMARK => attributes.is_failed(),
+        CHECK_BOX => {
+            traits.role_name.is_failed()
+                || (traits.role_name.present().map(String::as_str) == Some(GTK_SWITCH_ROLE_NAME)
+                    && attributes.is_failed())
+        }
+        _ => false,
+    }
+}
+
+/// The role token of a node, or unknown when the role read or a read its refinement depends on
+/// failed. That is
 /// not the canonical `unknown` role: it says nothing was read. A GTK switch
 /// is a check box by number but a `switch` by role, as on macOS and Windows.
 pub(crate) fn resolve_role(
@@ -110,6 +131,9 @@ pub(crate) fn resolve_role(
     let Some(number) = traits.role.present() else {
         return LocatorField::Unknown;
     };
+    if refinement_unread(traits, attributes) {
+        return LocatorField::Unknown;
+    }
     let role = if is_gtk_switch(&traits.role, &traits.role_name, attributes) {
         Role::Switch
     } else {

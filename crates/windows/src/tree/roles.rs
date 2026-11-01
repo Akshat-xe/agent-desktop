@@ -16,6 +16,9 @@ use super::properties::property_outcome::{PropertyOutcome, PropertyValue};
 pub fn resolve_role(properties: &ElementProperties) -> LocatorField<String> {
     match properties.get(TreeProperty::ControlType) {
         PropertyOutcome::Unknown => LocatorField::Unknown,
+        PropertyOutcome::Known(PropertyValue::Number(id)) if refinement_unread(id, properties) => {
+            LocatorField::Unknown
+        }
         PropertyOutcome::Known(PropertyValue::Number(id)) => {
             LocatorField::Known(control_type_role(id, properties).as_str().to_string())
         }
@@ -31,6 +34,7 @@ mod imp {
     use uiautomation::types::ControlType;
 
     use super::ElementProperties;
+    use super::PropertyOutcome;
     use super::TreeProperty;
 
     /// Maps one `ControlType` id to the canonical `Role`, refined by the
@@ -91,6 +95,58 @@ mod imp {
             ControlType::SemanticZoom => Role::Group,
             ControlType::AppBar => Role::Toolbar,
         }
+    }
+
+    /// Whether a pattern read the role refinement for this `ControlType` depends on failed, so the
+    /// refined role cannot be told from the unrefined one. A pattern read as available settles the
+    /// refinement whatever the other reads did.
+    pub(crate) fn refinement_unread(id: i32, properties: &ElementProperties) -> bool {
+        let Ok(control_type) = ControlType::try_from(id) else {
+            return false;
+        };
+        match control_type {
+            ControlType::Button => {
+                any_unread(properties, &[TreeProperty::ToggleAvailable])
+                    || any_unread(
+                        properties,
+                        &[
+                            TreeProperty::ToggleAvailable,
+                            TreeProperty::ExpandCollapseAvailable,
+                        ],
+                    )
+            }
+            ControlType::List => any_unread(properties, &[TreeProperty::SelectionAvailable]),
+            ControlType::DataItem | ControlType::Custom => any_unread(
+                properties,
+                &[
+                    TreeProperty::GridItemAvailable,
+                    TreeProperty::TableItemAvailable,
+                ],
+            ),
+            ControlType::Pane => any_unread(
+                properties,
+                &[TreeProperty::WindowAvailable, TreeProperty::IsDialog],
+            ),
+            ControlType::Document => {
+                any_unread(properties, &[TreeProperty::ValueAvailable])
+                    || (is_set(properties, TreeProperty::ValueAvailable)
+                        && is_unread(properties, TreeProperty::ValueIsReadOnly))
+            }
+            _ => false,
+        }
+    }
+
+    fn is_set(properties: &ElementProperties, read: TreeProperty) -> bool {
+        properties.is_true(read)
+    }
+
+    fn is_unread(properties: &ElementProperties, read: TreeProperty) -> bool {
+        matches!(properties.get(read), PropertyOutcome::Unknown)
+    }
+
+    fn any_unread(properties: &ElementProperties, reads: &[TreeProperty]) -> bool {
+        !reads.iter().any(|read| is_set(properties, *read))
+            && reads.iter().any(|read| is_unread(properties, *read))
     }
 
     /// Roles the fixture is required to expose in one snapshot so every
@@ -259,9 +315,13 @@ mod imp {
     pub(crate) fn control_type_role(_id: i32, _properties: &ElementProperties) -> Role {
         Role::Unknown
     }
+
+    pub(crate) fn refinement_unread(_id: i32, _properties: &ElementProperties) -> bool {
+        false
+    }
 }
 
-use imp::control_type_role;
+use imp::{control_type_role, refinement_unread};
 
 #[cfg(all(test, target_os = "windows"))]
 pub(crate) use imp::{FIXTURE_COVERED_ROLES, FIXTURE_UNCOVERED_ROLES};
