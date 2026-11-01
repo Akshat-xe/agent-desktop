@@ -51,35 +51,31 @@ fn resolve_ref_within_deadline(
     context: &CommandContext,
 ) -> Result<(RefEntry, crate::adapter::NativeHandle), AppError> {
     let entry = load_ref_entry(ref_id, context)?;
-    let handle =
-        resolve_handle_within_deadline(adapter, &entry, deadline, None).inspect_err(|err| {
-            let _ = context.trace_lazy("ref.resolve.error", || {
-                json!({
-                    "ref": ref_id,
-                    "code": err.code.as_str(),
-                    "message": err.message.clone(),
-                    "details": err.details.clone()
-                })
-            });
-        })?;
+    let handle = resolve_handle_within_deadline(adapter, &entry, deadline).inspect_err(|err| {
+        let _ = context.trace_lazy("ref.resolve.error", || {
+            json!({
+                "ref": ref_id,
+                "code": err.code.as_str(),
+                "message": err.message.clone(),
+                "details": err.details.clone()
+            })
+        });
+    })?;
     tracing::debug!("resolve: {} resolved successfully", ref_id);
     context.trace_lazy("ref.resolve.ok", || json!({ "ref": ref_id }))?;
     Ok((entry, handle))
 }
 
 /// Gives one-shot resolution its full caller budget; polling paths own their slices.
-/// `lease` is an interaction lease the caller already holds, so observation
-/// activation reuses it instead of queueing behind the same process's lock.
 pub(crate) fn resolve_handle_within_deadline(
     adapter: &dyn PlatformAdapter,
     entry: &RefEntry,
     deadline: crate::Deadline,
-    lease: Option<&crate::InteractionLease>,
 ) -> Result<crate::adapter::NativeHandle, crate::AdapterError> {
     if deadline.is_expired() {
         return Err(deadline.timeout_error());
     }
-    crate::refs::resolve_saved_ref::resolve_saved_ref(adapter, entry, deadline, lease)
+    adapter.resolve_element_strict(entry, deadline)
 }
 
 pub(crate) fn execute_ref_action_with_context(

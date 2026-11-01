@@ -11,7 +11,6 @@ fn bounds_only_entry(retained_object: Option<&str>) -> RefEntry {
             process_instance: Some("test-instance".into()),
         },
         identity: RefEntryIdentity {
-            unique_at_capture: false,
             retained_object: retained_object.map(String::from),
             role: "cell".into(),
             name: None,

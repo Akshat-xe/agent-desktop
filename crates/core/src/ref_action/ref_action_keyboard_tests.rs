@@ -44,7 +44,6 @@ impl ObservationOps for KeyboardAdapter {
     ) -> Result<Option<crate::Rect>, AdapterError> {
         Ok(None)
     }
-    crate::adapter::saved_ref_scope!("textfield", Some("Field"));
 }
 
 impl ActionOps for KeyboardAdapter {
@@ -88,8 +87,7 @@ fn a_headed_type_on_a_session_that_cannot_activate_skips_window_focus() {
     let adapter = KeyboardAdapter::default();
     let entry: RefEntry = serde_json::from_value(serde_json::json!({
         "pid": 1, "process_instance": "test-instance", "role": "textfield", "name": "Field",
-        "source_window_id": "w-1", "source_surface": "window", "path": [0],
-        "unique_at_capture": true,
+        "source_window_id": "w-test", "source_surface": "window", "path": [0],
         "available_actions": ["TypeText"], "states": []
     }))
     .unwrap();

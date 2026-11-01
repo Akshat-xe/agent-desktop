@@ -266,7 +266,6 @@ fn allocate_refs_skips_web_container_noise() {
 
     let mut refmap = RefMap::new();
     let config = RefAllocConfig {
-        capture: None,
         options: crate::refs::ref_alloc_options::RefAllocOptions {
             include_bounds: true,
             interactive_only: true,
@@ -299,7 +298,6 @@ fn allocate_refs_records_structural_paths() {
 
     let mut refmap = RefMap::new();
     let config = RefAllocConfig {
-        capture: None,
         options: crate::refs::ref_alloc_options::RefAllocOptions {
             include_bounds: true,
             interactive_only: false,
@@ -342,7 +340,6 @@ fn allocate_refs_keeps_bounds_hash_when_snapshot_hides_bounds() {
     root.children = vec![node("button", Some("Open"))];
     let mut refmap = RefMap::new();
     let config = RefAllocConfig {
-        capture: None,
         options: crate::refs::ref_alloc_options::RefAllocOptions {
             include_bounds: false,
             interactive_only: false,
@@ -389,8 +386,6 @@ fn entry_hash() -> u64 {
     .unwrap()
 }
 
-#[path = "ref_alloc_anchor_tests.rs"]
-mod anchor_tests;
 #[path = "ref_alloc_bounds_tests.rs"]
 mod bounds_tests;
 #[path = "ref_alloc_ordering_tests.rs"]

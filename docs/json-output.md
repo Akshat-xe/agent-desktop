@@ -127,19 +127,6 @@ Earlier output synthesized a display name, falling back to `value` or
 `name` as always present must tolerate its absence and apply their own fallback
 to `role` or `value`.
 
-## Ref re-identification details
-
-Every ref is re-identified from its stored entry or refused, and `details.kind` names which. A saved ref produces one of these four refusals:
-
-| `details.kind` | Code | Meaning |
-|------|------|---------|
-| `retained_object_stale` | `STALE_REF` | macOS: the element's recorded address is dead, or its process, role or recorded identifier no longer matches. `details.reason` is `dead`, `pid`, `role` or `native_identifier`. No search runs, so the ref cannot land on a look-alike. Take a fresh snapshot. |
-| `saved_ref_absent` | `STALE_REF` | No live element matches the stored role and stable fields over complete evidence, so the element is gone. Take a fresh snapshot. |
-| `saved_ref_ambiguous` | `AMBIGUOUS_TARGET` | Two or more live elements match the stored role and stable fields. Take a fresh snapshot. |
-| `identity_not_unique` | `AMBIGUOUS_TARGET` | The ref was not the only element matching its role and stable fields when it was captured, so nothing is searched. Identical twins reach this kind on Windows, on Linux, and on macOS when the element yields no address. Only an explicit coordinate click (`--headed mouse-click --xy`) can pick one, and it takes the foreground. |
-
-The fifth outcome is `resolution_identity_unknown`, which carries `TIMEOUT`: a live field could not be read, so the identity count stayed unproven. It is retryable. `saved_ref_absent`, `saved_ref_ambiguous` and `identity_not_unique` carry `details.retryable: false`, because waiting cannot change the answer. Every one of these is `not_delivered`.
-
 ## Error codes
 
 | Code | Meaning |

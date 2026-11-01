@@ -3,8 +3,7 @@ use std::sync::Mutex;
 
 use agent_desktop_core::{
     Action, ActionRequest, ActionResult, AdapterError, Deadline, InteractionLease, LiveElement,
-    NativeHandle, ObservationRequest, ObservationRoot, ObservationSource, ObservedSubtree,
-    ObservedTree, ProcessId, Rect, RefEntry, WindowFilter, WindowInfo, WindowState,
+    NativeHandle, Rect, RefEntry,
 };
 
 use crate::actions::physical_target::tests::fake::FakeWorld;
@@ -17,18 +16,6 @@ use crate::tree::observe::node_evidence::evidence_for;
 use crate::tree::placement::Placement;
 use crate::tree::vocabulary::state_bits::{ENABLED, SHOWING, VISIBLE};
 use crate::tree::{AtspiElement, Extents, Field, ObservedRead};
-
-fn fixture_window() -> WindowInfo {
-    WindowInfo {
-        id: "fixture-window".into(),
-        title: "Settings".into(),
-        app: "Fixture".into(),
-        pid: ProcessId::new(1),
-        process_instance: Some("fixture-instance".into()),
-        bounds: None,
-        state: WindowState::default(),
-    }
-}
 
 struct Sidebar {
     scene: Mutex<(ObservedRead, Placement)>,
@@ -79,11 +66,7 @@ impl Sidebar {
 }
 
 impl ObservationOps for Sidebar {
-    fn list_windows(&self, _: &WindowFilter, _: Deadline) -> Result<Vec<WindowInfo>, AdapterError> {
-        Ok(vec![fixture_window()])
-    }
-
-    fn resolve_locator_anchor(
+    fn resolve_element_strict(
         &self,
         _: &RefEntry,
         _: Deadline,
@@ -98,21 +81,6 @@ impl ObservationOps for Sidebar {
             .element
             .clone()
             .into_native_handle())
-    }
-
-    fn observe_tree(
-        &self,
-        root: ObservationRoot<'_>,
-        _: &ObservationRequest,
-    ) -> Result<ObservedTree, AdapterError> {
-        let scene = self.scene.lock().unwrap();
-        let evidence = evidence_for(&scene.0, &scene.0.node.element);
-        ObservedTree::from_roots(
-            vec![ObservedSubtree::new(evidence, Vec::new(), true, None)],
-            ObservationSource::from_root(&root, root.surface()),
-            agent_desktop_core::LocatorStats::default(),
-            true,
-        )
     }
 
     fn get_live_element(&self, _: &NativeHandle, _: Deadline) -> Result<LiveElement, AdapterError> {
@@ -198,7 +166,6 @@ fn a_clipped_row_is_scrolled_into_view_and_clicked_at_its_new_geometry() {
     entry.process.process_instance = Some("fixture-instance".into());
     entry.source.source_window_id = Some("fixture-window".into());
     entry.identity.name = Some("Mouse & Touchpad".into());
-    entry.identity.unique_at_capture = true;
     entry.geometry.bounds = Some(Rect {
         x: 100.0,
         y: 200.0,

@@ -184,10 +184,12 @@ impl<'a, S: TreeSource> TreeWalk<'a, S> {
         if !subtree_complete {
             self.complete = false;
         }
-        Some(
-            ObservedSubtree::new(evidence, children, subtree_complete, children_count)
-                .with_wrapper(web_wrapper),
-        )
+        Some(ObservedSubtree::new(
+            evidence,
+            children,
+            subtree_complete,
+            children_count,
+        ))
     }
 
     /// The child enumeration loop.

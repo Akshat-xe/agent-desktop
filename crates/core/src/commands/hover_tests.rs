@@ -98,7 +98,6 @@ impl ObservationOps for HoverCaptureAdapter {
         }
         Ok(())
     }
-    crate::adapter::saved_ref_scope!("button", Some("Target"));
 }
 
 impl ActionOps for HoverCaptureAdapter {}
@@ -150,7 +149,6 @@ fn ref_snapshot(pid: u32) -> String {
             value: None,
             description: None,
             native_id: None,
-            unique_at_capture: true,
         },
         geometry: crate::RefGeometry {
             bounds_space: None,
@@ -309,7 +307,6 @@ impl ObservationOps for StaleThenOkAdapter {
     ) -> Result<HitTestResult, AdapterError> {
         Ok(HitTestResult::ReachesTarget)
     }
-    crate::adapter::saved_ref_scope!("button", Some("Target"));
 }
 
 impl ActionOps for StaleThenOkAdapter {}

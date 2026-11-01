@@ -17,7 +17,8 @@ fn native_id_ancestor_covers_unnamed_boundaries() {
     let mut root = node("window");
     root.children = vec![split_view];
 
-    let (result, refmap) = run_captured(root);
+    let mut refmap = RefMap::new();
+    let result = ref_alloc::allocate_refs(root, &mut refmap, &run_config(false, false)).unwrap();
 
     let split_view = &result.children[0];
     assert!(split_view.ref_id.is_some());
@@ -47,7 +48,8 @@ fn web_boundary_with_only_ubiquitous_affordances_gets_anchor_ref() {
     let mut root = node("window");
     root.children = vec![boundary];
 
-    let (result, refmap) = run_captured(root);
+    let mut refmap = RefMap::new();
+    let result = ref_alloc::allocate_refs(root, &mut refmap, &run_config(false, false)).unwrap();
 
     let boundary = &result.children[0];
     let entry = refmap.get(boundary.ref_id.as_deref().unwrap()).unwrap();
@@ -68,7 +70,8 @@ fn unlabeled_bounded_boundary_gets_drill_ref() {
     let mut root = node("window");
     root.children = vec![boundary];
 
-    let (result, refmap) = run_captured(root);
+    let mut refmap = RefMap::new();
+    let result = ref_alloc::allocate_refs(root, &mut refmap, &run_config(false, false)).unwrap();
 
     let boundary = &result.children[0];
     assert!(boundary.ref_id.is_some());
@@ -99,7 +102,8 @@ fn a_named_bounded_boundary_still_has_its_rect_stripped() {
     let mut root = node("window");
     root.children = vec![boundary];
 
-    let (result, refmap) = run_captured(root);
+    let mut refmap = RefMap::new();
+    let result = ref_alloc::allocate_refs(root, &mut refmap, &run_config(false, false)).unwrap();
 
     let boundary = &result.children[0];
     let entry = refmap.get(boundary.ref_id.as_deref().unwrap()).unwrap();
@@ -110,7 +114,6 @@ fn a_named_bounded_boundary_still_has_its_rect_stripped() {
 #[test]
 fn deepest_resolvable_anchor_wins() {
     let mut boundary = node("group");
-    boundary.identity.name = Some("Sidebar".into());
     boundary.children_count = Some(5);
     boundary.presentation.bounds = Some(crate::Rect {
         x: 10.0,
@@ -127,7 +130,8 @@ fn deepest_resolvable_anchor_wins() {
     let mut root = node("window");
     root.children = vec![split_view];
 
-    let (result, refmap) = run_captured(root);
+    let mut refmap = RefMap::new();
+    let result = ref_alloc::allocate_refs(root, &mut refmap, &run_config(false, false)).unwrap();
 
     assert!(result.children[0].ref_id.is_none());
     assert!(result.children[0].children[0].ref_id.is_some());

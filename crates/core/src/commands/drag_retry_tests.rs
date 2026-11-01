@@ -51,7 +51,6 @@ impl ObservationOps for StaleThenOkAdapter {
     ) -> Result<HitTestResult, AdapterError> {
         Ok(HitTestResult::ReachesTarget)
     }
-    crate::adapter::saved_ref_scope!("button", Some("Item"));
 }
 
 impl ActionOps for StaleThenOkAdapter {}
@@ -163,7 +162,6 @@ impl ObservationOps for OccludedFromAdapter {
             bounds: None,
         })
     }
-    crate::adapter::saved_ref_scope!("button", Some("Item"));
 }
 
 impl ActionOps for OccludedFromAdapter {}
@@ -266,7 +264,6 @@ impl ObservationOps for MutuallyOffscreenAdapter {
     ) -> Result<HitTestResult, AdapterError> {
         Ok(HitTestResult::ReachesTarget)
     }
-    crate::adapter::saved_ref_scope!("button", Some("Item"));
 }
 
 impl ActionOps for MutuallyOffscreenAdapter {

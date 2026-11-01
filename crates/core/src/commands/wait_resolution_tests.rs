@@ -24,7 +24,6 @@ impl ObservationOps for AmbiguousResolveAdapter {
         Err(AdapterError::ambiguous_target("2 candidates matched")
             .with_details(serde_json::json!({ "retryable": true })))
     }
-    crate::adapter::saved_ref_scope!("button", Some("Run"));
 }
 
 impl ActionOps for AmbiguousResolveAdapter {}
@@ -49,7 +48,6 @@ impl ObservationOps for TransientResolveAdapter {
         }
         Ok(NativeHandle::null())
     }
-    crate::adapter::saved_ref_scope!("button", Some("Run"));
 }
 
 impl ActionOps for TransientResolveAdapter {}
@@ -68,7 +66,6 @@ impl ObservationOps for PermissionResolveAdapter {
     ) -> Result<NativeHandle, AdapterError> {
         Err(AdapterError::permission_denied())
     }
-    crate::adapter::saved_ref_scope!("button", Some("Run"));
 }
 
 impl ActionOps for PermissionResolveAdapter {}
@@ -93,7 +90,6 @@ impl ObservationOps for TimeoutCaptureAdapter {
             .push(deadline.remaining().as_millis());
         Ok(NativeHandle::null())
     }
-    crate::adapter::saved_ref_scope!("button", Some("Run"));
 }
 
 impl ActionOps for TimeoutCaptureAdapter {}
@@ -116,7 +112,6 @@ fn snapshot_with_one_ref() -> String {
             value: None,
             description: None,
             native_id: None,
-            unique_at_capture: true,
         },
         geometry: crate::RefGeometry {
             bounds_space: None,

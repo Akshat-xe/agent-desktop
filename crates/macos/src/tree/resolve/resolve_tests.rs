@@ -6,7 +6,8 @@ use crate::tree::resolve::resolve_roots::{
     source_window_scope_required,
 };
 use crate::tree::resolve::resolve_search::{
-    find_entry_by_path, incomplete_traversal_error, match_native_or_text_identity, walk_finite_path,
+    find_entry_by_path, incomplete_traversal_error, match_native_or_text_identity,
+    native_identifier_reused_by_different_role, walk_finite_path,
 };
 use agent_desktop_core::{
     RefCapabilities, RefEntryIdentity, RefGeometry, RefProcess, RefScope, RefSource,
@@ -31,7 +32,6 @@ pub(super) fn entry(
             value: None,
             description: None,
             native_id: None,
-            unique_at_capture: false,
         },
         geometry: RefGeometry {
             bounds_space: None,
@@ -58,6 +58,26 @@ pub(super) fn entry(
 }
 
 #[test]
+fn path_fast_path_requires_a_hard_window_scope() {
+    assert!(!can_use_path_fast_path(&entry(None, None, None, None)));
+    assert!(can_use_path_fast_path(&entry(
+        None,
+        Some("w-10"),
+        None,
+        None
+    )));
+    assert!(can_use_path_fast_path(&entry(
+        None,
+        None,
+        Some("Documents"),
+        None
+    )));
+    let mut menu = entry(Some(42), Some("w-10"), None, None);
+    menu.source.source_surface = SnapshotSurface::Menu;
+    assert!(can_use_path_fast_path(&menu));
+}
+
+#[test]
 fn locator_anchor_path_requires_scope_and_identity_or_geometry() {
     let mut unscoped = entry(Some(42), None, None, None);
     assert!(!can_use_locator_anchor_path(&unscoped));
@@ -72,7 +92,7 @@ fn locator_anchor_path_requires_scope_and_identity_or_geometry() {
 
 #[test]
 fn drill_down_path_must_be_absolute() {
-    assert!(!can_use_locator_anchor_path(&entry(
+    assert!(!can_use_path_fast_path(&entry(
         Some(42),
         Some("w-10"),
         None,
@@ -80,7 +100,23 @@ fn drill_down_path_must_be_absolute() {
     )));
     let mut absolute = entry(Some(42), Some("w-10"), None, Some("@e1"));
     absolute.scope.path_is_absolute = true;
-    assert!(can_use_locator_anchor_path(&absolute));
+    assert!(can_use_path_fast_path(&absolute));
+}
+
+#[test]
+fn broad_search_requires_bounds_or_stable_identity() {
+    let mut blank = entry(None, None, None, None);
+    blank.identity.name = None;
+
+    assert!(!can_use_broad_search(&blank));
+    blank.identity.native_id = Some(agent_desktop_core::ElementIdentifier {
+        kind: agent_desktop_core::IdentifierKind::AxDomIdentifier,
+        value: "dom-id".into(),
+    });
+    assert!(can_use_broad_search(&blank));
+    blank.identity.native_id = None;
+    blank.identity.description = Some("Insert Text Box".into());
+    assert!(can_use_broad_search(&blank));
 }
 
 #[test]
@@ -150,27 +186,6 @@ fn strict_resolution_requires_the_exact_process_instance() {
         verify_process_instance(&stored).unwrap_err().code,
         ErrorCode::StaleRef
     );
-}
-
-#[test]
-fn a_saved_ref_without_an_element_token_is_refused_not_searched_for() {
-    let pid = i32::try_from(std::process::id()).expect("test pid fits macOS pid_t");
-    let instance = crate::system::process::process_identity::token_for_pid(pid)
-        .unwrap()
-        .expect("current process identity");
-    let mut tokenless = entry(Some(42), Some("w-42"), None, None);
-    tokenless.process.pid = agent_desktop_core::ProcessId::try_from(pid).unwrap();
-    tokenless.process.process_instance = Some(instance);
-
-    let error = resolve_element_with_deadline(
-        &tokenless,
-        agent_desktop_core::Deadline::after(1_000).unwrap(),
-    )
-    .err()
-    .expect("a tokenless ref must be refused");
-
-    assert_eq!(error.code, ErrorCode::ElementNotFound);
-    assert_eq!(error.details.unwrap()["kind"], "element_token_required");
 }
 
 #[test]
@@ -334,6 +349,37 @@ fn authoritatively_absent_native_identifier_is_a_definitive_mismatch() {
         match_native_or_text_identity(&stored, &live),
         agent_desktop_core::IdentityMatch::NoMatch
     );
+}
+
+#[test]
+fn native_identifier_reuse_by_a_different_role_is_definitively_stale() {
+    use agent_desktop_core::{
+        ElementIdentifier, IdentifierEvidence, IdentifierKind, LocatorEvidence, LocatorField,
+        LocatorRefEvidence,
+    };
+
+    let mut stored = entry(None, Some("w-42"), None, None);
+    let identifier = ElementIdentifier {
+        kind: IdentifierKind::AxDomIdentifier,
+        value: "compose".into(),
+    };
+    stored.identity.native_id = Some(identifier.clone());
+    let live = LocatorEvidence {
+        role: LocatorField::Known("textfield".into()),
+        name: LocatorField::Absent,
+        description: LocatorField::Absent,
+        value: LocatorField::Absent,
+        identifiers: IdentifierEvidence::typed([identifier], Some(0), true),
+        states: LocatorField::Absent,
+        ref_evidence: LocatorRefEvidence {
+            window_bounds: LocatorField::Absent,
+            bounds: LocatorField::Absent,
+            available_actions: LocatorField::Absent,
+            descriptors: Default::default(),
+        },
+    };
+
+    assert!(native_identifier_reused_by_different_role(&stored, &live));
 }
 
 #[test]

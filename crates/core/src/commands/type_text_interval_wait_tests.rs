@@ -27,10 +27,7 @@ impl TitledField {
             presentation: Default::default(),
             children_count: None,
             subtree_truncated: false,
-            children: vec![crate::adapter::minimal_accessibility_node(
-                "textfield",
-                "Target",
-            )],
+            children: vec![],
         }
     }
 }
@@ -41,12 +38,6 @@ impl ObservationOps for TitledField {
         root: crate::locator::live_locator::ObservationRoot<'_>,
         _request: &crate::locator::live_locator::ObservationRequest,
     ) -> Result<crate::locator::live_locator::ObservedTree, AdapterError> {
-        if matches!(
-            root,
-            crate::locator::live_locator::ObservationRoot::Element { .. }
-        ) {
-            return crate::adapter::saved_ref_element_tree(root);
-        }
         crate::adapter::observed_tree(&root, self.window())
     }
 
@@ -99,7 +90,6 @@ impl ObservationOps for TitledField {
             offscreen: Some(false),
         }
     );
-    crate::adapter::saved_ref_anchor!();
 }
 
 impl ActionOps for TitledField {

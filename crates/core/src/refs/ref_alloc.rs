@@ -1,6 +1,5 @@
 use crate::AccessibilityNode;
-use crate::refs::ref_capture_proof::CaptureProof;
-use crate::refs::ref_identity::{has_meaningful_identity, is_element_token};
+use crate::refs::ref_identity::has_meaningful_identity;
 use crate::refs::{RefEntry, RefMap};
 use std::collections::HashSet;
 
@@ -34,7 +33,6 @@ pub(crate) fn ref_entry_from_node(
                 .native_id
                 .clone()
                 .filter(|id| !id.value.trim().is_empty()),
-            unique_at_capture: false,
         },
         geometry: crate::RefGeometry {
             bounds,
@@ -172,86 +170,22 @@ pub fn transform_tree(
     node
 }
 
-pub(crate) fn allocate_refs<'a>(
+pub(crate) fn allocate_refs(
     node: AccessibilityNode,
     refmap: &mut RefMap,
-    config: &RefAllocConfig<'a>,
+    config: &RefAllocConfig,
 ) -> Result<AccessibilityNode, crate::AppError> {
-    let plan = AllocationPlan::new(&node, config.scope.root_ref_id.is_some(), config.capture);
+    let mut skeleton_anchors = HashSet::new();
+    if config.scope.root_ref_id.is_none() {
+        plan_skeleton_anchors(&node, &mut Vec::new(), &mut skeleton_anchors);
+    }
     allocate_refs_at_path(
         node,
         refmap,
         config,
         &mut config.scope.path_prefix.to_vec(),
-        &plan,
+        &skeleton_anchors,
     )
-}
-
-/// Whether allocation over this presentation selects an entry that cannot
-/// re-identify itself on its own: a ref-able node, or a boundary container
-/// offered as a skeleton drill target, whose identity carries no element token.
-/// A presentation whose selected entries all carry a token resolves through
-/// those tokens and needs no capture census, so a caller can ask this before
-/// paying for the observation a census needs.
-pub(crate) fn selects_tokenless_entry(node: &AccessibilityNode) -> bool {
-    let plan = AllocationPlan::new(node, false, None);
-    selects_tokenless_at(node, &mut Vec::new(), &plan)
-}
-
-fn selects_tokenless_at(
-    node: &AccessibilityNode,
-    path: &mut Vec<usize>,
-    plan: &AllocationPlan<'_>,
-) -> bool {
-    let tokenless = !carries_element_token(node);
-    if tokenless && (is_ref_able(node) || plan.skeleton_anchors.contains(path.as_slice())) {
-        return true;
-    }
-    node.children.iter().enumerate().any(|(index, child)| {
-        path.push(index);
-        let selected = selects_tokenless_at(child, path, plan);
-        path.pop();
-        selected
-    })
-}
-
-/// What one allocation decides once for every node it visits: which boundary
-/// nodes anchor a skeleton, and which entries the observation's capture proof
-/// found exactly once.
-struct AllocationPlan<'a> {
-    skeleton_anchors: HashSet<Vec<usize>>,
-    capture: Option<&'a CaptureProof<'a>>,
-}
-
-impl<'a> AllocationPlan<'a> {
-    fn new(
-        node: &AccessibilityNode,
-        scoped_to_root: bool,
-        capture: Option<&'a CaptureProof<'a>>,
-    ) -> Self {
-        let mut skeleton_anchors = HashSet::new();
-        if !scoped_to_root {
-            plan_skeleton_anchors(node, &mut Vec::new(), &mut skeleton_anchors);
-        }
-        Self {
-            skeleton_anchors,
-            capture,
-        }
-    }
-
-    fn proven(&self, entry: &RefEntry, path: &[usize]) -> bool {
-        self.capture
-            .is_some_and(|capture| capture.proves(entry, path))
-    }
-
-    /// Whether a candidate boundary node is offered as a drill target: a later
-    /// resolve re-identifies it only through an element token or through the
-    /// capture finding its identity exactly once. Geometry is not identity and a
-    /// twin cannot be re-identified, so neither is offered; candidates are
-    /// planned without this gate because a caller costs the census from them.
-    fn drillable(&self, node: &AccessibilityNode, entry: &RefEntry, path: &[usize]) -> bool {
-        carries_element_token(node) || self.proven(entry, path)
-    }
 }
 
 fn plan_skeleton_anchors(
@@ -271,43 +205,41 @@ fn plan_skeleton_anchors(
     if can_receive_observed_ref(node) && is_ref_able(node) {
         return false;
     }
-    if !path.is_empty() && can_receive_observed_ref(node) && carries_identity_evidence(node) {
+    if !path.is_empty() && is_resolvable_skeleton_anchor(node) {
         anchors.insert(path.clone());
         return false;
     }
     true
 }
 
-/// Whether a boundary container carries anything a census could prove it by: an
-/// element token, a recorded name, description or native identifier, or bounds.
-/// Without one it is no drill target, so it earns neither a ref nor a census.
-fn carries_identity_evidence(node: &AccessibilityNode) -> bool {
-    carries_element_token(node)
-        || has_meaningful_text(node.identity.name.as_deref())
-        || has_meaningful_text(node.identity.description.as_deref())
-        || node.identity.native_id.as_ref().is_some_and(|identifier| {
-            identifier.kind != crate::IdentifierKind::Unknown && !identifier.value.trim().is_empty()
-        })
-        || node
-            .presentation
-            .bounds
-            .and_then(|bounds| bounds.bounds_hash())
-            .is_some()
-}
-
-fn has_meaningful_text(value: Option<&str>) -> bool {
-    value.is_some_and(|text| !text.trim().is_empty())
-}
-
-fn carries_element_token(node: &AccessibilityNode) -> bool {
-    node.identity
-        .retained_object
-        .as_deref()
-        .is_some_and(is_element_token)
+/// A skeleton anchor is offered as a drill target because it carries
+/// evidence a later resolve can re-identify it by. When that evidence is
+/// geometry alone, the entry must keep its bounds: dropping them because the
+/// caller did not ask to *see* bounds leaves a ref this predicate approved
+/// and nothing can resolve, which is a drill target that fails on its own
+/// snapshot. The ref-able path guards the same strip with the same
+/// condition.
+fn is_resolvable_skeleton_anchor(node: &AccessibilityNode) -> bool {
+    can_receive_observed_ref(node)
+        && (has_meaningful_text(node.identity.name.as_deref())
+            || has_meaningful_text(node.identity.description.as_deref())
+            || node.identity.native_id.as_ref().is_some_and(|identifier| {
+                identifier.kind != crate::IdentifierKind::Unknown
+                    && !identifier.value.trim().is_empty()
+            })
+            || node
+                .presentation
+                .bounds
+                .and_then(|bounds| bounds.bounds_hash())
+                .is_some())
 }
 
 fn can_receive_observed_ref(node: &AccessibilityNode) -> bool {
     crate::Role::is_canonical(&node.role) && node.role != "unknown"
+}
+
+fn has_meaningful_text(value: Option<&str>) -> bool {
+    value.is_some_and(|text| !text.trim().is_empty())
 }
 
 fn allocate_refs_at_path(
@@ -315,7 +247,7 @@ fn allocate_refs_at_path(
     refmap: &mut RefMap,
     config: &RefAllocConfig,
     path: &mut Vec<usize>,
-    plan: &AllocationPlan,
+    skeleton_anchors: &HashSet<Vec<usize>>,
 ) -> Result<AccessibilityNode, crate::AppError> {
     let node_is_ref_able = is_ref_able(&node);
 
@@ -327,25 +259,21 @@ fn allocate_refs_at_path(
             path,
         );
         entry.scope.path_is_absolute = config.scope.root_ref_id.is_some();
-        entry.identity.unique_at_capture = plan.proven(&entry, path);
         if !config.options.include_bounds && has_meaningful_identity(&entry) {
             entry.geometry.bounds = None;
         }
         node.ref_id = allocate_observed_ref(refmap, entry)?;
     }
 
-    let is_skeleton_anchor = !node_is_ref_able && plan.skeleton_anchors.contains(path.as_slice());
+    let is_skeleton_anchor = !node_is_ref_able && skeleton_anchors.contains(path.as_slice());
 
     if is_skeleton_anchor {
         let mut entry = ref_entry_from_node(&node, &config.source, None, path);
         entry.capabilities.available_actions = vec![];
-        entry.identity.unique_at_capture = plan.proven(&entry, path);
-        if plan.drillable(&node, &entry, path) {
-            if !config.options.include_bounds && has_meaningful_identity(&entry) {
-                entry.geometry.bounds = None;
-            }
-            node.ref_id = allocate_observed_ref(refmap, entry)?;
+        if !config.options.include_bounds && has_meaningful_identity(&entry) {
+            entry.geometry.bounds = None;
         }
+        node.ref_id = allocate_observed_ref(refmap, entry)?;
     }
 
     if !config.options.include_bounds {
@@ -356,7 +284,7 @@ fn allocate_refs_at_path(
     for (idx, child) in node.children.into_iter().enumerate() {
         let collapsible = config.options.compact && is_collapsible(&child);
         path.push(idx);
-        let child = allocate_refs_at_path(child, refmap, config, path, plan)?;
+        let child = allocate_refs_at_path(child, refmap, config, path, skeleton_anchors)?;
         path.pop();
         if collapsible {
             if let Some(child) = child.children.into_iter().next() {

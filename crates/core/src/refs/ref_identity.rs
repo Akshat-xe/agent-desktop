@@ -5,35 +5,13 @@ use crate::{
     tree::roles::is_mutable_value_role,
 };
 
-const ELEMENT_TOKEN_PREFIX: &str = "axtok1:";
-
-/// The retained object that is a genuine element token. A platform that keeps
-/// only a positional path or a runtime id retains a location, not a handle, so
-/// core never treats that value as identity evidence.
-pub fn element_token(entry: &RefEntry) -> Option<&str> {
-    entry
-        .identity
-        .retained_object
-        .as_deref()
-        .filter(|token| is_element_token(token))
-}
-
-/// Whether a retained object value is a genuine element token rather than a
-/// retained location.
-pub fn is_element_token(token: &str) -> bool {
-    token.starts_with(ELEMENT_TOKEN_PREFIX)
-}
-
 pub fn has_meaningful_identity(entry: &RefEntry) -> bool {
-    element_token(entry).is_some()
-        || recorded_native_id(entry).is_some()
-        || has_stable_text_identity(entry)
-}
-
-fn recorded_native_id(entry: &RefEntry) -> Option<&crate::ElementIdentifier> {
-    entry.identity.native_id.as_ref().filter(|identifier| {
+    if entry.identity.retained_object.is_some() {
+        return true;
+    }
+    entry.identity.native_id.as_ref().is_some_and(|identifier| {
         crate::tree::accname::non_blank(Some(identifier.value.as_str())).is_some()
-    })
+    }) || has_stable_text_identity(entry)
 }
 
 pub fn has_stable_text_identity(entry: &RefEntry) -> bool {
@@ -76,7 +54,7 @@ pub fn identity_match(
     actual_description: &LocatorField<String>,
     actual_identifiers: &IdentifierEvidence,
 ) -> IdentityMatch {
-    if let Some(expected) = element_token(entry) {
+    if let Some(expected) = entry.identity.retained_object.as_deref() {
         return match (
             crate::tree::accname::non_blank(Some(expected)),
             actual_identifiers.retained_object(),
@@ -85,32 +63,25 @@ pub fn identity_match(
             _ => IdentityMatch::Unknown,
         };
     }
-    if entry.identity.native_id.is_some() {
-        return native_id_match(entry, actual_identifiers);
+    if let Some(expected) = entry.identity.native_id.as_ref() {
+        let Some(expected_value) = crate::tree::accname::non_blank(Some(expected.value.as_str()))
+        else {
+            return IdentityMatch::Unknown;
+        };
+        if actual_identifiers
+            .identifiers()
+            .iter()
+            .any(|actual| actual.kind == expected.kind && actual.value == expected_value)
+        {
+            return IdentityMatch::Match;
+        }
+        if !actual_identifiers.is_complete() {
+            return IdentityMatch::Unknown;
+        }
+        return IdentityMatch::NoMatch;
     }
 
     stable_text_match(entry, actual_name, actual_value, actual_description)
-}
-
-fn native_id_match(entry: &RefEntry, actual_identifiers: &IdentifierEvidence) -> IdentityMatch {
-    let Some(expected) = entry.identity.native_id.as_ref() else {
-        return IdentityMatch::Match;
-    };
-    let Some(expected_value) = crate::tree::accname::non_blank(Some(expected.value.as_str()))
-    else {
-        return IdentityMatch::Unknown;
-    };
-    if actual_identifiers
-        .identifiers()
-        .iter()
-        .any(|actual| actual.kind == expected.kind && actual.value == expected_value)
-    {
-        return IdentityMatch::Match;
-    }
-    if !actual_identifiers.is_complete() {
-        return IdentityMatch::Unknown;
-    }
-    IdentityMatch::NoMatch
 }
 
 #[cfg(test)]
@@ -146,11 +117,11 @@ pub(crate) fn identity_matches(
 /// Whether one element's stable text carves a live identity that can refute
 /// or corroborate the stored one.
 ///
-/// Public because the Linux resolver composes it with `identity_match` to keep
-/// its identifier-first corroboration rule: an identifier that still resolves
+/// Public because the Windows resolver composes it with `identity_match` to
+/// keep its AutomationId-first corroboration rule: an id that still resolves
 /// onto a candidate whose stable text drifted must be refuted, the A7-3
 /// wrong-target shape. macOS consumes only `identity_match`, which already
-/// routes id-less entries here; Linux runs the corroboration tier itself.
+/// routes id-less entries here; Windows runs the corroboration tier itself.
 pub fn stable_text_match(
     entry: &RefEntry,
     actual_name: &LocatorField<String>,
@@ -203,7 +174,7 @@ fn match_primary_identity(
     }
 }
 
-pub(crate) fn equality_match(expected: &str, actual: &str) -> IdentityMatch {
+fn equality_match(expected: &str, actual: &str) -> IdentityMatch {
     if actual == expected {
         IdentityMatch::Match
     } else {
@@ -233,9 +204,9 @@ fn option_field(value: Option<&str>) -> LocatorField<String> {
         .unwrap_or(LocatorField::Absent)
 }
 
-pub(crate) fn meaningful_field<T: AsRef<str>>(field: &LocatorField<T>) -> LocatorField<&str> {
+fn meaningful_field(field: &LocatorField<String>) -> LocatorField<&str> {
     match field {
-        LocatorField::Known(value) => crate::tree::accname::non_blank(Some(value.as_ref()))
+        LocatorField::Known(value) => crate::tree::accname::non_blank(Some(value.as_str()))
             .map(LocatorField::Known)
             .unwrap_or(LocatorField::Absent),
         LocatorField::Absent => LocatorField::Absent,
@@ -243,10 +214,10 @@ pub(crate) fn meaningful_field<T: AsRef<str>>(field: &LocatorField<T>) -> Locato
     }
 }
 
-pub(crate) fn stable_name_field<'a, T: AsRef<str>>(
+fn stable_name_field<'a>(
     role: &str,
-    name: &'a LocatorField<T>,
-    value: &LocatorField<T>,
+    name: &'a LocatorField<String>,
+    value: &LocatorField<String>,
 ) -> LocatorField<&'a str> {
     let name = meaningful_field(name);
     if !is_mutable_value_role(role) {
@@ -270,11 +241,7 @@ fn stable_value_field<'a>(role: &str, value: &'a LocatorField<String>) -> Locato
     }
 }
 
-pub(crate) fn stable_name<'a>(
-    role: &str,
-    name: Option<&'a str>,
-    value: Option<&str>,
-) -> Option<&'a str> {
+fn stable_name<'a>(role: &str, name: Option<&'a str>, value: Option<&str>) -> Option<&'a str> {
     let name = crate::tree::accname::non_blank(name)?;
     if is_mutable_value_role(role)
         && value_matches_name(crate::tree::accname::non_blank(value), name)

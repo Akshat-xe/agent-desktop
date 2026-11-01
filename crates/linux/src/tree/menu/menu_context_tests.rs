@@ -135,12 +135,3 @@ fn a_menu_context_round_trips_utf8_paths_and_item_paths() {
     assert!(context.matches(&decoded));
     assert_eq!(object, "/org/a11y/atspi/accessible/メニュー/0");
 }
-
-#[test]
-fn a_menu_ref_without_its_popup_context_cannot_be_scoped_to_any_popup() {
-    let context = MenuContext::test("/popup", 10);
-    let entry = ref_entry("menuitem");
-
-    assert!(entry.identity.retained_object.is_none());
-    assert!(context.entry_for(&entry).is_none());
-}

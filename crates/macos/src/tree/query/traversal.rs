@@ -161,10 +161,12 @@ impl LocatorTraversal {
         if !subtree_complete {
             self.arena.mark_incomplete();
         }
-        Ok(Some(
-            ObservedSubtree::new(read.evidence, children, subtree_complete, children_count)
-                .with_wrapper(read.web_wrapper),
-        ))
+        Ok(Some(ObservedSubtree::new(
+            read.evidence,
+            children,
+            subtree_complete,
+            children_count,
+        )))
     }
 
     fn visit_children(

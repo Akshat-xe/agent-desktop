@@ -22,7 +22,12 @@ fn visit(
 ) {
     let is_root = path.is_empty();
     let limits = WalkLimits::default();
-    let evidence = project_node(&node.payload, node.in_web_document, &limits);
+    let mut evidence = project_node(&node.payload, node.in_web_document, &limits);
+    if entry.identity.retained_object.is_some() {
+        evidence.identifiers = evidence
+            .identifiers
+            .with_retained_object(node.payload.node.element.object_identity());
+    }
     let admission = admit_node(entry, &evidence);
     match admission {
         Admission::Collect => found.candidates.push(candidate(

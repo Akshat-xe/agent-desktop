@@ -80,7 +80,6 @@ impl ObservationOps for DoubleCheckAdapter {
     ) -> Result<crate::adapter::hit_test::HitTestResult, AdapterError> {
         Ok(crate::adapter::hit_test::HitTestResult::ReachesTarget)
     }
-    crate::adapter::saved_ref_scope!("button", Some("Run"));
 }
 
 impl ActionOps for DoubleCheckAdapter {
@@ -246,7 +245,6 @@ impl ObservationOps for DisabledAfterLeaseAdapter {
         self.bounds_calls.fetch_add(1, Ordering::SeqCst);
         Ok(Some(bounds()))
     }
-    crate::adapter::saved_ref_scope!("button", Some("Run"));
 }
 
 impl ActionOps for DisabledAfterLeaseAdapter {}

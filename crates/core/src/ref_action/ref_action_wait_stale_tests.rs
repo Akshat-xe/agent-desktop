@@ -21,7 +21,6 @@ impl ObservationOps for CompleteNoCandidateAdapter {
     }
 
     crate::adapter::complete_live_observation!("menubutton", "Advanced", [capability::EXPAND]);
-    crate::adapter::saved_ref_scope!("button", Some("Run"));
 }
 
 impl ActionOps for CompleteNoCandidateAdapter {}

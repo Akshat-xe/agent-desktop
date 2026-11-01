@@ -80,7 +80,6 @@ impl ObservationOps for ProbeFailingAdapter {
         "Open",
         [crate::actions::capability::RIGHT_CLICK]
     );
-    crate::adapter::saved_ref_observation!("button", Some("Open"));
 }
 
 impl ActionOps for ProbeFailingAdapter {
@@ -120,7 +119,6 @@ fn save_refmap(source_app: Option<String>) -> String {
             value: None,
             description: None,
             native_id: None,
-            unique_at_capture: true,
         },
         geometry: crate::RefGeometry {
             bounds_space: None,

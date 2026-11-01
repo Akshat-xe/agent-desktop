@@ -33,7 +33,6 @@ impl ObservationOps for StaleThenOkAdapter {
         "Target",
         [crate::actions::capability::SELECT]
     );
-    crate::adapter::saved_ref_scope!("combobox", Some("Target"));
 }
 
 impl ActionOps for StaleThenOkAdapter {

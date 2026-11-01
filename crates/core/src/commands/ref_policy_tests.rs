@@ -96,7 +96,6 @@ impl ObservationOps for RecordingAdapter {
             .count();
         Ok(Some(0..len))
     }
-    crate::adapter::saved_ref_scope!("textfield", Some("Target"));
 }
 
 impl ActionOps for RecordingAdapter {
@@ -112,6 +111,7 @@ impl ActionOps for RecordingAdapter {
 }
 
 impl InputOps for RecordingAdapter {}
+
 impl SystemOps for RecordingAdapter {
     crate::adapter::guarded_interaction_lease!();
     crate::adapter::exact_window_focus!();
@@ -137,7 +137,6 @@ fn snapshot_id() -> String {
             value: None,
             description: None,
             native_id: None,
-            unique_at_capture: true,
         },
         geometry: crate::RefGeometry {
             bounds_space: None,

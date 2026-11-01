@@ -27,7 +27,6 @@ fn entry() -> RefEntry {
             value: None,
             description: None,
             native_id: None,
-            unique_at_capture: true,
         },
         geometry: crate::RefGeometry {
             bounds_space: None,
@@ -67,7 +66,6 @@ impl ObservationOps for SuccessWithUnresponsiveProbeAdapter {
     }
 
     crate::adapter::complete_live_observation!("button", "Run", [capability::CLICK]);
-    crate::adapter::saved_ref_scope!("button", Some("Run"));
 }
 
 impl ActionOps for SuccessWithUnresponsiveProbeAdapter {

@@ -97,7 +97,6 @@ impl ObservationOps for SingleShotScrollAdapter {
     ) -> Result<HitTestResult, AdapterError> {
         Ok(HitTestResult::ReachesTarget)
     }
-    crate::adapter::saved_ref_scope!("button", Some("Target"));
 }
 
 impl ActionOps for SingleShotScrollAdapter {
@@ -176,11 +175,10 @@ fn ref_entry(pid: u32) -> RefEntry {
         identity: crate::RefEntryIdentity {
             retained_object: None,
             role: "button".into(),
-            name: Some("Target".into()),
+            name: Some(format!("Target {pid}")),
             value: None,
             description: None,
             native_id: None,
-            unique_at_capture: true,
         },
         geometry: crate::RefGeometry {
             bounds_space: None,

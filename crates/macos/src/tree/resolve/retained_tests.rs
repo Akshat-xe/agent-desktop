@@ -14,7 +14,6 @@ fn entry(token: Option<&str>) -> RefEntry {
             value: None,
             description: None,
             native_id: None,
-            unique_at_capture: false,
         },
         geometry: agent_desktop_core::RefGeometry {
             bounds_space: None,

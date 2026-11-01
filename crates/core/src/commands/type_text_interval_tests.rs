@@ -53,6 +53,3 @@ mod clock;
 
 #[path = "type_text_interval_caret_tests.rs"]
 mod caret;
-
-#[path = "type_text_interval_identity_tests.rs"]
-mod identity;

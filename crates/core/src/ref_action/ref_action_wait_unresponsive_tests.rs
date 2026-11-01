@@ -19,7 +19,6 @@ impl ObservationOps for TransientUnresponsiveAdapter {
     }
 
     crate::adapter::complete_live_observation!("button", "Run", [capability::CLICK]);
-    crate::adapter::saved_ref_scope!("button", Some("Run"));
 }
 
 impl ActionOps for TransientUnresponsiveAdapter {

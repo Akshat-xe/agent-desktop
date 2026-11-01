@@ -41,7 +41,6 @@ impl ObservationOps for LiveErrorPredicateAdapter {
     ) -> Result<Option<ElementState>, AdapterError> {
         Err(AdapterError::permission_denied())
     }
-    crate::adapter::saved_ref_scope!("button", Some("Run"));
 }
 
 impl ActionOps for LiveErrorPredicateAdapter {}
@@ -109,7 +108,6 @@ impl ObservationOps for LateObservationAdapter {
         }
         Ok(Some("ready".into()))
     }
-    crate::adapter::saved_ref_scope!("button", Some("Run"));
 }
 
 impl ActionOps for LateObservationAdapter {}
@@ -221,7 +219,6 @@ impl ObservationOps for DeadlineTimeoutPredicateAdapter {
         self.polls.fetch_add(1, Ordering::SeqCst);
         Err(deadline.timeout_error())
     }
-    crate::adapter::saved_ref_scope!("button", Some("Run"));
 }
 
 impl ActionOps for DeadlineTimeoutPredicateAdapter {}

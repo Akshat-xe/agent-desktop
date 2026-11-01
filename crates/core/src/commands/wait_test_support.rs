@@ -132,7 +132,6 @@ impl ObservationOps for PredicateAdapter {
     ) -> Result<crate::adapter::hit_test::HitTestResult, AdapterError> {
         Ok(crate::adapter::hit_test::HitTestResult::ReachesTarget)
     }
-    crate::adapter::saved_ref_scope!("button", Some("Run"));
 }
 
 impl ActionOps for PredicateAdapter {}
@@ -171,7 +170,6 @@ fn save_ref_in_store(store: RefStore, states: Vec<String>) -> String {
             value: None,
             description: None,
             native_id: None,
-            unique_at_capture: true,
         },
         geometry: crate::RefGeometry {
             bounds_space: None,

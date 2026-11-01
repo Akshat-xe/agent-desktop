@@ -2,6 +2,7 @@ use crate::{
     AccessibilityNode, AppError, WindowInfo,
     adapter::{PlatformAdapter, TreeOptions, WindowFilter},
     context::CommandContext,
+    locator::live_locator::{ObservationRequest, ObservationRoot},
     refs::RefMap,
     refs::ref_alloc::{self, RefAllocConfig},
     refs::ref_alloc_options::RefAllocOptions,
@@ -37,11 +38,16 @@ pub fn build(
     deadline: crate::Deadline,
 ) -> Result<SnapshotResult, AppError> {
     let windows = surface_windows(adapter, app_name, window_id, opts.surface, deadline)?;
-    let (window, capture) = first_surface_owner(windows, |window| {
-        window_capture::capture_window(adapter, opts, window, deadline)
+    let observation_options = opts.with_ref_identity_bounds();
+    let request = ObservationRequest::snapshot(&observation_options, deadline).validate()?;
+    let (window, observed) = first_surface_owner(windows, |window| {
+        crate::tree::renderer_accessibility::observe_tree(
+            adapter,
+            ObservationRoot::Window(window),
+            &request,
+        )
     })?;
-    let (raw_tree, complete, nodes_observed, observed) = capture.into_parts()?;
-    let capture_proof = crate::refs::ref_capture_proof::CaptureProof::new(&observed);
+    let (raw_tree, complete, nodes_observed) = observed.into_accessibility_tree_partial()?;
 
     let mut refmap = RefMap::new();
     let config = RefAllocConfig {
@@ -63,7 +69,6 @@ pub fn build(
             root_ref_id: None,
             path_prefix: &[],
         },
-        capture: Some(&capture_proof),
     };
     let mut tree = ref_alloc::allocate_refs(raw_tree, &mut refmap, &config)?;
 
@@ -86,12 +91,10 @@ pub fn build(
 /// Kinds naming OS chrome rather than a window's own sub-surface are routed to
 /// the adapter's `resolve_shell_surface` seam ahead of the application path,
 /// because no application owns them and the window inventory cannot identify
-/// them - not even a recorded or requested window id, which a shell container
-/// carries too. An adapter that answers with the trait default falls through to
-/// the application path, so an adapter's shape never changes by upgrading; every
+/// them. An adapter that answers with the trait default falls through to the
+/// application path, so an adapter's shape never changes by upgrading; every
 /// other answer - a missing surface, a build refusal, a timeout - is returned
-/// as the adapter supplied it, and a surface that answers with another window
-/// leaves the id to the application path.
+/// as the adapter supplied it.
 pub(crate) fn resolve_window_for_surface(
     adapter: &dyn PlatformAdapter,
     app_name: Option<&str>,
@@ -99,21 +102,17 @@ pub(crate) fn resolve_window_for_surface(
     surface: crate::SnapshotSurface,
     deadline: crate::Deadline,
 ) -> Result<WindowInfo, AppError> {
+    if window_id.is_some() || matches!(surface, crate::SnapshotSurface::Window) {
+        return resolve_window(adapter, app_name, window_id, deadline);
+    }
     if is_shell_surface(surface) {
         match adapter.resolve_shell_surface(surface, deadline) {
-            Ok(window) if window_id.is_none_or(|id| window.id == id) => return Ok(window),
-            Ok(_) => {}
-            Err(error)
-                if window_id.is_none()
-                    && !error.is_default_not_supported("resolve_shell_surface") =>
-            {
+            Ok(window) => return Ok(window),
+            Err(error) if !error.is_default_not_supported("resolve_shell_surface") => {
                 return Err(error.into());
             }
             Err(_) => {}
         }
-    }
-    if window_id.is_some() || matches!(surface, crate::SnapshotSurface::Window) {
-        return resolve_window(adapter, app_name, window_id, deadline);
     }
     crate::system::window_lookup::select_surface_owner(
         windows_for_app(adapter, app_name, deadline)?,
@@ -344,19 +343,6 @@ pub mod snapshot_surface;
 #[cfg(test)]
 #[path = "snapshot_tests.rs"]
 mod tests;
-pub(crate) mod window_capture;
-
-#[cfg(test)]
-#[path = "tokenless_capture_support.rs"]
-mod tokenless_capture_support;
-
-#[cfg(test)]
-#[path = "tokenless_capture_tests.rs"]
-mod tokenless_capture_tests;
-
-#[cfg(test)]
-#[path = "tokenless_drill_tests.rs"]
-mod tokenless_drill_tests;
 
 #[cfg(test)]
 #[path = "snapshot_window_tests.rs"]

@@ -23,7 +23,6 @@ fn entry() -> RefEntry {
             value: None,
             description: None,
             native_id: None,
-            unique_at_capture: true,
         },
         geometry: crate::RefGeometry {
             bounds_space: None,
@@ -77,7 +76,6 @@ impl ObservationOps for TicksThenAppNotFoundAdapter {
             Err(AdapterError::new(ErrorCode::AppNotFound, "app gone"))
         }
     }
-    crate::adapter::saved_ref_scope!("button", Some("Run"));
 }
 
 impl ActionOps for TicksThenAppNotFoundAdapter {
@@ -116,7 +114,6 @@ impl ObservationOps for AppNotFoundExitedProcessAdapter {
     ) -> Result<NativeHandle, AdapterError> {
         Err(AdapterError::new(ErrorCode::AppNotFound, "app gone"))
     }
-    crate::adapter::saved_ref_scope!("button", Some("Run"));
 }
 
 impl ActionOps for AppNotFoundExitedProcessAdapter {
@@ -192,7 +189,6 @@ impl ObservationOps for AppNotFoundUnresponsiveProcessAdapter {
     ) -> Result<NativeHandle, AdapterError> {
         Err(AdapterError::new(ErrorCode::AppNotFound, "app gone"))
     }
-    crate::adapter::saved_ref_scope!("button", Some("Run"));
 }
 
 impl ActionOps for AppNotFoundUnresponsiveProcessAdapter {
