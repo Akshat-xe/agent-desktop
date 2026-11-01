@@ -1,27 +1,4 @@
-use super::{environment_has_marker, is_shipped_executable};
-use std::path::Path;
-
-#[test]
-fn only_shipped_executable_names_qualify() {
-    for path in [
-        "/usr/local/bin/agent-desktop",
-        "/opt/npm/bin/agent-desktop-darwin-arm64",
-        "/opt/npm/bin/agent-desktop-darwin-x64",
-    ] {
-        assert!(is_shipped_executable(Path::new(path)), "{path}");
-    }
-    for path in [
-        "/tmp/agent-desktop-imposter",
-        "/usr/bin/python3",
-        "/tmp/agent-desktop/other",
-        "/tmp/other-agent-desktop",
-        "/tmp/agent-desktop-darwin",
-        "/tmp/agent-desktop-linux-x64",
-        "",
-    ] {
-        assert!(!is_shipped_executable(Path::new(path)), "{path}");
-    }
-}
+use super::environment_has_marker;
 
 fn procargs(arguments: &[&str], environment: &[&str]) -> Vec<u8> {
     let mut buffer = (arguments.len() as i32).to_ne_bytes().to_vec();

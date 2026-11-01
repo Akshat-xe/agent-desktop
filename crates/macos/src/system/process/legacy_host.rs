@@ -1,8 +1,6 @@
 //! Stops command hosts that earlier agent-desktop versions left running.
 
 use std::mem::{MaybeUninit, size_of};
-use std::os::unix::ffi::OsStrExt;
-use std::path::Path;
 use std::time::{Duration, Instant};
 
 const HOST_MARKER: &[u8] = b"AGENT_DESKTOP_INTERNAL_COMMAND_HOST=1";
@@ -25,9 +23,7 @@ pub fn stop_legacy_command_hosts() {
         .filter(|pid| *pid > 0 && *pid != own_pid)
         .filter_map(|pid| {
             let started_at = process_start_time(pid, uid)?;
-            if !executable_path(pid).is_some_and(|path| is_shipped_executable(&path))
-                || !process_arguments(pid).is_some_and(|args| environment_has_marker(&args))
-            {
+            if !process_arguments(pid).is_some_and(|args| environment_has_marker(&args)) {
                 return None;
             }
             Some(LegacyHost {
@@ -60,14 +56,6 @@ impl LegacyHost {
     fn signal_if_matches(&self, signal: libc::c_int) -> bool {
         self.is_running() && unsafe { libc::kill(self.pid, signal) } == 0
     }
-}
-
-/// Whether an executable file name is one agent-desktop shipped: the CLI or the
-/// npm package's platform build.
-pub(crate) fn is_shipped_executable(path: &Path) -> bool {
-    path.file_name()
-        .and_then(|name| name.to_str())
-        .is_some_and(|name| name == "agent-desktop" || name.starts_with("agent-desktop-darwin-"))
 }
 
 /// Whether a `KERN_PROCARGS2` buffer carries the host marker in its environment,
@@ -175,17 +163,6 @@ fn process_arguments(pid: libc::pid_t) -> Option<Vec<u8>> {
         buffer.truncate(size);
         buffer
     })
-}
-
-fn executable_path(pid: libc::pid_t) -> Option<std::path::PathBuf> {
-    let mut buffer = [0u8; libc::PROC_PIDPATHINFO_MAXSIZE as usize];
-    let written =
-        unsafe { libc::proc_pidpath(pid, buffer.as_mut_ptr().cast(), buffer.len() as u32) };
-    let written = usize::try_from(written)
-        .ok()
-        .filter(|written| *written > 0)?;
-    let path = std::ffi::OsStr::from_bytes(buffer.get(..written)?);
-    Some(std::path::PathBuf::from(path))
 }
 
 #[cfg(test)]

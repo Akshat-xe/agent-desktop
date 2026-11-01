@@ -64,7 +64,9 @@ fn run(args: &[&str], tmpdir: &Path, home: &Path) -> Output {
 }
 
 fn wait_process(tmpdir: &Path, home: &Path, marked: bool) -> ReapedChild {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_agent-desktop"));
+    let executable = tmpdir.join("renamed-host");
+    std::fs::copy(env!("CARGO_BIN_EXE_agent-desktop"), &executable).expect("copy binary");
+    let mut command = Command::new(&executable);
     command
         .args(["wait", "10000"])
         .env("TMPDIR", tmpdir)
@@ -173,7 +175,7 @@ fn a_dead_legacy_socket_is_left_alone_and_does_not_block_commands() {
 }
 
 #[test]
-fn version_stops_a_marked_legacy_host_without_a_socket_in_another_tmpdir() {
+fn version_stops_a_marked_host_running_from_a_renamed_executable() {
     let _lock = HOST_TEST_LOCK
         .lock()
         .unwrap_or_else(|error| error.into_inner());
