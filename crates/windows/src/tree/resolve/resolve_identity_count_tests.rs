@@ -101,7 +101,7 @@ fn a_second_match_past_the_sibling_cap_withholds_the_count() {
         read.complete,
         "a cap-hit list is reported whole, which is why the probe below exists"
     );
-    let cut = sibling_list_was_cut(&tree, &read.elements, &capped);
+    let cut = sibling_list_was_cut(&tree, &read.elements, &capped).expect("probe answers");
     assert!(
         cut,
         "a sibling past the cap means the count did not see the whole list"
@@ -131,7 +131,7 @@ fn a_second_match_beyond_the_depth_cap_withholds_the_count() {
         NodeAdmission::Collect,
         "the element below the cap answers to the stored identity"
     );
-    let cut = boundary_hides_descendants(&tree, &last);
+    let cut = boundary_hides_descendants(&tree, &last).expect("probe answers");
     assert!(
         cut,
         "the node at the cap still has a child, so the depth budget cut the count"

@@ -179,6 +179,7 @@ fn entry_for(live: &LiveElement) -> RefEntry {
             process_instance: Some("test-instance".into()),
         },
         identity: RefEntryIdentity {
+            basis: Some(agent_desktop_core::IdentityBasis::Name),
             role: live.state.role.clone(),
             name: Some("Run".into()),
             ..RefEntryIdentity::default()

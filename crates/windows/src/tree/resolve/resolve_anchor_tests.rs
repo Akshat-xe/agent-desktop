@@ -33,6 +33,7 @@ fn blank_entry_with_path(fixture: &HostedFixture, path: Vec<usize>) -> RefEntry 
             .expect("a live fixture token");
     let chosen_path = if path.is_empty() { stored_path } else { path };
     let mut entry = ref_entry(&evidence.role.known().cloned().unwrap_or_default());
+    entry.identity.basis = Some(agent_desktop_core::IdentityBasis::Positional);
     entry.process = agent_desktop_core::RefProcess {
         pid: ProcessId::new(fixture.process_id()),
         process_instance: Some(token),
@@ -212,6 +213,7 @@ fn locator_entry(role: &str, positive_area_hash: Option<Rect>) -> RefEntry {
         None => (None, None),
     };
     let mut entry = ref_entry(role);
+    entry.identity.basis = Some(agent_desktop_core::IdentityBasis::Positional);
     entry.geometry = agent_desktop_core::RefGeometry {
         bounds_space: None,
         bounds,

@@ -13,7 +13,7 @@ use super::resolve_search::{
 };
 use super::{SearchVerdict, into_verified_handle, resolve_window_root};
 use crate::system::runtime::hresult::ReadDisposition;
-use crate::tree::automation::{UiaFailure, uia_failure_disposition};
+use crate::tree::automation::{UiaFailure, uia_failure_disposition, uia_failure_error};
 use crate::tree::element::UIAElement;
 use crate::tree::walk::walker::{TreeSource, WalkBudget};
 use crate::tree::walk::walker_source::UiaTreeSource;
@@ -124,7 +124,7 @@ fn search_source_scope<S: TreeSource>(
         return Ok(());
     }
     if at_deepest_searched_level(depth) {
-        *unread_region |= boundary_hides_descendants(ctx.source, element);
+        *unread_region |= boundary_hides_descendants(ctx.source, element)?;
         return Ok(());
     }
     let children = enumerate_children(
@@ -134,7 +134,7 @@ fn search_source_scope<S: TreeSource>(
         unread_region,
         &IDENTITY_SEARCH_DESCENT,
     )?;
-    *unread_region |= sibling_list_was_cut(ctx.source, &children, ctx.budget);
+    *unread_region |= sibling_list_was_cut(ctx.source, &children, ctx.budget)?;
     for child in &children {
         if match_count_is_conclusive(found.len()) {
             break;
@@ -157,24 +157,47 @@ fn match_count_is_conclusive(match_count: usize) -> bool {
 }
 
 /// Whether a node at the depth cap has children the search never read. One child probe is the only
-/// way to tell a cut subtree from a real end, and a failed probe is unreadable, not empty.
-fn boundary_hides_descendants<S: TreeSource>(source: &S, element: &S::Node) -> bool {
-    !matches!(source.first_child(element), Err(failure) if failure.is_exhaustion())
+/// way to tell a cut subtree from a real end; a failed probe is unreadable unless its failure is
+/// terminal, which surfaces as the attempt's error.
+fn boundary_hides_descendants<S: TreeSource>(
+    source: &S,
+    element: &S::Node,
+) -> Result<bool, AdapterError> {
+    probe_left_region_unread(source.first_child(element), "probe a stored ref's children")
 }
 
 /// Whether the sibling cap cut the child list short: the shared enumeration reports a cap-hit as a
-/// whole list, and a failing probe is unreadable rather than empty.
+/// whole list, and a failing probe is unreadable rather than empty unless its failure is terminal.
 fn sibling_list_was_cut<S: TreeSource>(
     source: &S,
     children: &[S::Node],
     budget: &WalkBudget,
-) -> bool {
+) -> Result<bool, AdapterError> {
     if children.len() < budget.max_siblings {
-        return false;
+        return Ok(false);
     }
     match children.last() {
-        Some(last) => !matches!(source.next_sibling(last), Err(failure) if failure.is_exhaustion()),
-        None => false,
+        Some(last) => {
+            probe_left_region_unread(source.next_sibling(last), "probe a stored ref's siblings")
+        }
+        None => Ok(false),
+    }
+}
+
+/// Maps one boundary probe to "a region stayed unread": a node answers yes, the end-of-list signal
+/// answers no, and the shared identity classification decides whether any other failure is
+/// unread or terminal.
+fn probe_left_region_unread<N>(
+    probe: Result<N, UiaFailure>,
+    context: &str,
+) -> Result<bool, AdapterError> {
+    match probe {
+        Ok(_) => Ok(true),
+        Err(failure) => match identity_descent_verdict(failure) {
+            DescentVerdict::Settled => Ok(false),
+            DescentVerdict::Unfinished => Ok(true),
+            DescentVerdict::Surfaced => Err(uia_failure_error(failure, context)),
+        },
     }
 }
 

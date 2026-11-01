@@ -278,11 +278,11 @@ fn a_sibling_list_that_reached_the_cap_with_more_behind_it_is_cut() {
     let tree = FakeTree::default().with_children(1, &[2, 3, 4]);
 
     assert!(
-        super::sibling_list_was_cut(&tree, &[2, 3], &children_budget(2)),
+        super::sibling_list_was_cut(&tree, &[2, 3], &children_budget(2)).expect("probe answers"),
         "a sibling past the cap means the list the search saw is not the whole one"
     );
     assert!(
-        !super::sibling_list_was_cut(&tree, &[2, 3], &children_budget(4)),
+        !super::sibling_list_was_cut(&tree, &[2, 3], &children_budget(4)).expect("probe answers"),
         "a list shorter than the cap was read to its end"
     );
 }
@@ -293,11 +293,9 @@ fn a_sibling_list_that_reached_the_cap_with_more_behind_it_is_cut() {
 fn a_sibling_list_that_ends_at_the_cap_is_not_cut() {
     let tree = FakeTree::default().with_children(1, &[2, 3]);
 
-    assert!(!super::sibling_list_was_cut(
-        &tree,
-        &[2, 3],
-        &children_budget(2)
-    ));
+    assert!(
+        !super::sibling_list_was_cut(&tree, &[2, 3], &children_budget(2)).expect("probe answers")
+    );
 }
 
 /// A probe that fails is unreadable, not empty: the search cannot claim the
@@ -308,11 +306,9 @@ fn a_failing_sibling_probe_is_a_cut_not_an_end() {
         .with_children(1, &[2, 3, 4])
         .faulting_on_next_sibling(3);
 
-    assert!(super::sibling_list_was_cut(
-        &tree,
-        &[2, 3],
-        &children_budget(2)
-    ));
+    assert!(
+        super::sibling_list_was_cut(&tree, &[2, 3], &children_budget(2)).expect("probe answers")
+    );
 }
 
 /// The depth budget cuts depth-first, so a node at the cap with children is a
@@ -320,8 +316,8 @@ fn a_failing_sibling_probe_is_a_cut_not_an_end() {
 #[test]
 fn a_node_at_the_depth_cap_cuts_the_count_only_when_it_has_children() {
     let parent = FakeTree::default().with_children(1, &[2]);
-    assert!(super::boundary_hides_descendants(&parent, &1));
-    assert!(!super::boundary_hides_descendants(&parent, &2));
+    assert!(super::boundary_hides_descendants(&parent, &1).expect("probe answers"));
+    assert!(!super::boundary_hides_descendants(&parent, &2).expect("probe answers"));
 }
 
 /// A failed child read at the cap is not proof of a leaf: an unreadable
@@ -330,5 +326,23 @@ fn a_node_at_the_depth_cap_cuts_the_count_only_when_it_has_children() {
 fn an_unreadable_child_at_the_depth_cap_is_a_cut() {
     let unreadable = FakeTree::default().faulting_on_first_child(1);
 
-    assert!(super::boundary_hides_descendants(&unreadable, &1));
+    assert!(super::boundary_hides_descendants(&unreadable, &1).expect("probe answers"));
+}
+
+/// Access denied on a cap probe is the attempt's answer, not an unread region that retries turn
+/// into a timeout.
+#[test]
+fn a_denied_boundary_probe_surfaces_perm_denied() {
+    use crate::system::runtime::hresult::E_ACCESSDENIED;
+    let denied = UiaFailure::Hresult(E_ACCESSDENIED);
+    let deep = FakeTree::default().faulting_on_first_child_with(1, denied);
+    let error = super::boundary_hides_descendants(&deep, &1).expect_err("terminal surfaces");
+    assert_eq!(error.code, agent_desktop_core::ErrorCode::PermDenied);
+
+    let wide = FakeTree::default()
+        .with_children(1, &[2, 3, 4])
+        .faulting_on_next_sibling_with(3, denied);
+    let error = super::sibling_list_was_cut(&wide, &[2, 3], &children_budget(2))
+        .expect_err("terminal surfaces");
+    assert_eq!(error.code, agent_desktop_core::ErrorCode::PermDenied);
 }
