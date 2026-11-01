@@ -41,6 +41,12 @@ impl ObservationOps for TitledField {
         root: crate::locator::live_locator::ObservationRoot<'_>,
         _request: &crate::locator::live_locator::ObservationRequest,
     ) -> Result<crate::locator::live_locator::ObservedTree, AdapterError> {
+        if matches!(
+            root,
+            crate::locator::live_locator::ObservationRoot::Element { .. }
+        ) {
+            return crate::adapter::saved_ref_element_tree(root);
+        }
         crate::adapter::observed_tree(&root, self.window())
     }
 

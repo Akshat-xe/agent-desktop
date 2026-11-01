@@ -18,8 +18,8 @@ pub(crate) use observation::ObservationOps;
 pub(crate) use observation::optional_live_read;
 #[cfg(test)]
 pub(crate) use saved_ref_test_support::{
-    saved_ref_anchor, saved_ref_observation, saved_ref_observation_nodes, saved_ref_scope,
-    saved_ref_tree, saved_ref_tree_nodes, saved_ref_window_pool,
+    saved_ref_anchor, saved_ref_element_tree, saved_ref_observation, saved_ref_observation_nodes,
+    saved_ref_scope, saved_ref_tree, saved_ref_tree_nodes, saved_ref_window_pool,
 };
 pub(crate) use system::SystemOps;
 #[cfg(test)]

@@ -38,8 +38,32 @@ pub(crate) fn saved_ref_tree(
     role: &str,
     name: Option<&str>,
 ) -> Result<crate::locator::live_locator::ObservedTree, crate::AdapterError> {
+    if matches!(
+        root,
+        crate::locator::live_locator::ObservationRoot::Element { .. }
+    ) {
+        return saved_ref_element_tree(root);
+    }
     let mut node = minimal_accessibility_node(role, name.unwrap_or_default());
     node.identity.name = name.map(str::to_string);
+    observed_tree(&root, node)
+}
+
+/// The landed element a resolution re-identifies: the anchored entry's own
+/// identity, which is what an element-root observation answers for.
+pub(crate) fn saved_ref_element_tree(
+    root: crate::locator::live_locator::ObservationRoot<'_>,
+) -> Result<crate::locator::live_locator::ObservedTree, crate::AdapterError> {
+    let crate::locator::live_locator::ObservationRoot::Element { entry, .. } = root else {
+        return Err(crate::AdapterError::internal(
+            "an element observation needs an element root",
+        ));
+    };
+    let mut node = minimal_accessibility_node(&entry.identity.role, "");
+    node.identity.name = entry.identity.name.clone();
+    node.identity.value = entry.identity.value.clone();
+    node.identity.description = entry.identity.description.clone();
+    node.identity.native_id = entry.identity.native_id.clone();
     observed_tree(&root, node)
 }
 
@@ -49,6 +73,12 @@ pub(crate) fn saved_ref_tree_nodes(
     root: crate::locator::live_locator::ObservationRoot<'_>,
     nodes: &[(&str, Option<&str>, Option<&str>)],
 ) -> Result<crate::locator::live_locator::ObservedTree, crate::AdapterError> {
+    if matches!(
+        root,
+        crate::locator::live_locator::ObservationRoot::Element { .. }
+    ) {
+        return saved_ref_element_tree(root);
+    }
     let mut group = minimal_accessibility_node("group", "");
     group.identity.name = None;
     group.children = nodes

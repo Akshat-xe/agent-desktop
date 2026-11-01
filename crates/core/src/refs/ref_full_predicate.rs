@@ -1,36 +1,40 @@
-use std::hash::{Hash, Hasher};
-
 use crate::{
-    AccessibilityNode, ElementIdentifier, IdentityMatch, RefEntry,
+    ElementIdentifier, IdentityMatch, RefEntry,
     locator::live_locator::{LocatorEvidence, LocatorField},
     refs::ref_identity::{equality_match, meaningful_field, stable_name, stable_name_field},
     tree::accname::non_blank,
 };
 
-const NATIVE_ID: u8 = 0b001;
-const NAME: u8 = 0b010;
-const DESCRIPTION: u8 = 0b100;
+pub(crate) const NATIVE_ID: u8 = 0b001;
+pub(crate) const NAME: u8 = 0b010;
+pub(crate) const DESCRIPTION: u8 = 0b100;
 
 /// The identity fields capture and resolution both compare: role plus whichever
 /// of native identifier, stable name and description an element records.
 /// Mutable values and bounds are never identity.
 #[derive(Clone, Copy)]
 pub(crate) struct FullPredicate<'a> {
-    role: &'a str,
-    native_id: Option<&'a ElementIdentifier>,
-    name: Option<&'a str>,
-    description: Option<&'a str>,
+    pub(crate) role: &'a str,
+    pub(crate) native_id: Option<&'a ElementIdentifier>,
+    pub(crate) name: Option<&'a str>,
+    pub(crate) description: Option<&'a str>,
     mask: u8,
 }
 
 impl<'a> FullPredicate<'a> {
-    pub(crate) fn of_node(node: &'a AccessibilityNode) -> Self {
+    /// The predicate the projection of this evidence records, so a capture
+    /// census counts the fields resolution will later compare.
+    pub(crate) fn of_evidence(evidence: &'a LocatorEvidence) -> Self {
         Self::of_fields(
-            &node.role,
-            node.identity.name.as_deref(),
-            node.identity.value.as_deref(),
-            node.identity.description.as_deref(),
-            node.identity.native_id.as_ref(),
+            evidence
+                .role
+                .known()
+                .map(String::as_str)
+                .unwrap_or("unknown"),
+            evidence.name.known().map(String::as_str),
+            evidence.value.known().map(String::as_str),
+            evidence.description.known().map(String::as_str),
+            evidence.identifiers.preferred_identifier(),
         )
     }
 
@@ -91,8 +95,8 @@ impl<'a> FullPredicate<'a> {
         }
     }
 
-    /// The fields this predicate keeps; capture counts by subsets of them, so
-    /// two predicates only compare once they keep the same fields.
+    /// The fields this predicate records, which is the subset capture counts a
+    /// predicate against and the one resolution compares.
     pub(crate) fn mask(&self) -> u8 {
         self.mask
     }
@@ -102,41 +106,6 @@ impl<'a> FullPredicate<'a> {
             | (u8::from(self.name.is_some()) << 1)
             | (u8::from(self.description.is_some()) << 2);
         self
-    }
-
-    /// The predicate narrowed to the fields `mask` selects: capture counts each
-    /// field subset a recorded entry may be looked up by.
-    pub(crate) fn masked(&self, mask: u8) -> Self {
-        Self {
-            role: self.role,
-            native_id: (mask & NATIVE_ID != 0).then_some(self.native_id).flatten(),
-            name: (mask & NAME != 0).then_some(self.name).flatten(),
-            description: (mask & DESCRIPTION != 0)
-                .then_some(self.description)
-                .flatten(),
-            mask,
-        }
-    }
-}
-
-/// Capture groups elements by this predicate, so equality is the same rule
-/// resolution applies, once both sides keep the same fields.
-impl PartialEq for FullPredicate<'_> {
-    fn eq(&self, other: &Self) -> bool {
-        self.mask == other.mask
-            && self.compare(&LivePredicate::of_predicate(other)) == IdentityMatch::Match
-    }
-}
-
-impl Eq for FullPredicate<'_> {}
-
-impl Hash for FullPredicate<'_> {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.role.hash(state);
-        self.native_id.hash(state);
-        self.name.hash(state);
-        self.description.hash(state);
-        self.mask.hash(state);
     }
 }
 
@@ -163,22 +132,22 @@ impl<'a> LivePredicate<'a> {
         }
     }
 
-    fn of_predicate<'b: 'a>(predicate: &'a FullPredicate<'b>) -> Self {
-        Self {
-            role: LocatorField::Known(predicate.role),
-            name: field_of(predicate.name),
-            value: LocatorField::Absent,
-            description: field_of(predicate.description),
-            native_ids: predicate.native_id.map(std::slice::from_ref).unwrap_or(&[]),
-            native_ids_complete: true,
-        }
+    pub(crate) fn role(&self) -> &LocatorField<&'a str> {
+        &self.role
     }
-}
 
-fn field_of(value: Option<&str>) -> LocatorField<&str> {
-    value
-        .map(LocatorField::Known)
-        .unwrap_or(LocatorField::Absent)
+    /// The stable name a predicate carrying `role` compares this element by.
+    pub(crate) fn stable_name(&self, role: &str) -> LocatorField<&str> {
+        stable_name_field(role, &self.name, &self.value)
+    }
+
+    pub(crate) fn description(&self) -> &LocatorField<&'a str> {
+        &self.description
+    }
+
+    pub(crate) fn native_ids_complete(&self) -> bool {
+        self.native_ids_complete
+    }
 }
 
 fn field_match(expected: Option<&str>, actual: &LocatorField<&str>) -> IdentityMatch {

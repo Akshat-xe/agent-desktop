@@ -171,8 +171,12 @@ fn resolve_query_attempt(
     let observation_request =
         ObservationRequest::locator_for_root(query, request, root, observation_deadline(request))
             .validate()?;
-    let tree =
-        crate::tree::renderer_accessibility::observe_tree(adapter, root, &observation_request)?;
+    let tree = crate::tree::renderer_accessibility::observe_tree(
+        adapter,
+        root,
+        &observation_request,
+        None,
+    )?;
     let mut tree = tree;
     tree.stats.reads.counts.observation_attempts =
         tree.stats.reads.counts.observation_attempts.max(1);

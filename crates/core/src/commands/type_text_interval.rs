@@ -148,7 +148,8 @@ fn resolve_for_burst(
 ) -> Result<Burst, AppError> {
     let entry = crate::commands::helpers::load_ref_entry(ref_id, context)?;
     let deadline = crate::Deadline::after(timeout_ms)?;
-    let handle = crate::refs::resolve_saved_ref::resolve_saved_ref(adapter, &entry, deadline)?;
+    let handle =
+        crate::refs::resolve_saved_ref::resolve_saved_ref(adapter, &entry, deadline, None)?;
     let process = entry
         .process
         .process_instance

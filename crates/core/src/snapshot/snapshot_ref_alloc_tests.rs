@@ -22,7 +22,7 @@ fn drill_config<'a>(
     compact: bool,
 ) -> RefAllocConfig<'a> {
     RefAllocConfig {
-        observation_complete: false,
+        unique_entries: None,
         options: crate::refs::ref_alloc_options::RefAllocOptions {
             include_bounds: false,
             interactive_only,

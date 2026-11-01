@@ -32,6 +32,7 @@ fn single_attempt_resolution_receives_the_callers_budget_without_poll_slicing() 
             &adapter,
             &entry(),
             crate::Deadline::detached_after(timeout).unwrap(),
+            None,
         )
         .unwrap();
     }
@@ -49,7 +50,7 @@ fn expired_single_attempt_budget_never_calls_the_adapter() {
         1,
     )
     .unwrap();
-    let Err(error) = resolve_handle_within_deadline(&adapter, &entry(), deadline) else {
+    let Err(error) = resolve_handle_within_deadline(&adapter, &entry(), deadline, None) else {
         panic!("expired resolution must fail");
     };
     assert_eq!(error.code, ErrorCode::Timeout);

@@ -18,7 +18,9 @@ use crate::{
 
 struct RuleAdapter {
     windows: Vec<WindowInfo>,
+    shell: Option<WindowInfo>,
     observed: AccessibilityNode,
+    landed: Option<AccessibilityNode>,
     windows_listed: AtomicU32,
     observations: AtomicU32,
     strict: AtomicU32,
@@ -30,7 +32,9 @@ impl RuleAdapter {
     fn new(observed: AccessibilityNode) -> Self {
         Self {
             windows: vec![window()],
+            shell: None,
             observed,
+            landed: None,
             windows_listed: AtomicU32::new(0),
             observations: AtomicU32::new(0),
             strict: AtomicU32::new(0),
@@ -65,7 +69,13 @@ impl ObservationOps for RuleAdapter {
         _request: &crate::locator::live_locator::ObservationRequest,
     ) -> Result<crate::locator::live_locator::ObservedTree, AdapterError> {
         self.observations.fetch_add(1, Ordering::SeqCst);
-        crate::adapter::observed_tree(&root, self.observed.clone())
+        match (&self.landed, root) {
+            (Some(landed), ObservationRoot::Element { .. }) => {
+                crate::adapter::observed_tree(&root, landed.clone())
+            }
+            (None, ObservationRoot::Element { .. }) => crate::adapter::saved_ref_element_tree(root),
+            _ => crate::adapter::observed_tree(&root, self.observed.clone()),
+        }
     }
 
     fn resolve_element_strict(
@@ -75,6 +85,17 @@ impl ObservationOps for RuleAdapter {
     ) -> Result<NativeHandle, AdapterError> {
         self.strict.fetch_add(1, Ordering::SeqCst);
         Ok(NativeHandle::new("strict"))
+    }
+
+    fn resolve_shell_surface(
+        &self,
+        _surface: crate::SnapshotSurface,
+        _deadline: Deadline,
+    ) -> Result<WindowInfo, AdapterError> {
+        match &self.shell {
+            Some(window) => Ok(window.clone()),
+            None => Err(AdapterError::not_supported("resolve_shell_surface")),
+        }
     }
 
     fn resolve_locator_anchor(
@@ -122,11 +143,27 @@ fn tree_with(children: Vec<AccessibilityNode>) -> AccessibilityNode {
 }
 
 fn resolve(adapter: &RuleAdapter, entry: &RefEntry) -> Result<NativeHandle, AdapterError> {
-    resolve_entry(adapter, entry, Deadline::standard().unwrap())
+    resolve_entry(adapter, entry, Deadline::standard().unwrap(), None)
 }
 
 fn capture(root: AccessibilityNode, name: &str) -> RefEntry {
+    let mut refmap = RefMap::new();
+    let observed = crate::adapter::observed_tree(&ObservationRoot::Window(&window()), root.clone())
+        .expect("the fixture observes");
+    let unique = crate::refs::ref_alloc_unique::unique_capture_paths(&observed);
     let config = RefAllocConfig {
+        unique_entries: Some(&unique),
+        ..config_without_uniqueness()
+    };
+    allocate_refs(root, &mut refmap, &config).unwrap();
+    (1..=refmap.len())
+        .filter_map(|index| refmap.get(&format!("@e{index}")).cloned())
+        .find(|entry| entry.identity.name.as_deref() == Some(name))
+        .expect("the captured element has a ref")
+}
+
+fn config_without_uniqueness() -> RefAllocConfig<'static> {
+    RefAllocConfig {
         options: RefAllocOptions {
             include_bounds: false,
             interactive_only: false,
@@ -145,14 +182,8 @@ fn capture(root: AccessibilityNode, name: &str) -> RefEntry {
             root_ref_id: None,
             path_prefix: &[],
         },
-        observation_complete: true,
-    };
-    let mut refmap = RefMap::new();
-    allocate_refs(root, &mut refmap, &config).unwrap();
-    (1..=refmap.len())
-        .filter_map(|index| refmap.get(&format!("@e{index}")).cloned())
-        .find(|entry| entry.identity.name.as_deref() == Some(name))
-        .expect("the captured element has a ref")
+        unique_entries: None,
+    }
 }
 
 #[test]
@@ -168,7 +199,7 @@ fn a_unique_live_match_resolves_through_a_positional_anchor() {
     };
 
     assert_eq!(handle.downcast_ref::<&str>(), Some(&"anchor"));
-    assert_eq!(adapter.counts(), (1, 1, 0, 1));
+    assert_eq!(adapter.counts(), (1, 2, 0, 1));
     let anchor = adapter
         .anchored
         .lock()
@@ -194,6 +225,41 @@ fn a_live_twin_refuses_as_ambiguous() {
     assert_eq!(error.code, ErrorCode::AmbiguousTarget);
     assert_eq!(error.details.unwrap()["kind"], "saved_ref_ambiguous");
     assert_eq!(adapter.anchors.load(Ordering::SeqCst), 0);
+}
+
+#[test]
+fn a_landed_element_that_is_not_the_recorded_one_is_stale() {
+    let _guard = HomeGuard::new();
+    let mut adapter = RuleAdapter::new(tree_with(vec![node("button", "Run")]));
+    adapter.landed = Some(node("button", "Cancel"));
+
+    let Err(error) = resolve(&adapter, &entry()) else {
+        panic!("the anchor landed a different element");
+    };
+
+    assert_eq!(error.code, ErrorCode::StaleRef);
+    assert_eq!(error.details.unwrap()["kind"], "saved_ref_absent");
+    assert_eq!(adapter.anchors.load(Ordering::SeqCst), 1);
+}
+
+/// A shell container is not in the window inventory, so the recorded window id
+/// finds it only through the adapter's shell-surface seam.
+#[test]
+fn a_shell_surface_ref_reaches_its_container_without_the_window_inventory() {
+    let _guard = HomeGuard::new();
+    let mut adapter = RuleAdapter::new(tree_with(vec![node("button", "Run")]));
+    adapter.windows.clear();
+    adapter.shell = Some(window());
+    let mut entry = entry();
+    entry.source.source_window_id = Some("w-1".into());
+    entry.source.source_surface = crate::SnapshotSurface::SystemTray;
+
+    let Ok(handle) = resolve(&adapter, &entry) else {
+        panic!("the shell container answers for its recorded id");
+    };
+
+    assert_eq!(handle.downcast_ref::<&str>(), Some(&"anchor"));
+    assert_eq!(adapter.windows_listed.load(Ordering::SeqCst), 0);
 }
 
 #[test]

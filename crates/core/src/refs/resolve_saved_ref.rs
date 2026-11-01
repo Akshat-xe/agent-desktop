@@ -28,6 +28,7 @@ pub fn resolve_saved_ref(
     adapter: &dyn PlatformAdapter,
     entry: &RefEntry,
     deadline: Deadline,
+    lease: Option<&crate::InteractionLease>,
 ) -> Result<NativeHandle, AdapterError> {
     if element_token(entry).is_some() {
         return adapter.resolve_element_strict(entry, deadline);
@@ -36,18 +37,58 @@ pub fn resolve_saved_ref(
         return Err(identity_not_unique(entry));
     }
     let window = recorded_window(adapter, entry, deadline)?;
-    let observed = observe_scope(adapter, entry, &window, deadline)?;
+    let observed = observe_scope(adapter, entry, &window, deadline, lease)?;
     let found = unique_live_match(entry, &observed)?;
     let anchor = positional_anchor(entry, &observed, found)?;
-    adapter.resolve_locator_anchor(&anchor, deadline)
+    let handle = adapter.resolve_locator_anchor(&anchor, deadline)?;
+    let root = ObservationRoot::Element {
+        handle: &handle,
+        entry: &anchor,
+        root_ref: None,
+    };
+    confirm_landed(adapter, entry, root, deadline, lease)?;
+    Ok(handle)
+}
+
+/// The anchor lands a stored path, which a different element can move into
+/// between the live count and the descent, so the handle is re-identified
+/// before it is handed back: only the recorded predicate proves the landing.
+fn confirm_landed(
+    adapter: &dyn PlatformAdapter,
+    entry: &RefEntry,
+    root: ObservationRoot<'_>,
+    deadline: Deadline,
+    lease: Option<&crate::InteractionLease>,
+) -> Result<(), AdapterError> {
+    let options = TreeOptions {
+        max_depth: 0,
+        surface: entry.source.source_surface,
+        ..TreeOptions::default()
+    };
+    let request = ObservationRequest::snapshot(&options, deadline).validate()?;
+    let observed =
+        crate::tree::renderer_accessibility::observe_tree(adapter, root, &request, lease)
+            .map_err(adapter_error)?;
+    let landed = observed
+        .roots
+        .first()
+        .and_then(|index| observed.nodes.get(*index as usize))
+        .ok_or_else(|| AdapterError::internal("the landed element was not observed"))?;
+    match FullPredicate::of_entry(entry).compare(&LivePredicate::observed(&landed.evidence)) {
+        IdentityMatch::Match => Ok(()),
+        IdentityMatch::Unknown => Err(identity_unknown_error(entry)),
+        IdentityMatch::NoMatch => Err(absent(entry)),
+    }
 }
 
 /// The window the ref was captured from, never any other window of the
 /// process: resolution re-searches the scope the capture proved unique.
 ///
-/// The surface lookup owns shell surfaces and the focused-window case; a
-/// recorded window that the inventory lists without surfacing through that
-/// lookup is found by its id and process generation in the same inventory.
+/// The surface lookup owns shell surfaces and the focused-window case, and it
+/// already resolves a recorded window id by that id; `belongs_to_entry` checks
+/// the process and its generation on that answer. Only an entry that records no
+/// window id falls back to enumerating the process's windows, where the
+/// generation alone still says which one it was.
 fn recorded_window(
     adapter: &dyn PlatformAdapter,
     entry: &RefEntry,
@@ -66,6 +107,9 @@ fn recorded_window(
         Ok(_) => {}
         Err(error) => failure = Some(adapter_error(error)),
     }
+    if entry.source.source_window_id.is_some() {
+        return Err(failure.unwrap_or_else(gone));
+    }
     let listed = adapter.list_windows(
         &crate::adapter::WindowFilter {
             focused_only: false,
@@ -76,11 +120,11 @@ fn recorded_window(
     listed
         .into_iter()
         .find(|window| belongs_to_entry(window, entry))
-        .ok_or_else(|| {
-            failure.unwrap_or_else(|| {
-                AdapterError::stale_ref_because("The window the ref was captured from is gone")
-            })
-        })
+        .ok_or_else(|| failure.unwrap_or_else(gone))
+}
+
+fn gone() -> AdapterError {
+    AdapterError::stale_ref_because("The window the ref was captured from is gone")
 }
 
 fn belongs_to_entry(window: &WindowInfo, entry: &RefEntry) -> bool {
@@ -102,6 +146,7 @@ fn observe_scope(
     entry: &RefEntry,
     window: &WindowInfo,
     deadline: Deadline,
+    lease: Option<&crate::InteractionLease>,
 ) -> Result<ObservedTree, AdapterError> {
     let options = TreeOptions {
         max_depth: SCOPE_MAX_DEPTH,
@@ -114,6 +159,7 @@ fn observe_scope(
         adapter,
         ObservationRoot::Window(window),
         &request,
+        lease,
     )
     .map_err(adapter_error)
 }
@@ -121,7 +167,8 @@ fn observe_scope(
 fn unique_live_match(entry: &RefEntry, observed: &ObservedTree) -> Result<usize, AdapterError> {
     let predicate = FullPredicate::of_entry(entry);
     let mut found = None;
-    let mut incomplete = !observed.is_complete() || observed.nodes.iter().any(omits_descendants);
+    let mut incomplete =
+        !observed.is_complete() || observed.nodes.iter().any(ObservedNode::omits_descendants);
     for (index, node) in observed.nodes.iter().enumerate() {
         match predicate.compare(&LivePredicate::observed(&node.evidence)) {
             IdentityMatch::Match if found.is_some() => return Err(ambiguous_live_match(entry)),
@@ -134,13 +181,6 @@ fn unique_live_match(entry: &RefEntry, observed: &ObservedTree) -> Result<usize,
         return Err(identity_unknown_error(entry));
     }
     found.ok_or_else(|| absent(entry))
-}
-
-/// A container whose descendants were not read cannot support a uniqueness
-/// verdict: the twin it might hide is exactly what the count is looking for.
-fn omits_descendants(node: &ObservedNode) -> bool {
-    !node.completeness.subtree_complete
-        || (node.children_count.is_some_and(|count| count > 0) && node.children.is_empty())
 }
 
 /// A positional anchor at the matching node's path, carrying the saved

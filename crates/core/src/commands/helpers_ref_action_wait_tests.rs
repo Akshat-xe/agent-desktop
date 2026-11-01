@@ -44,6 +44,12 @@ impl ObservationOps for ScopedWaitAdapter {
         root: crate::locator::live_locator::ObservationRoot<'_>,
         _request: &crate::locator::live_locator::ObservationRequest,
     ) -> Result<crate::locator::live_locator::ObservedTree, AdapterError> {
+        if matches!(
+            root,
+            crate::locator::live_locator::ObservationRoot::Element { .. }
+        ) {
+            return crate::adapter::saved_ref_element_tree(root);
+        }
         if !self.lease_held.load(Ordering::SeqCst) {
             self.lease_free_polls.fetch_add(1, Ordering::SeqCst);
         }
@@ -190,6 +196,12 @@ impl ObservationOps for MultiWindowAdapter {
         root: crate::locator::live_locator::ObservationRoot<'_>,
         _request: &crate::locator::live_locator::ObservationRequest,
     ) -> Result<crate::locator::live_locator::ObservedTree, AdapterError> {
+        if matches!(
+            root,
+            crate::locator::live_locator::ObservationRoot::Element { .. }
+        ) {
+            return crate::adapter::saved_ref_element_tree(root);
+        }
         let crate::locator::live_locator::ObservationRoot::Window(window) = root else {
             return Err(AdapterError::internal("expected window root"));
         };

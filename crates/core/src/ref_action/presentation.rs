@@ -85,6 +85,7 @@ fn target_center(
             context.adapter,
             context.entry,
             deadline,
+            None,
         )
         .ok()?;
         let bounds = context

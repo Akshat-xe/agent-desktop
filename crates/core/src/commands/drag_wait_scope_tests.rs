@@ -78,6 +78,12 @@ impl ObservationOps for CrossAppWaitAdapter {
         root: crate::locator::live_locator::ObservationRoot<'_>,
         _request: &crate::locator::live_locator::ObservationRequest,
     ) -> Result<crate::locator::live_locator::ObservedTree, AdapterError> {
+        if matches!(
+            root,
+            crate::locator::live_locator::ObservationRoot::Element { .. }
+        ) {
+            return crate::adapter::saved_ref_element_tree(root);
+        }
         let crate::locator::live_locator::ObservationRoot::Window(window) = root else {
             return Err(AdapterError::internal("expected window root"));
         };

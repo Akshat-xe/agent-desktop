@@ -61,6 +61,7 @@ pub(super) fn selected_matches(
             hydration_root,
             &ObservationRequest::selected_hydration(query, request, hydration_root, deadline)
                 .validate()?,
+            None,
         )?;
         hydrated.stats.reads.counts.observation_attempts =
             hydrated.stats.reads.counts.observation_attempts.max(1);

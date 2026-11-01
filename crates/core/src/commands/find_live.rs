@@ -41,7 +41,7 @@ pub(super) fn execute(
             let (_, local_root_ref) = crate::refs::ref_token::resolve_ref_target(root_ref)?;
             let entry = crate::commands::helpers::load_ref_entry(root_ref, context)?;
             let handle =
-                crate::refs::resolve_saved_ref::resolve_saved_ref(adapter, &entry, deadline)?;
+                crate::refs::resolve_saved_ref::resolve_saved_ref(adapter, &entry, deadline, None)?;
             resolve_query(
                 adapter,
                 query,

@@ -17,7 +17,7 @@ fn allocate_refs_assigns_refs_in_depth_first_order() {
 
     let mut refmap = RefMap::new();
     let config = RefAllocConfig {
-        observation_complete: false,
+        unique_entries: None,
         options: crate::refs::ref_alloc_options::RefAllocOptions {
             include_bounds: false,
             interactive_only: false,
@@ -98,7 +98,7 @@ fn allocate_refs_keeps_bounds_in_refmap_when_snapshot_includes_bounds() {
     root.children = vec![node("button", Some("Open"))];
     let mut refmap = RefMap::new();
     let config = RefAllocConfig {
-        observation_complete: false,
+        unique_entries: None,
         options: crate::refs::ref_alloc_options::RefAllocOptions {
             include_bounds: true,
             interactive_only: false,
@@ -195,7 +195,7 @@ fn structural_allocation_failure_still_aborts_snapshot() {
 
 fn allocation_config(include_bounds: bool) -> RefAllocConfig<'static> {
     RefAllocConfig {
-        observation_complete: false,
+        unique_entries: None,
         options: crate::refs::ref_alloc_options::RefAllocOptions {
             include_bounds,
             interactive_only: false,

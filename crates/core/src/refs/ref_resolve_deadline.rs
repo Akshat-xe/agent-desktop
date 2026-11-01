@@ -20,6 +20,7 @@ pub(crate) fn resolve_within_deadline(
     adapter: &dyn PlatformAdapter,
     entry: &RefEntry,
     deadline: Deadline,
+    lease: Option<&crate::InteractionLease>,
 ) -> ResolveAttemptOutcome {
     if deadline.remaining_slice(RESOLVE_ATTEMPT).is_err() {
         return ResolveAttemptOutcome::DeadlinePassed;
@@ -28,6 +29,7 @@ pub(crate) fn resolve_within_deadline(
         adapter,
         entry,
         deadline.capped(RESOLVE_ATTEMPT),
+        lease,
     ) {
         Ok(_) if deadline.is_expired() => ResolveAttemptOutcome::DeadlinePassed,
         Ok(handle) => ResolveAttemptOutcome::Resolved(handle),

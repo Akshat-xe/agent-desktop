@@ -171,10 +171,10 @@ pub fn transform_tree(
     node
 }
 
-pub(crate) fn allocate_refs(
+pub(crate) fn allocate_refs<'a>(
     node: AccessibilityNode,
     refmap: &mut RefMap,
-    config: &RefAllocConfig,
+    config: &'a RefAllocConfig<'a>,
 ) -> Result<AccessibilityNode, crate::AppError> {
     let plan = AllocationPlan::new(&node, config);
     allocate_refs_at_path(
@@ -187,28 +187,28 @@ pub(crate) fn allocate_refs(
 }
 
 /// What one allocation decides once for every node it visits: which boundary
-/// nodes anchor a skeleton, and which entries a complete capture found exactly
+/// nodes anchor a skeleton, and which entries the capture census found exactly
 /// one match for.
-struct AllocationPlan {
+struct AllocationPlan<'a> {
     skeleton_anchors: HashSet<Vec<usize>>,
-    unique_entries: HashSet<Vec<usize>>,
+    unique_entries: Option<&'a HashSet<Vec<usize>>>,
 }
 
-impl AllocationPlan {
-    fn new(node: &AccessibilityNode, config: &RefAllocConfig) -> Self {
+impl<'a> AllocationPlan<'a> {
+    fn new(node: &AccessibilityNode, config: &'a RefAllocConfig<'a>) -> Self {
         let mut skeleton_anchors = HashSet::new();
         if config.scope.root_ref_id.is_none() {
             plan_skeleton_anchors(node, &mut Vec::new(), &mut skeleton_anchors);
         }
-        let unique_entries = if config.observation_complete && config.scope.root_ref_id.is_none() {
-            crate::refs::ref_alloc_unique::unique_capture_paths(node)
-        } else {
-            HashSet::new()
-        };
         Self {
             skeleton_anchors,
-            unique_entries,
+            unique_entries: config.unique_entries,
         }
+    }
+
+    fn found_once(&self, path: &[usize]) -> bool {
+        self.unique_entries
+            .is_some_and(|unique| unique.contains(path))
     }
 }
 
@@ -283,7 +283,7 @@ fn allocate_refs_at_path(
             path,
         );
         entry.scope.path_is_absolute = config.scope.root_ref_id.is_some();
-        entry.identity.unique_at_capture = plan.unique_entries.contains(path);
+        entry.identity.unique_at_capture = plan.found_once(path);
         if !config.options.include_bounds && has_meaningful_identity(&entry) {
             entry.geometry.bounds = None;
         }

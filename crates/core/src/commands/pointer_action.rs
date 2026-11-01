@@ -38,7 +38,7 @@ fn resolve_point_from_entry(
         verify_receives_events,
     } = request;
     let mut handle =
-        resolve_handle_within_deadline(adapter, entry, deadline).inspect_err(|err| {
+        resolve_handle_within_deadline(adapter, entry, deadline, lease).inspect_err(|err| {
             let _ = context.trace_lazy("ref.resolve.error", || {
                 json!({
                     "ref": ref_id,
@@ -75,7 +75,7 @@ fn resolve_point_from_entry(
             .into());
         };
         adapter.scroll_into_view(&handle, lease)?;
-        handle = resolve_handle_within_deadline(adapter, entry, deadline)?;
+        handle = resolve_handle_within_deadline(adapter, entry, deadline, Some(lease))?;
         let observation = adapter.observe_pointer(&handle, deadline)?;
         bounds = observation.bounds;
         states = observation.states;
@@ -310,7 +310,7 @@ fn scroll_point_target(
 ) -> Result<(), AppError> {
     let lease = adapter.acquire_interaction_lease(deadline)?;
     focus_point_under_lease(args, &lease, adapter, context)?;
-    let handle = resolve_handle_within_deadline(adapter, entry, deadline)?;
+    let handle = resolve_handle_within_deadline(adapter, entry, deadline, Some(&lease))?;
     adapter.scroll_into_view(&handle, &lease)?;
     Ok(())
 }

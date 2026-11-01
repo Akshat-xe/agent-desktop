@@ -54,6 +54,7 @@ unsafe fn resolve_core_entry(
         adapter.inner.as_ref(),
         entry,
         deadline,
+        None,
     );
     match resolved {
         Ok(handle) => {

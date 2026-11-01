@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use crate::{
     refs::ref_alloc_options::RefAllocOptions, refs::ref_alloc_scope::RefAllocScope,
     refs::ref_alloc_source::RefAllocSource,
@@ -8,5 +10,5 @@ pub(crate) struct RefAllocConfig<'a> {
     pub(crate) options: RefAllocOptions,
     pub(crate) source: RefAllocSource<'a>,
     pub(crate) scope: RefAllocScope<'a>,
-    pub(crate) observation_complete: bool,
+    pub(crate) unique_entries: Option<&'a HashSet<Vec<usize>>>,
 }
