@@ -250,7 +250,7 @@ impl CommandContext {
         let session_id = session_id.or_else(|| self.session_id().map(str::to_owned));
         if self.pinned_session_namespace && session_id.as_deref() != self.session_id() {
             return Err(AppError::invalid_input(
-                "A command host cannot switch snapshot namespaces",
+                "A pinned session namespace cannot switch snapshot namespaces",
             ));
         }
         if let Some(id) = session_id.as_deref() {

@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Bug Fixes
+
+* Remove the macOS command host. Every CLI call runs in its own process, as on Windows and Linux, and stops any command host an earlier version left running.
+* Refs from snapshots taken before this release return `STALE_REF`. Take a new snapshot.
+
 ## [1.0.2](https://github.com/vercel-labs/agent-desktop/compare/v1.0.1...v1.0.2) (2026-10-30)
 
 ### Features
