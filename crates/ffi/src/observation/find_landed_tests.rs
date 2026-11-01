@@ -70,7 +70,7 @@ fn first_selection_never_publishes_a_handle_that_landed_on_another_element() {
     assert!(out.ptr.is_null());
 }
 
-struct TwinButtons;
+struct TwinButtons(&'static str);
 
 impl ActionOps for TwinButtons {}
 impl InputOps for TwinButtons {}
@@ -86,7 +86,7 @@ impl ObservationOps for TwinButtons {
             ObservationRoot::Window(window) => window,
             ObservationRoot::Element { handle, .. } => {
                 let x = *handle.downcast_ref::<f64>().unwrap_or(&-1.0);
-                return element_tree("Save", x);
+                return element_tree(self.0, x);
             }
         };
         let roots = [10.0, 200.0]
@@ -135,8 +135,16 @@ impl ObservationOps for TwinButtons {
 }
 
 fn find_twin(kind: AdFindSelectionKind, nth: u32) -> (AdResult, Option<f64>) {
+    find_twin_landing(kind, nth, "Save")
+}
+
+fn find_twin_landing(
+    kind: AdFindSelectionKind,
+    nth: u32,
+    landed: &'static str,
+) -> (AdResult, Option<f64>) {
     let handle = crate::adapter::register_adapter(AdAdapter {
-        inner: Box::new(TwinButtons),
+        inner: Box::new(TwinButtons(landed)),
         session_id: None,
         _session_lease: None,
     })
@@ -178,6 +186,10 @@ fn explicit_selection_among_identical_buttons_returns_the_chosen_element() {
     assert_eq!(
         find_twin(AdFindSelectionKind::Strict, 0),
         (AdResult::ErrAmbiguousTarget, None)
+    );
+    assert_eq!(
+        find_twin_landing(AdFindSelectionKind::Nth, 1, "Delete"),
+        (AdResult::ErrStaleRef, None)
     );
 }
 

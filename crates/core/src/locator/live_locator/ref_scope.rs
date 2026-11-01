@@ -230,9 +230,35 @@ pub fn resolve_anchor(
         }
     } else if !positional_matches(entry, live) {
         return Err(stale());
+    } else if recorded_identity_is_meaningful(entry) {
+        match crate::refs::ref_identity_observed::observed_identity_match(
+            entry,
+            &live.evidence.name,
+            &live.evidence.value,
+            &live.evidence.description,
+            &live.evidence.identifiers,
+        ) {
+            IdentityMatch::Match => {}
+            IdentityMatch::NoMatch => return Err(stale()),
+            IdentityMatch::Unknown => return Err(incomplete()),
+        }
     }
     retained_object_verdict(entry, live)?;
     Ok(handle)
+}
+
+fn recorded_identity_is_meaningful(entry: &RefEntry) -> bool {
+    crate::refs::ref_identity::identity_fields_are_meaningful(
+        &entry.identity.role,
+        entry.identity.name.as_deref(),
+        entry.identity.value.as_deref(),
+        entry.identity.description.as_deref(),
+        entry
+            .identity
+            .native_id
+            .as_ref()
+            .map(|id| id.value.as_str()),
+    )
 }
 
 fn positional_matches(entry: &RefEntry, node: &ObservedNode) -> bool {
