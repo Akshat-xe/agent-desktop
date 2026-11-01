@@ -107,42 +107,15 @@ fn save_refmap(source_app: Option<String>) -> String {
         width: 20.0,
         height: 20.0,
     };
-    refmap.allocate(RefEntry {
-        process: crate::RefProcess {
-            pid: crate::ProcessId::new(7),
-            process_instance: Some("test-instance".into()),
-        },
-        identity: crate::RefEntryIdentity {
-            basis: Some(crate::IdentityBasis::Name),
-            retained_object: None,
-            role: "button".into(),
-            name: Some("Open".into()),
-            value: None,
-            description: None,
-            native_id: None,
-        },
-        geometry: crate::RefGeometry {
-            bounds_space: None,
-            bounds: Some(bounds),
-            bounds_hash: bounds.bounds_hash(),
-        },
-        capabilities: crate::RefCapabilities {
-            states: Vec::new(),
-            available_actions: vec!["RightClick".into()],
-        },
-        source: crate::RefSource {
-            source_app,
-            source_window_id: None,
-            source_window_title: None,
-            source_window_bounds_hash: None,
-            source_surface: crate::adapter::SnapshotSurface::Window,
-        },
-        scope: crate::RefScope {
-            root_ref: None,
-            path_is_absolute: false,
-            census_depth: None,
-            path: smallvec::SmallVec::new(),
-        },
+    refmap.allocate({
+        let mut entry = crate::adapter::minimal_ref_entry("button", Some("Open"));
+        entry.process.pid = crate::ProcessId::new(7);
+        entry.geometry.bounds = Some(bounds);
+        entry.geometry.bounds_hash = bounds.bounds_hash();
+        entry.capabilities.available_actions = vec!["RightClick".into()];
+        entry.source.source_app = source_app;
+        entry.source.source_surface = crate::adapter::SnapshotSurface::Window;
+        entry
     });
     RefStore::new().unwrap().save_new_snapshot(&refmap).unwrap()
 }

@@ -1,10 +1,9 @@
 use agent_desktop_core::{
     Action, ActionOps, ActionRequest, AdapterError, DeliveryDisposition, DeliverySemantics,
     ElementState, ErrorCode, IdentifierEvidence, InputOps, InteractionLease, LiveElement,
-    LiveIdentity, LocatorField, NativeHandle, ObservationOps, Point, ProcessId, Rect,
-    RefCapabilities, RefEntry, RefEntryIdentity, RefGeometry, RefProcess, RefScope, RefSource,
-    RetryDisposition, SnapshotSurface, SystemOps, WindowInfo, actions::capability,
-    adapter::hit_test::HitTestResult, ref_action, tree::state::VisibilityEvidence,
+    LiveIdentity, LocatorField, NativeHandle, ObservationOps, Point, Rect, RefEntry,
+    RetryDisposition, SystemOps, WindowInfo, actions::capability, adapter::hit_test::HitTestResult,
+    ref_action, tree::state::VisibilityEvidence,
 };
 use std::sync::atomic::{AtomicU32, Ordering};
 
@@ -173,40 +172,17 @@ fn entry_for(live: &LiveElement) -> RefEntry {
         width: 20.0,
         height: 20.0,
     });
-    RefEntry {
-        process: RefProcess {
-            pid: ProcessId::new(1),
-            process_instance: Some("test-instance".into()),
-        },
-        identity: RefEntryIdentity {
-            basis: Some(agent_desktop_core::IdentityBasis::Name),
-            role: live.state.role.clone(),
-            name: Some("Run".into()),
-            ..RefEntryIdentity::default()
-        },
-        geometry: RefGeometry {
-            bounds_space: None,
-            bounds: Some(bounds),
-            bounds_hash: bounds.bounds_hash(),
-        },
-        capabilities: RefCapabilities {
-            states: Vec::new(),
-            available_actions: live.available_actions.clone(),
-        },
-        source: RefSource {
-            source_app: Some("Fixture".into()),
-            source_window_id: Some("w-1".into()),
-            source_window_title: Some("Fixture".into()),
-            source_window_bounds_hash: None,
-            source_surface: SnapshotSurface::Window,
-        },
-        scope: RefScope {
-            root_ref: None,
-            path_is_absolute: false,
-            census_depth: None,
-            path: Default::default(),
-        },
-    }
+    let mut entry = crate::tree::walk::walker_fake::ref_entry(&live.state.role);
+    entry.process.process_instance = Some("test-instance".into());
+    entry.identity.basis = Some(agent_desktop_core::IdentityBasis::Name);
+    entry.identity.name = Some("Run".into());
+    entry.geometry.bounds = Some(bounds);
+    entry.geometry.bounds_hash = bounds.bounds_hash();
+    entry.capabilities.available_actions = live.available_actions.clone();
+    entry.source.source_app = Some("Fixture".into());
+    entry.source.source_window_id = Some("w-1".into());
+    entry.source.source_window_title = Some("Fixture".into());
+    entry
 }
 
 fn area(width: f64, height: f64) -> Rect {

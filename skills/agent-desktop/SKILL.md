@@ -51,7 +51,7 @@ agent-desktop snapshot --root @s8f3k2p9:e3 -i --compact        # verify: re-read
 - Refs are valid for one snapshot. After any UI change, re-drill the affected region or take a new snapshot.
 - Only addressable elements get refs. Static text and inert containers do not.
 - A ref resolves through the identifier, name or description that singled it out at snapshot time: exactly one live element must still have it. A ref with none of them keeps its old path and bounds.
-- Refs never use a mutable control's value, such as text field content or a checkbox state, to tell elements apart. When look-alikes differ only in that value, the ref cannot pick one: choose the intended element with `find --value`, `--name` or `--nth`, then act on the new ref.
+- Refs never use a mutable control's value, such as text field content or a checkbox state, to tell elements apart. When look-alikes differ only in that value, the ref cannot pick one. If they differ in name, identifier or description, `find --name` gives a ref that works. If they are identical, read bounds with `snapshot --include-bounds` and use `--headed mouse-click --xy X,Y` (headed: it takes the foreground, so only when the run allows headed input; there is no headless way to pick one twin); `find --first`, `--last` and `--nth` return refs that are refused the same way.
 - `STALE_REF`: no live element matches the ref. Take a fresh snapshot and use the new ref.
 - `AMBIGUOUS_TARGET`: the ref never had unique evidence, or several live elements match it. Narrow the target with `find`, then use the new ref.
 - `SNAPSHOT_NOT_FOUND`: the snapshot id expired. Snapshot again.

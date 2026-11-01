@@ -97,9 +97,7 @@ impl ObservationOps for DrillAdapter {
         let node = match root {
             ObservationRoot::Window(_) => {
                 let mut tree = self.tree.lock().unwrap().clone();
-                if request.observation_mode.skeleton {
-                    prune(&mut tree, 0, request.max_logical_depth);
-                }
+                prune(&mut tree, 0, request.max_logical_depth);
                 tree
             }
             ObservationRoot::Element { handle, .. } => {

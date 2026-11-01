@@ -1,6 +1,7 @@
 use agent_desktop_core::{AdapterError, RefEntry, SnapshotSurface};
 
 use super::resolve_read_context::ResolveReadContext;
+use crate::system::window::window_resolve::parse_window_number;
 use crate::tree::AXElement;
 use crate::tree::element_dedupe::push_unique;
 use crate::tree::properties::element::element_for_pid;
@@ -18,11 +19,14 @@ pub(in crate::tree) fn candidate_roots(
 ) -> Result<CandidateRoots, AdapterError> {
     let deadline = context.deadline;
     crate::tree::locator_deadline::remaining(deadline)?;
-    if entry.source.source_surface == SnapshotSurface::Focused {
-        return super::resolve_identity_roots::identity_scope_roots(entry, context);
-    }
     let pid = crate::system::process::process_identity::to_pid_t(entry.process.pid)?;
     let application = element_for_pid(pid);
+    if entry.source.source_surface == SnapshotSurface::Focused {
+        if !recorded_source_window(entry) {
+            return Err(AdapterError::element_not_found("saved source window"));
+        }
+        return source_window_scoped_roots(&application, entry, context);
+    }
     if entry.source.source_surface != SnapshotSurface::Window {
         super::resolve_source_app::verify_source_application(&application, entry, context)?;
         return source_surface_scoped_roots(&application, entry, context);
@@ -93,7 +97,7 @@ fn source_surface_scoped_roots(
                             deadline,
                         )
                     })?;
-                    let root = surface_or_bridge_error(root, error)?;
+                    let root = root.ok_or(error)?;
                     return Ok(CandidateRoots {
                         scope_verified: true,
                         roots: vec![root],
@@ -110,13 +114,11 @@ fn source_surface_scoped_roots(
                 None => None,
             }
         }
-        SnapshotSurface::Focused => crate::tree::surfaces::focused_surface_for_pid(pid, deadline)?,
         SnapshotSurface::Menu => crate::tree::surfaces::menu_element_for_pid(pid, deadline)?,
         SnapshotSurface::Menubar => crate::tree::surfaces::menubar_for_pid(pid, deadline)?,
         SnapshotSurface::Sheet => crate::tree::surfaces::sheet_for_pid(pid, deadline)?,
         SnapshotSurface::Popover => crate::tree::surfaces::popover_for_pid(pid, deadline)?,
         SnapshotSurface::Alert => crate::tree::surfaces::alert_for_pid(pid, deadline)?,
-        SnapshotSurface::Window => None,
         _ => None,
     };
     let Some(root) = root else {
@@ -372,15 +374,17 @@ pub(in crate::tree) fn source_window_scope_required(entry: &RefEntry) -> bool {
                 .is_some_and(|title| !title.is_empty()))
 }
 
-pub(in crate::tree) fn source_window_number(entry: &RefEntry) -> Option<i64> {
-    let number = entry
-        .source
-        .source_window_id
-        .as_deref()?
-        .strip_prefix("w-")?
-        .parse()
-        .ok()?;
-    (number > 0).then_some(number)
+fn source_window_number(entry: &RefEntry) -> Option<i64> {
+    parse_window_number(entry.source.source_window_id.as_deref()?)
+}
+
+fn recorded_source_window(entry: &RefEntry) -> bool {
+    entry.source.source_window_id.is_some()
+        || entry
+            .source
+            .source_window_title
+            .as_deref()
+            .is_some_and(|title| !title.trim().is_empty())
 }
 
 fn saved_surface_fallback<T>(
@@ -388,10 +392,6 @@ fn saved_surface_fallback<T>(
     find_surface: impl FnOnce(i64) -> Result<Option<T>, AdapterError>,
 ) -> Result<Option<T>, AdapterError> {
     source_window_number(entry).map_or(Ok(None), find_surface)
-}
-
-fn surface_or_bridge_error<T>(surface: Option<T>, error: AdapterError) -> Result<T, AdapterError> {
-    surface.ok_or(error)
 }
 
 #[cfg(test)]

@@ -67,10 +67,17 @@ struct RefChurnView: View {
             .accessibilityElement(children: .contain)
             .accessibilityLabel("Changing collection")
 
-            Button("Filter labeled") {
-                labeledFiltered = true
+            HStack {
+                Button("Filter labeled") {
+                    labeledFiltered = true
+                }
+                .accessibilityIdentifier("filter-labeled")
+                Button("Replace labeled") {
+                    labeledFiltered = true
+                    delta = "Gamma"
+                }
+                .accessibilityIdentifier("replace-labeled")
             }
-            .accessibilityIdentifier("filter-labeled")
 
             VStack(alignment: .leading, spacing: 8) {
                 if !labeledFiltered {

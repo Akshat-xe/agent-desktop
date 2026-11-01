@@ -1,4 +1,4 @@
-use super::{LocatorEvidence, LocatorField, ObservationSource, ObservedTree};
+use super::{LocatorEvidence, LocatorField, ObservationSource, ObservedNode, ObservedTree};
 use crate::{
     RefEntryIdentity,
     adapter::SnapshotSurface,
@@ -36,9 +36,9 @@ pub(crate) fn survey_counts(tree: &ObservedTree, query: &LocatorQuery) -> Identi
 pub(crate) fn materialize_refmap(
     tree: &mut ObservedTree,
     query: &LocatorQuery,
+    counts: &IdentityBasisCounts,
     selected: Option<&[usize]>,
 ) -> Result<(RefMap, bool), crate::AdapterError> {
-    let counts = survey_counts(tree, query);
     let source = &tree.source;
     let nodes = &mut tree.nodes;
     let mut refmap = RefMap::new();
@@ -53,20 +53,31 @@ pub(crate) fn materialize_refmap(
         if !addressable {
             continue;
         }
-        let mut entry = ref_entry(node, source, query);
-        let basis = counts.basis(&entry.identity);
-        entry.identity.basis = Some(basis);
-        crate::refs::ref_identity::withhold_unverified_name(
-            &mut entry.identity,
-            node.evidence.value.is_unknown(),
-            Some(basis),
-        );
+        let entry = based_ref_entry(node, source, query, counts);
         let ref_id = refmap.try_allocate(entry).map_err(|error| {
             crate::AdapterError::new(crate::ErrorCode::InvalidArgs, error.to_string())
         })?;
         nodes[index].ref_id = Some(ref_id);
     }
     Ok((refmap, complete))
+}
+
+/// Builds the node's ref entry with the basis the survey proved for it.
+pub(crate) fn based_ref_entry(
+    node: &ObservedNode,
+    source: &ObservationSource,
+    query: &LocatorQuery,
+    counts: &IdentityBasisCounts,
+) -> RefEntry {
+    let mut entry = ref_entry(node, source, query);
+    let basis = counts.basis(&entry.identity);
+    entry.identity.basis = Some(basis);
+    crate::refs::ref_identity::withhold_unverified_name(
+        &mut entry.identity,
+        node.evidence.value.is_unknown(),
+        Some(basis),
+    );
+    entry
 }
 
 /// Withdraws the proofs that rest on a field this element left unread. A value

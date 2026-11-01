@@ -85,43 +85,12 @@ fn save_entry(entry: RefEntry) -> String {
 }
 
 fn entry(states: Vec<String>, value: Option<&str>, actions: Vec<&str>) -> RefEntry {
-    RefEntry {
-        process: crate::RefProcess {
-            pid: crate::ProcessId::new(1),
-            process_instance: Some("test-instance".into()),
-        },
-        identity: crate::RefEntryIdentity {
-            basis: Some(crate::IdentityBasis::Name),
-            retained_object: None,
-            role: "checkbox".into(),
-            name: Some("Target".into()),
-            value: value.map(str::to_string),
-            description: None,
-            native_id: None,
-        },
-        geometry: crate::RefGeometry {
-            bounds_space: None,
-            bounds: None,
-            bounds_hash: None,
-        },
-        capabilities: crate::RefCapabilities {
-            states,
-            available_actions: actions.into_iter().map(str::to_string).collect(),
-        },
-        source: crate::RefSource {
-            source_app: None,
-            source_window_id: None,
-            source_window_title: None,
-            source_window_bounds_hash: None,
-            source_surface: crate::adapter::SnapshotSurface::Window,
-        },
-        scope: crate::RefScope {
-            root_ref: None,
-            path_is_absolute: false,
-            census_depth: None,
-            path: smallvec::SmallVec::new(),
-        },
-    }
+    let mut entry = crate::adapter::minimal_ref_entry("checkbox", Some("Target"));
+    entry.identity.value = value.map(str::to_string);
+    entry.capabilities.states = states;
+    entry.capabilities.available_actions = actions.into_iter().map(str::to_string).collect();
+    entry.source.source_surface = crate::adapter::SnapshotSurface::Window;
+    entry
 }
 
 fn visible_bounds() -> Rect {

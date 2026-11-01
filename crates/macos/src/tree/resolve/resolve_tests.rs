@@ -1,9 +1,9 @@
 use super::*;
+use crate::system::window::window_resolve::parse_window_number;
 use crate::tree::AXElement;
 use crate::tree::resolve::resolve_classify::classify_candidates;
 use crate::tree::resolve::resolve_roots::{
-    require_unique_window_number_match, source_scope_verified, source_window_number,
-    source_window_scope_required,
+    require_unique_window_number_match, source_scope_verified, source_window_scope_required,
 };
 use crate::tree::resolve::resolve_search::{
     find_entry_by_path, incomplete_traversal_error, match_native_or_text_identity,
@@ -127,27 +127,7 @@ fn source_window_scope_rejects_malformed_ids_instead_of_broadening() {
     let malformed = entry(Some(42), Some("not-a-window"), None, None);
 
     assert!(source_window_scope_required(&malformed));
-    assert_eq!(source_window_number(&malformed), None);
-}
-
-#[test]
-fn source_window_number_parses_only_canonical_ids() {
-    assert_eq!(
-        source_window_number(&entry(None, Some("w-42"), None, None)),
-        Some(42)
-    );
-    assert_eq!(
-        source_window_number(&entry(None, Some("42"), None, None)),
-        None
-    );
-    assert_eq!(
-        source_window_number(&entry(None, Some("w-0"), None, None)),
-        None
-    );
-    assert_eq!(
-        source_window_number(&entry(None, Some("w--1"), None, None)),
-        None
-    );
+    assert_eq!(parse_window_number("not-a-window"), None);
 }
 
 #[test]
@@ -396,4 +376,25 @@ fn complete_absence_remains_retryable_for_renderer_detach_and_reattach() {
 
     assert_eq!(error.code, ErrorCode::StaleRef);
     assert_eq!(error.details.unwrap()["retryable"], true);
+}
+
+#[test]
+fn a_focused_ref_without_a_recorded_window_is_refused_instead_of_following_focus() {
+    for basis in [
+        agent_desktop_core::IdentityBasis::Name,
+        agent_desktop_core::IdentityBasis::Positional,
+    ] {
+        let mut focused = entry(Some(42), None, Some(" "), None);
+        focused.identity.basis = Some(basis);
+        focused.source.source_surface = SnapshotSurface::Focused;
+        let mut context = ResolveReadContext::new(Instant::now() + Duration::from_secs(1));
+        let error = candidate_roots(&focused, &mut context)
+            .err()
+            .expect("a focused ref that recorded no window must never search the live focus");
+        assert_eq!(error.code, ErrorCode::ElementNotFound);
+        assert_eq!(
+            error.message,
+            AdapterError::element_not_found("saved source window").message
+        );
+    }
 }

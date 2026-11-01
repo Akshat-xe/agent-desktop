@@ -117,34 +117,13 @@ unsafe fn find_in_window(
         return AdResult::ErrInvalidArgs;
     };
     let process = agent_desktop_core::ProcessIdentity::new(entry.process.pid, process_instance);
-    let resolved = if request.selection == LocatorSelection::Strict {
-        adapter
-            .inner
-            .resolve_element_strict(&entry, request.deadline)
-    } else {
-        agent_desktop_core::resolve_verified_anchor(
-            adapter.inner.as_ref(),
-            &entry,
-            request.deadline,
-        )
-    };
-    match resolved {
-        Ok(handle) => {
-            match crate::actions::native_handle::into_ffi_handle(adapter_id, handle, process) {
-                Ok(token) => {
-                    unsafe { (*out_handle).ptr = token };
-                    AdResult::Ok
-                }
-                Err(error) => {
-                    set_last_error(&error);
-                    crate::error::last_error_code()
-                }
-            }
-        }
-        Err(e) => {
-            set_last_error(&e);
-            crate::error::last_error_code()
-        }
+    let resolved = agent_desktop_core::resolve_verified_anchor(
+        adapter.inner.as_ref(),
+        &entry,
+        request.deadline,
+    );
+    unsafe {
+        crate::actions::native_handle::publish_resolved(adapter_id, resolved, process, out_handle)
     }
 }
 

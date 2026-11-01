@@ -15,7 +15,7 @@ use std::time::{Duration, Instant};
 use serde_json::{Value, json};
 
 use crate::{
-    AdapterError, AppError, DeliverySemantics,
+    AppError, DeliverySemantics,
     actions::action::Action,
     adapter::PlatformAdapter,
     commands::helpers::{RefArgs, execute_ref_action_with_context},
@@ -211,10 +211,7 @@ fn after_partial_delivery(error: AppError, typed: usize, total: usize) -> AppErr
     if typed == 0 {
         return error;
     }
-    let adapter_error = match error {
-        AppError::Adapter(error) => error,
-        other => AdapterError::internal(other.to_string()),
-    };
+    let adapter_error = crate::ref_action::into_adapter_error(error);
     let mut details = adapter_error.details.clone().unwrap_or_else(|| json!({}));
     if let Some(object) = details.as_object_mut() {
         object.insert("typed_keystrokes".into(), json!(typed));

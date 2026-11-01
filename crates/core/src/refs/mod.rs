@@ -60,15 +60,14 @@ impl RefMap {
     pub(crate) fn try_allocate_observed(
         &mut self,
         entry: RefEntry,
-    ) -> Result<crate::refs::ref_allocation::RefAllocation, AppError> {
-        if !crate::Role::is_canonical(&entry.identity.role) || entry.identity.role == "unknown" {
-            return Ok(crate::refs::ref_allocation::RefAllocation::SkippedInvalidRole);
+    ) -> Result<Option<String>, AppError> {
+        if !crate::Role::is_canonical(&entry.identity.role)
+            || entry.identity.role == "unknown"
+            || crate::refs::refs_validate::validate_ref_entry(&entry).is_err()
+        {
+            return Ok(None);
         }
-        if crate::refs::refs_validate::validate_ref_entry(&entry).is_err() {
-            return Ok(crate::refs::ref_allocation::RefAllocation::SkippedInvalidEntry);
-        }
-        self.allocate_validated(entry)
-            .map(crate::refs::ref_allocation::RefAllocation::Allocated)
+        self.allocate_validated(entry).map(Some)
     }
 
     fn allocate_validated(&mut self, entry: RefEntry) -> Result<String, AppError> {
@@ -349,8 +348,8 @@ pub(crate) mod ref_alloc_options;
 pub(crate) mod ref_alloc_plan;
 pub(crate) mod ref_alloc_scope;
 pub(crate) mod ref_alloc_source;
-pub(crate) mod ref_allocation;
 pub(crate) mod ref_capabilities;
+pub(crate) mod ref_census;
 pub(crate) mod ref_entry;
 pub(crate) mod ref_entry_identity;
 pub(crate) mod ref_geometry;

@@ -80,6 +80,12 @@ fn a_full_count_with_omitted_descendants_never_selects_a_match() {
     unread_name.name = LocatorField::Unknown;
     let code = |sibling| resolve_with(false, Some(sibling)).map(|error| error.code);
     assert_eq!(code(unread_name.clone()), Some(crate::ErrorCode::Timeout));
+    let unread = resolve_with(false, Some(unread_name.clone())).unwrap();
+    assert!(unread.is_explicitly_retryable());
+    assert_eq!(
+        unread.details.unwrap()["kind"],
+        "resolution_identity_unknown"
+    );
     let mut other_role = unread_name.clone();
     other_role.role = LocatorField::Known("group".into());
     assert_eq!(code(other_role), None);

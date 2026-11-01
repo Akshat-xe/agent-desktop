@@ -77,7 +77,7 @@ agent-desktop find [--app NAME] [--window-id ID] [--role ROLE] [--name TEXT] [--
   </tbody>
 </table>
 
-`--count`, `--first`, `--last`, `--nth`, and `--limit` are mutually exclusive. The result shapes and match fields are in [JSON output](/desktop/json-output#find-results).
+`--count`, `--first`, `--last`, `--nth`, and `--limit` are mutually exclusive. A pick does not make look-alikes distinct: the ref it returns is built from the same identity evidence, so identical elements still give an `ambiguous` ref that actions refuse. The result shapes and match fields are in [JSON output](/desktop/json-output#find-results).
 
 ```bash
 agent-desktop find --app gnome-calculator --role button --name 7 --exact --first

@@ -132,42 +132,17 @@ fn tree_builder_default_is_not_supported() {
 
 #[test]
 fn element_root_derives_surface_with_relative_depth_budgets() {
-    let entry = crate::RefEntry {
-        process: crate::RefProcess {
-            pid: crate::ProcessId::new(42),
-            process_instance: Some("instance-1".into()),
-        },
-        identity: crate::RefEntryIdentity {
-            basis: Some(crate::IdentityBasis::Name),
-            retained_object: None,
-            role: "group".into(),
-            name: Some("Menu root".into()),
-            value: None,
-            description: None,
-            native_id: None,
-        },
-        geometry: crate::RefGeometry {
-            bounds_space: None,
-            bounds: None,
-            bounds_hash: None,
-        },
-        capabilities: crate::RefCapabilities {
-            states: Vec::new(),
-            available_actions: Vec::new(),
-        },
-        source: crate::RefSource {
-            source_app: Some("Fixture".into()),
-            source_window_id: Some("w-1".into()),
-            source_window_title: Some("Fixture".into()),
-            source_window_bounds_hash: None,
-            source_surface: crate::SnapshotSurface::Menu,
-        },
-        scope: crate::RefScope {
-            root_ref: None,
-            path_is_absolute: true,
-            census_depth: None,
-            path: smallvec::smallvec![3, 4, 5],
-        },
+    let entry = {
+        let mut entry = crate::adapter::minimal_ref_entry("group", Some("Menu root"));
+        entry.process.pid = crate::ProcessId::new(42);
+        entry.process.process_instance = Some("instance-1".into());
+        entry.source.source_app = Some("Fixture".into());
+        entry.source.source_window_id = Some("w-1".into());
+        entry.source.source_window_title = Some("Fixture".into());
+        entry.source.source_surface = crate::SnapshotSurface::Menu;
+        entry.scope.path_is_absolute = true;
+        entry.scope.path = smallvec::smallvec![3, 4, 5];
+        entry
     };
     let handle = crate::NativeHandle::null();
     let root = ObservationRoot::Element {

@@ -40,7 +40,10 @@ fn capture_items(role: &str, names: &[&str]) -> (String, crate::refs::RefMap) {
             include_bounds: false,
             interactive_only: false,
             compact: false,
-            skeleton_depth: Some(3),
+            census: Some(crate::refs::ref_census::Census {
+                depth: 3,
+                skeleton: true,
+            }),
         },
         source: RefAllocSource {
             pid: ProcessId::new(42),
@@ -79,24 +82,10 @@ fn adapter_with(names: &[&str]) -> DrillAdapter {
 }
 
 #[test]
-fn removed_twin_never_lets_a_drill_select_the_survivor() {
+fn twin_skeleton_anchors_are_not_offered_as_drill_targets() {
     let _home = HomeGuard::new();
-    let (id, map) = capture_skeleton(&["Panel", "Panel"]);
-    assert_eq!(
-        map.get("@e1").unwrap().identity.basis,
-        Some(IdentityBasis::Ambiguous)
-    );
-    let adapter = adapter_with(&["Panel"]);
-    let error = run_from_ref(&adapter, &TreeOptions::default(), "@e1", Some(&id))
-        .err()
-        .unwrap();
-    assert_eq!(error.code(), "AMBIGUOUS_TARGET");
-
-    let adapter = adapter_with(&["Panel", "Panel"]);
-    let error = run_from_ref(&adapter, &TreeOptions::default(), "@e2", Some(&id))
-        .err()
-        .unwrap();
-    assert_eq!(error.code(), "AMBIGUOUS_TARGET");
+    let (_, map) = capture_skeleton(&["Panel", "Panel"]);
+    assert!(map.is_empty());
 }
 
 #[test]
@@ -136,7 +125,14 @@ fn with_deep_twin_at(adapter: &DrillAdapter, host: usize) {
 fn a_twin_below_the_skeleton_depth_cannot_stand_in_for_a_removed_anchor() {
     let _home = HomeGuard::new();
     let (id, map) = capture_skeleton(&["Panel", "Other"]);
-    assert_eq!(map.get("@e1").unwrap().scope.census_depth, Some(3));
+    assert_eq!(
+        map.get("@e1")
+            .unwrap()
+            .scope
+            .census_depth
+            .map(|census| census.depth),
+        Some(3)
+    );
     let present = adapter_with(&["Panel", "Other"]);
     with_deep_twin_at(&present, 1);
     click(&present, &format!("@{id}:e1")).unwrap();
@@ -177,7 +173,7 @@ fn actionable_skeleton_item_drills_like_an_anchor_and_refuses_a_deeper_twin() {
     let (id, map) = capture_items("treeitem", &["Recents", "Shared"]);
     let entry = map.get("@e1").unwrap();
     assert_eq!(entry.identity.basis, Some(IdentityBasis::Name));
-    assert_eq!(entry.scope.census_depth, Some(3));
+    assert_eq!(entry.scope.census_depth.map(|census| census.depth), Some(3));
     let adapter = DrillAdapter::new();
     adapter
         .derived_names
@@ -205,4 +201,46 @@ fn actionable_skeleton_item_drills_like_an_anchor_and_refuses_a_deeper_twin() {
         .err()
         .unwrap();
     assert_eq!(error.code(), "STALE_REF");
+}
+
+#[test]
+fn a_depth_cut_default_snapshot_resolves_a_unique_element_by_replaying_its_depth() {
+    let _home = HomeGuard::new();
+    let adapter = DrillAdapter::new();
+    let mut deep = node("group", "Deep");
+    deep.children.push(node("button", "Hidden"));
+    adapter.tree.lock().unwrap().children = vec![node("button", "Save"), deep];
+    let options = TreeOptions {
+        max_depth: 1,
+        ..TreeOptions::default()
+    };
+    let deadline = crate::Deadline::standard().unwrap();
+    let result =
+        crate::snapshot::build(&adapter, &options, Some("TestApp"), None, deadline).unwrap();
+    let entry = result.refmap.get("@e1").unwrap();
+    assert_eq!(entry.identity.basis, Some(IdentityBasis::Name));
+    assert_eq!(
+        entry.scope.census_depth,
+        Some(crate::refs::ref_census::Census {
+            depth: 1,
+            skeleton: false
+        })
+    );
+    let id = RefStore::new()
+        .unwrap()
+        .save_new_snapshot(&result.refmap)
+        .unwrap();
+
+    click(&adapter, &format!("@{id}:e1")).unwrap();
+    assert_eq!(*adapter.actions.lock().unwrap(), vec![vec![0]]);
+
+    adapter
+        .tree
+        .lock()
+        .unwrap()
+        .children
+        .push(node("button", "Save"));
+    let error = click(&adapter, &format!("@{id}:e1")).unwrap_err();
+    assert_eq!(error.code(), "AMBIGUOUS_TARGET");
+    assert_eq!(adapter.actions.lock().unwrap().len(), 1);
 }

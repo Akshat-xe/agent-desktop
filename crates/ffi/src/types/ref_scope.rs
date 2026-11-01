@@ -2,6 +2,8 @@ use std::os::raw::c_char;
 
 #[repr(C)]
 pub struct AdRefScope {
+    /// The drill-down root that created the entry. An exact-ref entry that sets it is refused
+    /// with `STALE_REF`, because the root's snapshot is not available to resolve against.
     pub root_ref: *const c_char,
     pub path: *const u32,
     pub path_count: usize,

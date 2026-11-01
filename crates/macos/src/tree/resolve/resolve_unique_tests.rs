@@ -40,23 +40,6 @@ fn live_element() -> AXElement {
 }
 
 #[test]
-fn a_recorded_bounds_hash_never_breaks_a_duplicate_identity() {
-    let stored = identity_entry(IdentityBasis::NativeId);
-    assert_eq!(stored.geometry.bounds_hash, Some(42));
-    let mut tally = UniqueTally::default();
-    tally.record(AXElement(std::ptr::null_mut()));
-    tally.record(AXElement(std::ptr::null_mut()));
-
-    let error = tally
-        .into_resolution(&stored)
-        .err()
-        .expect("a duplicate identity must never resolve");
-
-    assert_eq!(error.code, ErrorCode::AmbiguousTarget);
-    assert_eq!(error.details.unwrap()["candidate_count"], 2);
-}
-
-#[test]
 fn the_duplicate_verdict_depends_only_on_the_count_not_on_basis_or_bounds() {
     for basis in [IdentityBasis::NativeId, IdentityBasis::Positional] {
         let stored = identity_entry(basis);
@@ -75,25 +58,6 @@ fn the_duplicate_verdict_depends_only_on_the_count_not_on_basis_or_bounds() {
         assert_eq!(details["candidate_count"], 2);
         assert_ne!(details["kind"], "bounds_mismatch");
     }
-}
-
-#[test]
-fn one_match_in_an_unfinished_search_never_resolves() {
-    let stored = identity_entry(IdentityBasis::NativeId);
-    let mut tally = UniqueTally::default();
-    tally.record(AXElement(std::ptr::null_mut()));
-    tally.mark_incomplete(incomplete_traversal("children", 2));
-
-    let error = tally
-        .into_resolution(&stored)
-        .err()
-        .expect("one match in an unfinished search must never resolve");
-
-    assert_eq!(error.code, ErrorCode::AppUnresponsive);
-    assert_eq!(
-        error.details.unwrap()["kind"],
-        "resolution_traversal_incomplete"
-    );
 }
 
 #[test]

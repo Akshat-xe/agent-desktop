@@ -31,3 +31,16 @@ fn separate_rows_with_the_same_name_stay_ambiguous() {
     let error = resolve(&mut fake, &entry, deadline()).expect_err("twins are refused");
     assert_eq!(error.code, ErrorCode::AmbiguousTarget);
 }
+
+#[test]
+fn a_stale_stored_path_never_makes_a_single_unique_match_incomplete() {
+    let mut fake = Fake::new();
+    fake.add(FRAME_PATH, "/back", node(PUSH_BUTTON, "Back", 30, 30));
+    let entry = fake.entry_of("/back", true);
+    fake.faults.level_errors.insert(
+        FRAME_PATH.to_owned(),
+        agent_desktop_core::AdapterError::internal("a level failed"),
+    );
+    let element = resolve(&mut fake, &entry, deadline()).expect("the one live match resolves");
+    assert_eq!(element.path(), "/back");
+}

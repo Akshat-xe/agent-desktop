@@ -9,14 +9,11 @@ use crate::types::{
     AdDeliveryDisposition, AdDeliverySemantics, AdExactRefEntry, AdIdentifierKind, AdNativeHandle,
     AdRefEntry,
 };
-use agent_desktop_core::refs::identity_basis_gate::{
-    basis_gate, bounds_may_decide, requires_live_uniqueness,
-};
 use agent_desktop_core::{
     ActionOps, ActionRequest, ActionResult, AdapterError, Deadline, ErrorCode, IdentityBasis,
     InputOps, InteractionLease, NativeHandle, ObservationOps, RefEntry, SystemOps,
 };
-use std::ffi::{CStr, CString};
+use std::ffi::CStr;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -166,127 +163,59 @@ fn resolve_exact(registered: &Registered, exact: &AdExactRefEntry) -> (AdResult,
     (result, out)
 }
 
-fn derive_and_resolve(entry: AdRefEntry) -> (RefEntry, RefEntry) {
-    let registered = Registered::new(None);
-    let exact = exact_of(entry);
-    let decoded = unsafe { core_ref_entry_from_exact(&exact) }.unwrap();
-    assert!(basis_gate(&decoded.identity).is_ok());
-    assert!(decoded.identity.retained_object.is_none());
-
-    let (result, mut out) = resolve_exact(&registered, &exact);
-
-    assert_eq!(result, AdResult::Ok);
-    assert!(!out.ptr.is_null());
-    let seen = registered
-        .seen()
-        .expect("the adapter must receive the entry");
-    assert_eq!(seen.identity.basis, decoded.identity.basis);
-    assert!(seen.identity.retained_object.is_none());
-    assert_eq!(registered.actions(), 0);
-    unsafe { ad_free_handle(registered.adapter, &mut out) };
-    (decoded, seen)
-}
-
-/// The C struct carries no basis field, so `identity_basis` derives one: identifier, then
-/// name, then description, and positional when none is present. It never derives `Ambiguous`.
-/// The stub adapter performs no uniqueness count; this checks derivation and routing only.
+/// Only a native id proves uniqueness for a C caller, so name or description evidence alone
+/// derives `Ambiguous` and is refused before resolution; no evidence at all stays positional.
 #[test]
-fn exact_ref_derivation_reaches_strict_resolution() {
+fn exact_ref_derivation_trusts_only_native_ids() {
     let bounds = crate::types::AdRect {
         x: 1.0,
         y: 2.0,
         width: 3.0,
         height: 4.0,
     };
-    let native = CString::new("row-7").unwrap();
-    let name = CString::new("Save").unwrap();
-    let description = CString::new("Commits changes").unwrap();
-    let value = CString::new("On").unwrap();
     let shapes = [
-        (Some(&native), None, None, None, IdentityBasis::NativeId),
-        (
-            Some(&native),
-            Some(&name),
-            None,
-            None,
-            IdentityBasis::NativeId,
-        ),
-        (None, Some(&name), None, None, IdentityBasis::Name),
-        (
-            None,
-            None,
-            Some(&description),
-            None,
-            IdentityBasis::Description,
-        ),
-        (
-            None,
-            Some(&name),
-            Some(&description),
-            None,
-            IdentityBasis::Name,
-        ),
-        (None, None, None, Some(&value), IdentityBasis::Positional),
-        (None, None, None, None, IdentityBasis::Positional),
+        (c"row-7", c"", c"", IdentityBasis::NativeId),
+        (c"row-7", c"Save", c"", IdentityBasis::NativeId),
+        (c"", c"Save", c"", IdentityBasis::Ambiguous),
+        (c"", c"", c"Commits changes", IdentityBasis::Ambiguous),
+        (c"", c"Save", c"Commits changes", IdentityBasis::Ambiguous),
+        (c"", c"", c"", IdentityBasis::Positional),
     ];
-
-    for (native_id, shape_name, shape_description, shape_value, expected_basis) in shapes {
+    for (native_id, name, description, expected_basis) in shapes {
+        let pick = |value: &'static CStr| {
+            if value.is_empty() {
+                std::ptr::null()
+            } else {
+                value.as_ptr()
+            }
+        };
         let mut entry = test_ref_entry();
         entry.identity.role = c"button".as_ptr();
-        entry.identity.native_id = native_id.map_or(std::ptr::null(), |value| value.as_ptr());
-        entry.identity.name = shape_name.map_or(std::ptr::null(), |value| value.as_ptr());
-        entry.identity.description =
-            shape_description.map_or(std::ptr::null(), |value| value.as_ptr());
-        entry.identity.value = shape_value.map_or(std::ptr::null(), |value| value.as_ptr());
+        entry.identity.native_id = pick(native_id);
+        entry.identity.name = pick(name);
+        entry.identity.description = pick(description);
         entry.geometry.bounds = bounds;
         entry.geometry.has_bounds = true;
         entry.geometry.bounds_space = native_bounds_space();
-
-        let (decoded, seen) = derive_and_resolve(entry);
-
+        let registered = Registered::new(None);
+        let exact = exact_of(entry);
+        let decoded = unsafe { core_ref_entry_from_exact(&exact) }.unwrap();
         assert_eq!(decoded.identity.basis, Some(expected_basis));
-        if expected_basis == IdentityBasis::Positional {
-            assert!(decoded.identity.native_id.is_none());
-            assert!(decoded.identity.name.is_none());
-            assert!(decoded.identity.description.is_none());
-            assert!(!requires_live_uniqueness(&decoded.identity));
-            assert!(bounds_may_decide(&decoded.identity));
-        } else {
-            assert!(requires_live_uniqueness(&decoded.identity));
-            assert!(!bounds_may_decide(&decoded.identity));
+
+        let (result, mut out) = resolve_exact(&registered, &exact);
+
+        if expected_basis == IdentityBasis::Ambiguous {
+            assert_eq!(result, AdResult::ErrAmbiguousTarget);
+            assert!(out.ptr.is_null());
+            assert_eq!(registered.resolves(), 0);
+            continue;
         }
-        assert_eq!(
-            requires_live_uniqueness(&seen.identity),
-            expected_basis != IdentityBasis::Positional
-        );
+        assert_eq!(result, AdResult::Ok);
+        let seen = registered.seen().unwrap();
+        assert_eq!(seen.identity.basis, Some(expected_basis));
+        assert_eq!(registered.actions(), 0);
+        unsafe { ad_free_handle(registered.adapter, &mut out) };
     }
-
-    let mut mirrored = test_ref_entry();
-    mirrored.identity.role = c"textfield".as_ptr();
-    mirrored.identity.name = c"hello".as_ptr();
-    mirrored.identity.value = c"hello".as_ptr();
-    mirrored.identity.description = c"Billing".as_ptr();
-    let (decoded, _) = derive_and_resolve(mirrored);
-    assert_eq!(decoded.identity.basis, Some(IdentityBasis::Description));
-
-    let path = [2_u32, 0];
-    let mut positional = test_ref_entry();
-    positional.identity.role = c"button".as_ptr();
-    positional.geometry.bounds = bounds;
-    positional.geometry.has_bounds = true;
-    positional.geometry.bounds_space = native_bounds_space();
-    positional.scope.path = path.as_ptr();
-    positional.scope.path_count = path.len();
-    positional.scope.path_is_absolute = true;
-    let (decoded, seen) = derive_and_resolve(positional);
-    let bounds_hash = decoded
-        .geometry
-        .bounds_hash
-        .expect("a positional ref keeps its geometry");
-    assert_eq!(seen.identity.basis, Some(IdentityBasis::Positional));
-    assert_eq!(seen.scope.path.as_slice(), &[2_usize, 0]);
-    assert!(seen.scope.path_is_absolute);
-    assert_eq!(seen.geometry.bounds_hash, Some(bounds_hash));
 }
 
 #[test]
@@ -318,7 +247,7 @@ fn invalid_identity_or_scope_is_refused_before_resolution() {
 
     let mut scoped = test_ref_entry();
     scoped.identity.role = c"button".as_ptr();
-    scoped.identity.name = c"Save".as_ptr();
+    scoped.identity.native_id = c"row-7".as_ptr();
     scoped.scope.root_ref = c"@e1".as_ptr();
     let (result, out) = resolve_exact(&registered, &exact_of(scoped));
 
@@ -362,7 +291,7 @@ fn exact_resolver_preserves_live_refusal() {
         let registered = Registered::new(Some(refusal));
         let mut entry = test_ref_entry();
         entry.identity.role = c"button".as_ptr();
-        entry.identity.name = c"Save".as_ptr();
+        entry.identity.native_id = c"row-7".as_ptr();
 
         let (result, out) = resolve_exact(&registered, &exact_of(entry));
 

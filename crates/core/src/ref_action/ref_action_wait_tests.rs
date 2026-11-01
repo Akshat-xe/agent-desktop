@@ -120,43 +120,14 @@ fn entry() -> RefEntry {
         width: 10.0,
         height: 10.0,
     };
-    RefEntry {
-        process: crate::RefProcess {
-            pid: crate::ProcessId::new(1),
-            process_instance: Some("test-instance".into()),
-        },
-        identity: crate::RefEntryIdentity {
-            basis: Some(crate::IdentityBasis::Name),
-            retained_object: None,
-            role: "button".into(),
-            name: Some("Run".into()),
-            value: None,
-            description: None,
-            native_id: None,
-        },
-        geometry: crate::RefGeometry {
-            bounds_space: None,
-            bounds: Some(bounds),
-            bounds_hash: bounds.bounds_hash(),
-        },
-        capabilities: crate::RefCapabilities {
-            states: vec![],
-            available_actions: vec![capability::CLICK.into()],
-        },
-        source: crate::RefSource {
-            source_app: Some("Fixture".into()),
-            source_window_id: Some("w-1".into()),
-            source_window_title: Some("Fixture".into()),
-            source_window_bounds_hash: None,
-            source_surface: crate::snapshot::snapshot_surface::SnapshotSurface::Window,
-        },
-        scope: crate::RefScope {
-            root_ref: None,
-            path_is_absolute: false,
-            census_depth: None,
-            path: smallvec::SmallVec::new(),
-        },
-    }
+    let mut entry = crate::adapter::minimal_ref_entry("button", Some("Run"));
+    entry.geometry.bounds = Some(bounds);
+    entry.geometry.bounds_hash = bounds.bounds_hash();
+    entry.capabilities.available_actions = vec![capability::CLICK.into()];
+    entry.source.source_app = Some("Fixture".into());
+    entry.source.source_window_id = Some("w-1".into());
+    entry.source.source_window_title = Some("Fixture".into());
+    entry
 }
 
 fn request_with_timeout(timeout_ms: u64) -> ActionRequest {

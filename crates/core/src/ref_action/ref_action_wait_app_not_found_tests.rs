@@ -11,48 +11,17 @@ use std::sync::atomic::{AtomicU32, Ordering};
 /// enrichment, split out of `ref_action_wait_process_state_tests.rs` to keep
 /// both files under the repo's 400 LOC hard limit.
 fn entry() -> RefEntry {
-    RefEntry {
-        process: crate::RefProcess {
-            pid: crate::ProcessId::new(1),
-            process_instance: Some("test-instance".into()),
-        },
-        identity: crate::RefEntryIdentity {
-            basis: Some(crate::IdentityBasis::Name),
-            retained_object: None,
-            role: "button".into(),
-            name: Some("Run".into()),
-            value: None,
-            description: None,
-            native_id: None,
-        },
-        geometry: crate::RefGeometry {
-            bounds_space: None,
-            bounds: Some(crate::Rect {
-                x: 0.0,
-                y: 0.0,
-                width: 10.0,
-                height: 10.0,
-            }),
-            bounds_hash: Some(1),
-        },
-        capabilities: crate::RefCapabilities {
-            states: vec![],
-            available_actions: vec![capability::CLICK.into()],
-        },
-        source: crate::RefSource {
-            source_app: Some("Original".into()),
-            source_window_id: None,
-            source_window_title: None,
-            source_window_bounds_hash: None,
-            source_surface: crate::snapshot::snapshot_surface::SnapshotSurface::Window,
-        },
-        scope: crate::RefScope {
-            root_ref: None,
-            path_is_absolute: false,
-            census_depth: None,
-            path: smallvec::SmallVec::new(),
-        },
-    }
+    let mut entry = crate::adapter::minimal_ref_entry("button", Some("Run"));
+    entry.geometry.bounds = Some(crate::Rect {
+        x: 0.0,
+        y: 0.0,
+        width: 10.0,
+        height: 10.0,
+    });
+    entry.geometry.bounds_hash = Some(1);
+    entry.capabilities.available_actions = vec![capability::CLICK.into()];
+    entry.source.source_app = Some("Original".into());
+    entry
 }
 
 fn request_with_timeout(timeout_ms: u64) -> ActionRequest {

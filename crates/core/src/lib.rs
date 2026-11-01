@@ -73,7 +73,7 @@ pub use locator::live_locator::{
     LocatorResolveRequest, LocatorSelection, LocatorSemanticReadStats, LocatorStats,
     LocatorTraversalStats, ObservationBudget, ObservationMode, ObservationRequest, ObservationRoot,
     ObservationSource, ObservedSubtree, ObservedTree, classify_query_result, evaluate_locator_tree,
-    observed_anchor, require_unique, resolve_query, resolve_verified_anchor,
+    require_unique, resolve_query, resolve_verified_anchor,
 };
 pub use locator::state_predicate::StatePredicate;
 pub use locator::{

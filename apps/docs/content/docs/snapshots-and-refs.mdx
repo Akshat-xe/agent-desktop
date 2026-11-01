@@ -142,13 +142,13 @@ Each ref maps to a `RefEntry`: the evidence needed to find the same element agai
     <tr><td>Geometry</td><td><code>bounds</code>, <code>bounds_hash</code>, <code>bounds_space</code></td><td>Position and size for a <code>positional</code> ref. Bounds never pick or confirm a candidate for any other basis.</td></tr>
     <tr><td>Capabilities</td><td><code>states</code>, <code>available_actions</code></td><td>What the element offered at snapshot time.</td></tr>
     <tr><td>Source</td><td><code>source_app</code>, <code>source_window_id</code>, <code>source_window_title</code>, <code>source_window_bounds_hash</code>, <code>source_surface</code></td><td>Tie the ref to its window and surface.</td></tr>
-    <tr><td>Scope</td><td><code>path</code>, <code>root_ref</code>, <code>path_is_absolute</code></td><td>The element's position as child indexes, and which drill-down created the ref.</td></tr>
+    <tr><td>Scope</td><td><code>path</code>, <code>root_ref</code>, <code>path_is_absolute</code>, <code>census_depth</code></td><td>The element's position as child indexes, which drill-down created the ref, and for a skeleton ref the depth whose nodes counted its look-alikes.</td></tr>
   </tbody>
 </table>
 
-The entry also records the control's `value` for reading, but a value never gives a ref a basis. It changes while you use the control, so two elements that differ only in value cannot be told apart by ref. Choose one of them with `find --value`, `--name`, or `--nth`.
+The entry also records the control's `value` for reading, but a value never gives a ref a basis. It changes while you use the control, so two elements that differ only in value cannot be told apart by ref. If they differ in name, identifier, or description, `find --name` gives a ref that resolves. If they are identical, a ref from `find --value`, `--first`, `--last`, or `--nth` is refused the same way; read bounds with `snapshot --include-bounds` and use `--headed mouse-click --xy X,Y` (headed: it takes the foreground, so only when the run allows headed input; there is no headless way to pick one twin).
 
-A count proves uniqueness only when the survey saw the whole tree. A snapshot that ran out of budget, and a drill-down, record every ref they allocate as `ambiguous` or `positional` instead.
+A count proves uniqueness only when the survey saw the whole tree. A snapshot that ran out of budget records every ref it allocates as `ambiguous` or `positional` instead. A drill-down counts only inside the drilled root, so its refs are unique within that root.
 
 ## How a ref resolves
 
@@ -172,7 +172,7 @@ The promise is one unique current match, not continuity of the original native o
   </thead>
   <tbody>
     <tr><td><code>STALE_REF</code></td><td>The key is not in the snapshot's ref map, no live element carries the recorded identity, or the entry was saved before identity bases existed. The UI changed, the window closed, or a re-drill replaced the ref.</td><td>Take a fresh snapshot, or re-drill the region, and use the new ref. An older ref map cannot be repaired. Nothing was sent to the app.</td></tr>
-    <tr><td><code>AMBIGUOUS_TARGET</code></td><td>Several live elements carry the recorded identity, or the entry recorded no identifier, name, or description that was unique when it was captured (<code>details.kind: "identity_not_unique"</code>). The same code reports several windows for one <code>--app</code>.</td><td>Narrow the target with <code>find --role --name --exact</code> or <code>--root</code>. For <code>identity_not_unique</code>, pick the element by its current content with <code>find --name</code>, <code>--value</code>, or <code>--nth</code>, then use the new ref.</td></tr>
+    <tr><td><code>AMBIGUOUS_TARGET</code></td><td>Several live elements carry the recorded identity, or the entry recorded no identifier, name, or description that was unique when it was captured (<code>details.kind: "identity_not_unique"</code>). The same code reports several windows for one <code>--app</code>.</td><td>Narrow the target with <code>find --role --name --exact</code> or <code>--root</code>. For <code>identity_not_unique</code>, <code>find --name</code> gives a working ref when the elements differ in identifier, name, or description. For identical elements, use <code>--headed mouse-click --xy</code> with bounds from <code>snapshot --include-bounds</code>, only when the run allows headed input; it takes the foreground, and there is no headless way to pick one twin.</td></tr>
     <tr><td><code>SNAPSHOT_NOT_FOUND</code></td><td>No saved snapshot has that id: it was pruned, it belongs to another <a href="/desktop/sessions">session</a>, or the state root differs.</td><td>Take a new snapshot under the same <code>--session</code> and state root as the command that uses it.</td></tr>
   </tbody>
 </table>

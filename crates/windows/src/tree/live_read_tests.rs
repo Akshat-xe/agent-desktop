@@ -236,43 +236,19 @@ fn blank_secure_entry(fixture: &HostedFixture) -> RefEntry {
         crate::system::process_identity::token_for_pid(ProcessId::new(fixture.process_id()))
             .unwrap()
             .expect("a live fixture token");
-    RefEntry {
-        process: agent_desktop_core::RefProcess {
-            pid: ProcessId::new(fixture.process_id()),
-            process_instance: Some(token),
-        },
-        identity: agent_desktop_core::RefEntryIdentity {
-            basis: Some(agent_desktop_core::IdentityBasis::Positional),
-            retained_object: None,
-            role: evidence.role.known().cloned().unwrap_or_default(),
-            name: None,
-            value: None,
-            description: None,
-            native_id: None,
-        },
-        geometry: agent_desktop_core::RefGeometry {
-            bounds_space: None,
-            bounds: Some(*rect),
-            bounds_hash: Some(hash),
-        },
-        capabilities: agent_desktop_core::RefCapabilities {
-            states: Vec::new(),
-            available_actions: Vec::new(),
-        },
-        source: agent_desktop_core::RefSource {
-            source_app: Some("fixture.exe".into()),
-            source_window_id: Some(format!("w-{}", fixture.handle())),
-            source_window_title: None,
-            source_window_bounds_hash: None,
-            source_surface: agent_desktop_core::SnapshotSurface::Window,
-        },
-        scope: agent_desktop_core::RefScope {
-            root_ref: None,
-            path_is_absolute: true,
-            census_depth: None,
-            path,
-        },
-    }
+    let mut entry = crate::tree::walk::walker_fake::ref_entry(
+        &evidence.role.known().cloned().unwrap_or_default(),
+    );
+    entry.process.pid = ProcessId::new(fixture.process_id());
+    entry.process.process_instance = Some(token);
+    entry.identity.basis = Some(agent_desktop_core::IdentityBasis::Positional);
+    entry.geometry.bounds = Some(*rect);
+    entry.geometry.bounds_hash = Some(hash);
+    entry.source.source_app = Some("fixture.exe".into());
+    entry.source.source_window_id = Some(format!("w-{}", fixture.handle()));
+    entry.scope.path_is_absolute = true;
+    entry.scope.path = path;
+    entry
 }
 
 fn find_secure(

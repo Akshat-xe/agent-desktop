@@ -78,14 +78,25 @@ fn census_entry(surface: crate::SnapshotSurface) -> RefEntry {
     let mut entry = crate::adapter::minimal_ref_entry("button", Some("Save"));
     entry.identity.basis = Some(IdentityBasis::Name);
     entry.scope.path = smallvec::smallvec![0];
-    entry.scope.census_depth = Some(2);
+    entry.scope.census_depth = Some(crate::refs::ref_census::Census {
+        depth: 2,
+        skeleton: true,
+    });
     entry.source.source_window_id = Some("w-1".into());
     entry.source.source_surface = surface;
     entry
 }
 
 fn resolve(adapter: &CensusAdapter, entry: &RefEntry) -> Result<NativeHandle, AdapterError> {
-    resolve_by_census(adapter, entry, 2, Deadline::standard().unwrap())
+    resolve_by_census(
+        adapter,
+        entry,
+        crate::refs::ref_census::Census {
+            depth: 2,
+            skeleton: true,
+        },
+        Deadline::standard().unwrap(),
+    )
 }
 
 #[test]

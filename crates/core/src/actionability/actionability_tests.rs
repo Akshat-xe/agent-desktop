@@ -2,7 +2,7 @@ use super::*;
 use crate::tree::state;
 use crate::{
     Action, Direction, ErrorCode, Rect, actions::action_request::ActionRequest,
-    actions::capability, adapter::SnapshotSurface, refs::RefEntry,
+    actions::capability, refs::RefEntry,
 };
 
 fn entry() -> RefEntry {
@@ -12,43 +12,12 @@ fn entry() -> RefEntry {
         width: 20.0,
         height: 20.0,
     };
-    RefEntry {
-        process: crate::RefProcess {
-            pid: crate::ProcessId::new(1),
-            process_instance: Some("test-instance".into()),
-        },
-        identity: crate::RefEntryIdentity {
-            basis: Some(crate::IdentityBasis::Name),
-            retained_object: None,
-            role: "button".into(),
-            name: Some("OK".into()),
-            value: None,
-            description: None,
-            native_id: None,
-        },
-        geometry: crate::RefGeometry {
-            bounds_space: None,
-            bounds: Some(bounds),
-            bounds_hash: bounds.bounds_hash(),
-        },
-        capabilities: crate::RefCapabilities {
-            states: vec![],
-            available_actions: vec![capability::CLICK.into()],
-        },
-        source: crate::RefSource {
-            source_app: None,
-            source_window_id: None,
-            source_window_title: None,
-            source_window_bounds_hash: None,
-            source_surface: SnapshotSurface::Window,
-        },
-        scope: crate::RefScope {
-            root_ref: None,
-            path_is_absolute: true,
-            census_depth: None,
-            path: smallvec::SmallVec::new(),
-        },
-    }
+    let mut entry = crate::adapter::minimal_ref_entry("button", Some("OK"));
+    entry.geometry.bounds = Some(bounds);
+    entry.geometry.bounds_hash = bounds.bounds_hash();
+    entry.capabilities.available_actions = vec![capability::CLICK.into()];
+    entry.scope.path_is_absolute = true;
+    entry
 }
 
 fn visibility_evidence(

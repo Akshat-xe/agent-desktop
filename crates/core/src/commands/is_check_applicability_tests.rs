@@ -3,42 +3,11 @@ use super::*;
 #[test]
 fn action_availability_makes_toggle_and_expand_applicable() {
     let _guard = HomeGuard::new();
-    let snapshot_id = save_entry(RefEntry {
-        process: crate::RefProcess {
-            pid: crate::ProcessId::new(1),
-            process_instance: Some("test-instance".into()),
-        },
-        identity: crate::RefEntryIdentity {
-            basis: Some(crate::IdentityBasis::Name),
-            retained_object: None,
-            role: "cell".into(),
-            name: Some("Disclosure".into()),
-            value: None,
-            description: None,
-            native_id: None,
-        },
-        geometry: crate::RefGeometry {
-            bounds_space: None,
-            bounds: None,
-            bounds_hash: None,
-        },
-        capabilities: crate::RefCapabilities {
-            states: vec![],
-            available_actions: vec!["Check".into(), "Expand".into()],
-        },
-        source: crate::RefSource {
-            source_app: None,
-            source_window_id: None,
-            source_window_title: None,
-            source_window_bounds_hash: None,
-            source_surface: crate::adapter::SnapshotSurface::Window,
-        },
-        scope: crate::RefScope {
-            root_ref: None,
-            path_is_absolute: false,
-            census_depth: None,
-            path: smallvec::SmallVec::new(),
-        },
+    let snapshot_id = save_entry({
+        let mut entry = crate::adapter::minimal_ref_entry("cell", Some("Disclosure"));
+        entry.capabilities.available_actions = vec!["Check".into(), "Expand".into()];
+        entry.source.source_surface = crate::adapter::SnapshotSurface::Window;
+        entry
     });
     let adapter = LiveStateAdapter {
         state: Mutex::new(None),

@@ -22,11 +22,11 @@ fn refusal_prevents_dispatch_with_a_working_effect_counter() {
         "Ambiguous target: 2 candidates matched",
     )));
     let role = CString::new("button").unwrap();
-    let name = CString::new("Save").unwrap();
+    let native_id = CString::new("save-button").unwrap();
     let mut entry = test_ref_entry();
     entry.process.pid = 42;
     entry.identity.role = role.as_ptr();
-    entry.identity.name = name.as_ptr();
+    entry.identity.native_id = native_id.as_ptr();
     let exact = AdExactRefEntry {
         version: crate::types::exact_ref_entry::AD_EXACT_REF_ENTRY_VERSION,
         size: crate::types::exact_ref_entry::AD_EXACT_REF_ENTRY_SIZE as u32,

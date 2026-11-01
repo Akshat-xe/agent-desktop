@@ -169,10 +169,11 @@ impl ObservationOps for ValueOnRequestAdapter {
         root: ObservationRoot<'_>,
         request: &ObservationRequest,
     ) -> Result<ObservedTree, agent_desktop_core::AdapterError> {
-        let ObservationRoot::Window(window) = root else {
-            return Err(agent_desktop_core::AdapterError::internal(
-                "expected window root",
-            ));
+        let (window, twins) = match root {
+            ObservationRoot::Window(window) => (window.clone(), self.twins),
+            ObservationRoot::Element { .. } => {
+                (crate::windows::ad_exact_window_to_core(&ffi_window())?, 1)
+            }
         };
         let required = request.evidence_for_raw_depth(0);
         let read = |wanted: bool, value: &str| {
@@ -182,7 +183,7 @@ impl ObservationOps for ValueOnRequestAdapter {
                 LocatorField::Unknown
             }
         };
-        let roots = (0..self.twins)
+        let roots = (0..twins)
             .map(|_| {
                 ObservedSubtree::new(
                     LocatorEvidence {
@@ -217,12 +218,20 @@ impl ObservationOps for ValueOnRequestAdapter {
         ObservedTree::from_roots(
             roots,
             ObservationSource::Window {
-                window: window.clone(),
+                window,
                 surface: agent_desktop_core::SnapshotSurface::Window,
             },
             Default::default(),
             true,
         )
+    }
+
+    fn resolve_locator_anchor(
+        &self,
+        _entry: &agent_desktop_core::RefEntry,
+        _deadline: agent_desktop_core::Deadline,
+    ) -> Result<agent_desktop_core::NativeHandle, agent_desktop_core::AdapterError> {
+        Ok(agent_desktop_core::NativeHandle::null())
     }
 
     fn resolve_element_strict(
@@ -233,7 +242,7 @@ impl ObservationOps for ValueOnRequestAdapter {
         *self.seen_basis.lock().unwrap() = entry.identity.basis;
         Err(agent_desktop_core::AdapterError::new(
             agent_desktop_core::ErrorCode::ElementNotFound,
-            "stub stops after recording the basis",
+            "strict resolution must not be used for a find the query proved unique",
         ))
     }
 }
@@ -261,14 +270,8 @@ fn find_address(twins: usize) -> (AdResult, Option<agent_desktop_core::IdentityB
 }
 
 #[test]
-fn strict_find_of_a_unique_text_field_reaches_strict_resolution_by_name() {
-    assert_eq!(
-        find_address(1),
-        (
-            AdResult::ErrElementNotFound,
-            Some(agent_desktop_core::IdentityBasis::Name)
-        )
-    );
+fn strict_find_of_a_unique_text_field_lands_through_the_verified_anchor() {
+    assert_eq!(find_address(1), (AdResult::Ok, None));
 }
 
 #[test]

@@ -45,13 +45,5 @@ pub(crate) fn observed_identity_match(
     let Some(first) = verdicts.next() else {
         return IdentityMatch::Unknown;
     };
-    verdicts.fold(first, merge_identity_match)
-}
-
-fn merge_identity_match(left: IdentityMatch, right: IdentityMatch) -> IdentityMatch {
-    match (left, right) {
-        (IdentityMatch::NoMatch, _) | (_, IdentityMatch::NoMatch) => IdentityMatch::NoMatch,
-        (IdentityMatch::Unknown, _) | (_, IdentityMatch::Unknown) => IdentityMatch::Unknown,
-        _ => IdentityMatch::Match,
-    }
+    verdicts.fold(first, IdentityMatch::and)
 }

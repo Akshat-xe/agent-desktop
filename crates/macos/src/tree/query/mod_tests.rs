@@ -88,8 +88,7 @@ fn capture_save(surface: SnapshotSurface, outside_save: bool, sheet_open: bool) 
 
 #[test]
 fn focused_capture_counts_the_save_button_outside_the_sheet() {
-    let root_surface = admit_focused_owner("w-11", Some(11)).unwrap();
-    let captured = capture_save(root_surface, true, true);
+    let captured = capture_save(SnapshotSurface::Window, true, true);
     let survivor = capture_save(SnapshotSurface::Window, true, false);
 
     assert_eq!(captured.identity.basis, Some(IdentityBasis::Ambiguous));
@@ -103,8 +102,7 @@ fn focused_capture_counts_the_save_button_outside_the_sheet() {
 
 #[test]
 fn focused_capture_keeps_a_unique_sheet_button_relative_to_the_window() {
-    let root_surface = admit_focused_owner("w-11", Some(11)).unwrap();
-    let captured = capture_save(root_surface, false, true);
+    let captured = capture_save(SnapshotSurface::Window, false, true);
 
     assert_eq!(captured.identity.basis, Some(IdentityBasis::Name));
     assert_eq!(captured.scope.path.as_slice(), &[0, 0]);

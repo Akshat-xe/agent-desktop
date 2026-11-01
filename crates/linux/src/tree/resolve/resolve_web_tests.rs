@@ -148,7 +148,8 @@ fn a_disappearing_renderer_is_not_reported_as_the_live_frame_owner_leaving() {
                 "/target",
                 node(PUSH_BUTTON, "Target", 50, 20),
             );
-            let entry = fake.entry_of("/target", true);
+            let mut entry = fake.entry_of("/target", true);
+            entry.identity.basis = Some(agent_desktop_core::IdentityBasis::Positional);
             let errors = if during_descent {
                 &mut fake.faults.level_errors
             } else {
@@ -177,7 +178,8 @@ fn a_disappearing_renderer_is_not_reported_as_the_live_frame_owner_leaving() {
 #[test]
 fn a_frame_owner_lost_during_renderer_failure_keeps_the_frame_gate_cause() {
     let mut fake = remote_panel();
-    let entry = fake.entry_of("/remote", true);
+    let mut entry = fake.entry_of("/remote", true);
+    entry.identity.basis = Some(agent_desktop_core::IdentityBasis::Positional);
     fake.faults.evidence_errors.insert(
         "/remote".to_owned(),
         AdapterError::new(ErrorCode::AppNotFound, "renderer left"),

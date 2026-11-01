@@ -4,7 +4,7 @@ use super::{
     compiled_clause::{CompiledClause, compile_clauses},
     evaluation_buffers::EvaluationBuffers,
     match_verdict::MatchVerdict,
-    materialize::{materialize_refmap, ref_entry, survey_counts},
+    materialize::{based_ref_entry, materialize_refmap, survey_counts},
     predicate::{normalize_query, self_text_verdict, self_verdict},
     select::{match_data, selected_indices},
     selection_completeness::first_is_authoritative,
@@ -68,22 +68,22 @@ pub fn evaluate_locator_tree(
     stats.evaluation.matched_nodes = matched_indices.len() as u64;
     let (selected, truncated) = selected_indices(&matched_indices, request.selection);
     let mut complete = tree.structurally_complete && !unknown;
+    let counts = survey_counts(&tree, &normalized);
     let refmap = match request.materialization {
         LocatorMaterialization::None => None,
         LocatorMaterialization::SelectedMatches => {
             let (refmap, materialization_complete) =
-                materialize_refmap(&mut tree, &normalized, Some(&selected))?;
+                materialize_refmap(&mut tree, &normalized, &counts, Some(&selected))?;
             complete &= materialization_complete;
             Some(refmap)
         }
         LocatorMaterialization::FullRefMap => {
             let (refmap, materialization_complete) =
-                materialize_refmap(&mut tree, &normalized, None)?;
+                materialize_refmap(&mut tree, &normalized, &counts, None)?;
             complete &= materialization_complete;
             Some(refmap)
         }
     };
-    let counts = survey_counts(&tree, &normalized);
     let mut selected_matches = Vec::with_capacity(selected.len());
     for index in selected {
         let data = match_data(&tree, index, &parents)
@@ -92,14 +92,7 @@ pub fn evaluate_locator_tree(
             .nodes
             .get(index)
             .ok_or_else(|| AdapterError::internal("selected locator node is out of bounds"))?;
-        let mut entry = ref_entry(node, &tree.source, &normalized);
-        let basis = counts.basis(&entry.identity);
-        entry.identity.basis = Some(basis);
-        crate::refs::ref_identity::withhold_unverified_name(
-            &mut entry.identity,
-            node.evidence.value.is_unknown(),
-            Some(basis),
-        );
+        let entry = based_ref_entry(node, &tree.source, &normalized, &counts);
         selected_matches.push(LocatorMatch {
             data,
             document_order: node.document_order,

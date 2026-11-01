@@ -54,7 +54,7 @@ pub fn run_from_ref_with_context(
 
     let deadline = crate::Deadline::after(timeout_ms)?;
     let window = resolve_result_window(&entry, adapter, deadline)?;
-    let handle = crate::refs::ref_resolve::resolve_drill_root(adapter, &entry, &refmap, deadline)?;
+    let handle = crate::refs::ref_resolve::resolve_in_map(adapter, &entry, &refmap, deadline)?;
     pin_root(adapter, &entry, deadline)?;
 
     let observation_options = opts.with_ref_identity_bounds();
@@ -80,7 +80,7 @@ pub fn run_from_ref_with_context(
             include_bounds: opts.include_bounds,
             interactive_only: opts.interactive_only,
             compact: opts.compact,
-            skeleton_depth: None,
+            census: None,
         },
         source: RefAllocSource {
             pid: entry.process.pid,

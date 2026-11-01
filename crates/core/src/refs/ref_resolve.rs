@@ -31,15 +31,6 @@ pub fn resolve(
     resolve_in_map(adapter, entry, &map, deadline)
 }
 
-pub(crate) fn resolve_drill_root(
-    adapter: &dyn PlatformAdapter,
-    entry: &RefEntry,
-    map: &RefMap,
-    deadline: Deadline,
-) -> Result<NativeHandle, AdapterError> {
-    resolve_in_map(adapter, entry, map, deadline)
-}
-
 /// Points a stale scoped ref at re-drilling its root, since a moved root is never followed.
 pub(crate) fn redrill(error: AdapterError) -> AdapterError {
     if error.code == crate::ErrorCode::StaleRef {
@@ -54,14 +45,14 @@ fn resolve_unscoped(
     deadline: Deadline,
 ) -> Result<NativeHandle, AdapterError> {
     match entry.scope.census_depth {
-        Some(depth) => crate::locator::live_locator::ref_scope::resolve_by_census(
-            adapter, entry, depth, deadline,
+        Some(census) => crate::locator::live_locator::ref_scope::resolve_by_census(
+            adapter, entry, census, deadline,
         ),
         None => adapter.resolve_element_strict(entry, deadline),
     }
 }
 
-fn resolve_in_map(
+pub(crate) fn resolve_in_map(
     adapter: &dyn PlatformAdapter,
     entry: &RefEntry,
     map: &RefMap,

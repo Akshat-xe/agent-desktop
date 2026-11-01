@@ -704,6 +704,10 @@ typedef struct AdRefSource {
 } AdRefSource;
 
 typedef struct AdRefScope {
+  /**
+   * The drill-down root that created the entry. An exact-ref entry that sets it is refused
+   * with `STALE_REF`, because the root's snapshot is not available to resolve against.
+   */
   const char *root_ref;
   const uint32_t *path;
   size_t path_count;

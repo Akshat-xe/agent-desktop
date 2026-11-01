@@ -2,6 +2,7 @@ use super::{LocatorResolution, ObservationRequest, ObservationRoot, ObservedNode
 use crate::{
     AdapterError, AppError, ErrorCode, IdentityMatch, adapter::PlatformAdapter,
     locator::LocatorQuery, refs::RefEntry, refs::RefMap,
+    refs::ref_identity::entry_fields_are_meaningful,
 };
 use serde_json::json;
 
@@ -31,7 +32,7 @@ pub(super) fn selected_matches(
         ensure_remaining(deadline)?;
         let preliminary = matched.entry.clone();
         let bounds_space = preliminary.geometry.bounds_space.unwrap_or_default();
-        let has_identity = anchor_has_evidence(&preliminary);
+        let has_identity = entry_fields_are_meaningful(&preliminary);
         let has_bounds = preliminary.geometry.bounds_hash.is_some();
         tracing::debug!(
             role = preliminary.identity.role,
@@ -98,7 +99,7 @@ pub(super) fn selected_matches(
             let screen_bounds = super::materialize::screen_bounds(&node.evidence);
             (entry, name, value, node.document_order, screen_bounds)
         };
-        if !anchor_has_evidence(&entry) && entry.geometry.bounds_hash.is_none() {
+        if !entry_fields_are_meaningful(&entry) && entry.geometry.bounds_hash.is_none() {
             return Err(anchor_missing(&entry).into());
         }
         let validation = super::evaluate_locator_tree(
@@ -185,25 +186,10 @@ pub(super) fn geometry_complete(
     }
 }
 
-/// Whether a locator anchor carries identity of its own to re-verify.
-fn anchor_has_evidence(entry: &RefEntry) -> bool {
-    crate::refs::ref_identity::identity_fields_are_meaningful(
-        entry.identity.role.as_str(),
-        entry.identity.name.as_deref(),
-        entry.identity.value.as_deref(),
-        entry.identity.description.as_deref(),
-        entry
-            .identity
-            .native_id
-            .as_ref()
-            .map(|identifier| identifier.value.as_str()),
-    )
-}
-
 /// Confirms the hydrated root against every field the anchor observed in this same call. An
 /// anchor with no identity is confirmed by geometry, and an unread field never resolves.
 fn anchor_matches(preliminary: &RefEntry, node: &ObservedNode) -> IdentityMatch {
-    let fields = if anchor_has_evidence(preliminary) {
+    let fields = if entry_fields_are_meaningful(preliminary) {
         crate::refs::ref_identity_observed::observed_identity_match(
             preliminary,
             &node.evidence.name,
@@ -214,14 +200,10 @@ fn anchor_matches(preliminary: &RefEntry, node: &ObservedNode) -> IdentityMatch 
     } else {
         bounds_anchor_match(preliminary, node)
     };
-    match (
-        fields,
-        crate::refs::ref_identity::retained_object_match(preliminary, &node.evidence.identifiers),
-    ) {
-        (IdentityMatch::NoMatch, _) | (_, IdentityMatch::NoMatch) => IdentityMatch::NoMatch,
-        (IdentityMatch::Match, IdentityMatch::Match) => IdentityMatch::Match,
-        _ => IdentityMatch::Unknown,
-    }
+    fields.and(crate::refs::ref_identity::retained_object_match(
+        preliminary,
+        &node.evidence.identifiers,
+    ))
 }
 
 fn bounds_anchor_match(preliminary: &RefEntry, node: &ObservedNode) -> IdentityMatch {
@@ -289,7 +271,7 @@ fn preserve_verified_identity(preliminary: &RefEntry, node: &ObservedNode, entry
 
 /// The positional anchor handed to the platform resolver: the locator observed this
 /// node in the same call, so it is found by its observed fields and path.
-pub fn observed_anchor(preliminary: &RefEntry) -> RefEntry {
+fn observed_anchor(preliminary: &RefEntry) -> RefEntry {
     let mut anchor = preliminary.clone();
     anchor.identity.basis = Some(crate::IdentityBasis::Positional);
     anchor
@@ -306,7 +288,7 @@ fn anchor_missing(entry: &RefEntry) -> AdapterError {
         "retryable": false,
         "role": entry.identity.role,
         "path_len": entry.scope.path.len(),
-        "has_identity": anchor_has_evidence(entry),
+        "has_identity": entry_fields_are_meaningful(entry),
         "has_bounds": entry.geometry.bounds_hash.is_some(),
     }))
     .with_disposition(crate::DeliverySemantics::not_delivered())

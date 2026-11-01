@@ -53,14 +53,7 @@ fn resolve_ref_within_deadline(
     let entry = load_ref_entry(ref_id, context)?;
     let handle = resolve_handle_within_deadline(adapter, &entry, deadline, ref_id, context)
         .inspect_err(|err| {
-            let _ = context.trace_lazy("ref.resolve.error", || {
-                json!({
-                    "ref": ref_id,
-                    "code": err.code.as_str(),
-                    "message": err.message.clone(),
-                    "details": err.details.clone()
-                })
-            });
+            crate::ref_action::ref_action_wait_support::trace_resolve_error(context, ref_id, err);
         })?;
     tracing::debug!("resolve: {} resolved successfully", ref_id);
     context.trace_lazy("ref.resolve.ok", || json!({ "ref": ref_id }))?;
@@ -186,16 +179,6 @@ pub(crate) fn apply_scoped_post_action_wait(
             }
             Ok(snapshot)
         }
-        Err(AppError::Adapter(mut adapter_err)) => {
-            let mut details = adapter_err.details.take().unwrap_or_else(|| json!({}));
-            let delivery = super::operation_response::delivery_in(&result);
-            if let Some(obj) = details.as_object_mut() {
-                obj.insert("after_action".into(), result);
-            }
-            Err(AppError::Adapter(
-                adapter_err.with_details(details).with_disposition(delivery),
-            ))
-        }
         Err(err) => Err(post_delivery_error(err, result)),
     }
 }
@@ -237,10 +220,7 @@ pub(crate) fn validate_post_action_wait(context: &CommandContext) -> Result<(), 
 }
 
 fn post_delivery_error(error: AppError, result: Value) -> AppError {
-    let mut adapter_error = match error {
-        AppError::Adapter(error) => error,
-        other => crate::AdapterError::internal(other.to_string()),
-    };
+    let mut adapter_error = crate::ref_action::into_adapter_error(error);
     let mut details = adapter_error.details.take().unwrap_or_else(|| json!({}));
     let delivery = super::operation_response::delivery_in(&result);
     if let Some(object) = details.as_object_mut() {

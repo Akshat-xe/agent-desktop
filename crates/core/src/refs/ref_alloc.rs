@@ -2,7 +2,6 @@ use crate::AccessibilityNode;
 use crate::refs::ref_alloc_plan::RefAllocPlan;
 use crate::refs::ref_identity::has_meaningful_identity;
 use crate::refs::{RefEntry, RefMap};
-use std::collections::HashSet;
 
 pub(crate) use crate::refs::ref_alloc_config::RefAllocConfig;
 
@@ -186,11 +185,12 @@ pub(crate) fn allocate_refs(
     refmap: &mut RefMap,
     config: &RefAllocConfig,
 ) -> Result<AccessibilityNode, crate::AppError> {
-    let mut skeleton_anchors = HashSet::new();
-    if config.scope.root_ref_id.is_none() {
-        plan_skeleton_anchors(&node, &mut Vec::new(), &mut skeleton_anchors);
-    }
-    let plan = RefAllocPlan::new(&node, skeleton_anchors, config.complete);
+    let plan = RefAllocPlan::new(
+        &node,
+        config.scope.root_ref_id.is_none(),
+        config.complete,
+        config.options.census,
+    );
     allocate_refs_at_path(
         node,
         refmap,
@@ -200,58 +200,8 @@ pub(crate) fn allocate_refs(
     )
 }
 
-fn plan_skeleton_anchors(
-    node: &AccessibilityNode,
-    path: &mut Vec<usize>,
-    anchors: &mut HashSet<Vec<usize>>,
-) -> bool {
-    let mut uncovered_boundary = node.children_count.is_some();
-    for (index, child) in node.children.iter().enumerate() {
-        path.push(index);
-        uncovered_boundary |= plan_skeleton_anchors(child, path, anchors);
-        path.pop();
-    }
-    if !uncovered_boundary {
-        return false;
-    }
-    if can_receive_observed_ref(node) && is_ref_able(node) {
-        return false;
-    }
-    if !path.is_empty() && is_resolvable_skeleton_anchor(node) {
-        anchors.insert(path.clone());
-        return false;
-    }
-    true
-}
-
-/// A skeleton anchor is offered as a drill target because it carries
-/// evidence a later resolve can re-identify it by. When that evidence is
-/// geometry alone, the entry must keep its bounds: dropping them because the
-/// caller did not ask to *see* bounds leaves a ref this predicate approved
-/// and nothing can resolve, which is a drill target that fails on its own
-/// snapshot. The ref-able path guards the same strip with the same
-/// condition.
-fn is_resolvable_skeleton_anchor(node: &AccessibilityNode) -> bool {
-    can_receive_observed_ref(node)
-        && (has_meaningful_text(node.identity.name.as_deref())
-            || has_meaningful_text(node.identity.description.as_deref())
-            || node.identity.native_id.as_ref().is_some_and(|identifier| {
-                identifier.kind != crate::IdentifierKind::Unknown
-                    && !identifier.value.trim().is_empty()
-            })
-            || node
-                .presentation
-                .bounds
-                .and_then(|bounds| bounds.bounds_hash())
-                .is_some())
-}
-
 pub(crate) fn can_receive_observed_ref(node: &AccessibilityNode) -> bool {
     crate::Role::is_canonical(&node.role) && node.role != "unknown"
-}
-
-fn has_meaningful_text(value: Option<&str>) -> bool {
-    value.is_some_and(|text| !text.trim().is_empty())
 }
 
 fn allocate_refs_at_path(
@@ -271,12 +221,12 @@ fn allocate_refs_at_path(
             path,
         );
         entry.scope.path_is_absolute = config.scope.root_ref_id.is_some();
-        plan.record_basis(&mut entry, config.options.skeleton_depth);
+        plan.record_basis(&mut entry);
         withhold_unread_name(&mut entry, &node);
         if !config.options.include_bounds && has_meaningful_identity(&entry) {
             entry.geometry.bounds = None;
         }
-        node.ref_id = allocate_observed_ref(refmap, entry)?;
+        node.ref_id = refmap.try_allocate_observed(entry)?;
     }
 
     let is_skeleton_anchor = !node_is_ref_able && plan.is_skeleton_anchor(path);
@@ -284,12 +234,12 @@ fn allocate_refs_at_path(
     if is_skeleton_anchor {
         let mut entry = ref_entry_from_node(&node, &config.source, None, path);
         entry.capabilities.available_actions = vec![];
-        plan.record_basis(&mut entry, config.options.skeleton_depth);
+        plan.record_basis(&mut entry);
         withhold_unread_name(&mut entry, &node);
         if !config.options.include_bounds && has_meaningful_identity(&entry) {
             entry.geometry.bounds = None;
         }
-        node.ref_id = allocate_observed_ref(refmap, entry)?;
+        node.ref_id = refmap.try_allocate_observed(entry)?;
     }
 
     if !config.options.include_bounds {
@@ -330,17 +280,6 @@ fn withhold_unread_name(entry: &mut RefEntry, node: &AccessibilityNode) {
         node.identity.unread.values,
         basis,
     );
-}
-
-fn allocate_observed_ref(
-    refmap: &mut RefMap,
-    entry: RefEntry,
-) -> Result<Option<String>, crate::AppError> {
-    match refmap.try_allocate_observed(entry)? {
-        crate::refs::ref_allocation::RefAllocation::Allocated(ref_id) => Ok(Some(ref_id)),
-        crate::refs::ref_allocation::RefAllocation::SkippedInvalidRole
-        | crate::refs::ref_allocation::RefAllocation::SkippedInvalidEntry => Ok(None),
-    }
 }
 
 fn meaningful_string(value: Option<String>) -> Option<String> {

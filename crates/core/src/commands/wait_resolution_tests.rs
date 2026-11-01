@@ -100,42 +100,11 @@ impl SystemOps for TimeoutCaptureAdapter {}
 
 fn snapshot_with_one_ref() -> String {
     let mut refmap = RefMap::new();
-    refmap.allocate(RefEntry {
-        process: crate::RefProcess {
-            pid: crate::ProcessId::new(1),
-            process_instance: Some("test-instance".into()),
-        },
-        identity: crate::RefEntryIdentity {
-            basis: Some(crate::IdentityBasis::Name),
-            retained_object: None,
-            role: "button".into(),
-            name: Some("Run".into()),
-            value: None,
-            description: None,
-            native_id: None,
-        },
-        geometry: crate::RefGeometry {
-            bounds_space: None,
-            bounds: None,
-            bounds_hash: None,
-        },
-        capabilities: crate::RefCapabilities {
-            states: vec![],
-            available_actions: vec![capability::CLICK.into()],
-        },
-        source: crate::RefSource {
-            source_app: None,
-            source_window_id: None,
-            source_window_title: None,
-            source_window_bounds_hash: None,
-            source_surface: crate::adapter::SnapshotSurface::Window,
-        },
-        scope: crate::RefScope {
-            root_ref: None,
-            path_is_absolute: false,
-            census_depth: None,
-            path: smallvec::SmallVec::new(),
-        },
+    refmap.allocate({
+        let mut entry = crate::adapter::minimal_ref_entry("button", Some("Run"));
+        entry.capabilities.available_actions = vec![capability::CLICK.into()];
+        entry.source.source_surface = crate::adapter::SnapshotSurface::Window;
+        entry
     });
     RefStore::new().unwrap().save_new_snapshot(&refmap).unwrap()
 }

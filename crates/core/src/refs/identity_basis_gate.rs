@@ -13,7 +13,7 @@ pub fn basis_gate(identity: &RefEntryIdentity) -> Result<(), AdapterError> {
             "The saved ref has no identifier, name or description that was unique when it was captured",
         )
         .with_suggestion(
-            "Use find with --name, --value or --nth to choose the element by its current content",
+            "If the elements differ in identifier, name or description, find one with --name and act on the new ref. If they are identical, no headless command can pick one; a headed run can read bounds with snapshot --include-bounds and use --headed mouse-click --xy",
         )
         .with_details(serde_json::json!({
             "kind": "identity_not_unique",
@@ -26,14 +26,5 @@ pub fn basis_gate(identity: &RefEntryIdentity) -> Result<(), AdapterError> {
 /// Whether the ref resolves only when a complete live search finds exactly one
 /// element matching its recorded identity.
 pub fn requires_live_uniqueness(identity: &RefEntryIdentity) -> bool {
-    matches!(
-        identity.basis,
-        Some(IdentityBasis::NativeId | IdentityBasis::Name | IdentityBasis::Description)
-    )
-}
-
-/// Whether bounds may pick or confirm a candidate; only positional refs, which
-/// carry no identity evidence, rely on geometry.
-pub fn bounds_may_decide(identity: &RefEntryIdentity) -> bool {
-    identity.basis == Some(IdentityBasis::Positional)
+    identity.basis.is_some_and(IdentityBasis::is_proven)
 }

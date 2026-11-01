@@ -301,41 +301,12 @@ fn scoped_refmap_extends_source_path_without_index_correlation() {
 }
 
 fn source_entry() -> RefEntry {
-    RefEntry {
-        process: crate::RefProcess {
-            pid: crate::ProcessId::new(42),
-            process_instance: Some("test-instance".into()),
-        },
-        identity: crate::RefEntryIdentity {
-            basis: Some(crate::IdentityBasis::Name),
-            retained_object: None,
-            role: "group".into(),
-            name: Some("Scope".into()),
-            value: None,
-            description: None,
-            native_id: None,
-        },
-        geometry: crate::RefGeometry {
-            bounds_space: None,
-            bounds: None,
-            bounds_hash: None,
-        },
-        capabilities: crate::RefCapabilities {
-            states: Vec::new(),
-            available_actions: Vec::new(),
-        },
-        source: crate::RefSource {
-            source_app: Some("FixtureApp".into()),
-            source_window_id: Some("w-1".into()),
-            source_window_title: Some("Fixture".into()),
-            source_window_bounds_hash: None,
-            source_surface: SnapshotSurface::Menu,
-        },
-        scope: crate::RefScope {
-            root_ref: None,
-            path_is_absolute: false,
-            census_depth: None,
-            path: RefPath::from_slice(&[3]),
-        },
-    }
+    let mut entry = crate::adapter::minimal_ref_entry("group", Some("Scope"));
+    entry.process.pid = crate::ProcessId::new(42);
+    entry.source.source_app = Some("FixtureApp".into());
+    entry.source.source_window_id = Some("w-1".into());
+    entry.source.source_window_title = Some("Fixture".into());
+    entry.source.source_surface = SnapshotSurface::Menu;
+    entry.scope.path = RefPath::from_slice(&[3]);
+    entry
 }

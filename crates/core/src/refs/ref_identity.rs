@@ -10,17 +10,7 @@ use crate::{
 pub fn has_meaningful_identity(entry: &RefEntry) -> bool {
     match entry.identity.basis {
         Some(IdentityBasis::NativeId | IdentityBasis::Name | IdentityBasis::Description) => true,
-        Some(IdentityBasis::Positional) => identity_fields_are_meaningful(
-            entry.identity.role.as_str(),
-            entry.identity.name.as_deref(),
-            entry.identity.value.as_deref(),
-            entry.identity.description.as_deref(),
-            entry
-                .identity
-                .native_id
-                .as_ref()
-                .map(|identifier| identifier.value.as_str()),
-        ),
+        Some(IdentityBasis::Positional) => entry_fields_are_meaningful(entry),
         None | Some(IdentityBasis::Ambiguous) => false,
     }
 }
@@ -38,6 +28,18 @@ pub fn has_stable_text_identity(entry: &RefEntry) -> bool {
         )
         .is_some()
         || crate::tree::accname::non_blank(entry.identity.description.as_deref()).is_some()
+}
+
+/// Whether the entry's own recorded identifier or stable text identifies it.
+pub fn entry_fields_are_meaningful(entry: &RefEntry) -> bool {
+    let identity = &entry.identity;
+    identity_fields_are_meaningful(
+        &identity.role,
+        identity.name.as_deref(),
+        identity.value.as_deref(),
+        identity.description.as_deref(),
+        identity.native_id.as_ref().map(|id| id.value.as_str()),
+    )
 }
 
 /// Whether an element's own identifier or stable text identifies it, ignoring
@@ -76,13 +78,8 @@ pub fn identity_match(
             basis @ (IdentityBasis::NativeId | IdentityBasis::Name | IdentityBasis::Description),
         ) => {
             let role = entry.identity.role.as_str();
-            combine_identity_matches([
-                recorded_identifier_match(
-                    entry,
-                    actual_identifiers,
-                    basis == IdentityBasis::NativeId,
-                ),
-                recorded_text_match(
+            recorded_identifier_match(entry, actual_identifiers, basis == IdentityBasis::NativeId)
+                .and(recorded_text_match(
                     stable_name(
                         role,
                         entry.identity.name.as_deref(),
@@ -90,13 +87,12 @@ pub fn identity_match(
                     ),
                     stable_name_field(role, actual_name, actual_value),
                     basis == IdentityBasis::Name,
-                ),
-                recorded_text_match(
+                ))
+                .and(recorded_text_match(
                     crate::tree::accname::non_blank(entry.identity.description.as_deref()),
                     meaningful_field(actual_description),
                     basis == IdentityBasis::Description,
-                ),
-            ])
+                ))
         }
         None | Some(IdentityBasis::Ambiguous) => IdentityMatch::NoMatch,
     }
@@ -161,16 +157,6 @@ pub(super) fn same_field_match(expected: &str, actual: LocatorField<&str>) -> Id
         LocatorField::Unknown => IdentityMatch::Unknown,
         LocatorField::Absent => IdentityMatch::NoMatch,
     }
-}
-
-fn combine_identity_matches(verdicts: [IdentityMatch; 3]) -> IdentityMatch {
-    if verdicts.contains(&IdentityMatch::NoMatch) {
-        return IdentityMatch::NoMatch;
-    }
-    if verdicts.contains(&IdentityMatch::Unknown) {
-        return IdentityMatch::Unknown;
-    }
-    IdentityMatch::Match
 }
 
 /// Whether a live element still carries one typed identifier. An incomplete

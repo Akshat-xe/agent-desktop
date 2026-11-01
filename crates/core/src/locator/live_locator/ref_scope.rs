@@ -2,7 +2,7 @@ use super::{ObservationRequest, ObservationRoot, ObservedNode, ObservedTree};
 use crate::{
     AdapterError, Deadline, IdentityBasis, IdentityMatch, NativeHandle, PlatformAdapter, RefEntry,
     refs::identity_basis_gate::requires_live_uniqueness,
-    refs::ref_identity::{identity_match, retained_object_match},
+    refs::ref_identity::{entry_fields_are_meaningful, identity_match, retained_object_match},
 };
 
 pub(crate) fn resolve_in_root(
@@ -29,12 +29,9 @@ pub(crate) fn resolve_in_root(
         observation_root,
         &ObservationRequest::snapshot(&options, deadline).validate()?,
     )
-    .map_err(|error| match error {
-        crate::AppError::Adapter(error) => error,
-        error => AdapterError::internal(error.to_string()),
-    })?;
+    .map_err(crate::ref_action::into_adapter_error)?;
     if requires_live_uniqueness(&entry.identity) && tree.omits_descendants() {
-        return Err(incomplete());
+        return Err(descendants_omitted());
     }
     let selected = select(&tree, entry, root)?;
     let mut anchor =
@@ -49,24 +46,21 @@ pub(crate) fn resolve_in_root(
     Ok(handle)
 }
 
-/// Resolves an entry whose basis was proven over the first `depth` skeleton levels by observing
-/// its window the same way and requiring exactly one match inside that depth.
+/// Resolves an entry whose basis was proven over a depth-cut census by observing its window at
+/// the same depth and mode and requiring exactly one match inside it.
 pub(crate) fn resolve_by_census(
     adapter: &dyn PlatformAdapter,
     entry: &RefEntry,
-    depth: u8,
+    census: crate::refs::ref_census::Census,
     deadline: Deadline,
 ) -> Result<NativeHandle, AdapterError> {
-    let into_adapter = |error| match error {
-        crate::AppError::Adapter(error) => error,
-        error => AdapterError::internal(error.to_string()),
-    };
+    let into_adapter = crate::ref_action::into_adapter_error;
     let window = crate::snapshot::snapshot_ref::resolve_result_window(entry, adapter, deadline)
         .map_err(into_adapter)?;
     let options = crate::TreeOptions {
-        max_depth: depth,
+        max_depth: census.depth,
         include_bounds: true,
-        skeleton: true,
+        skeleton: census.skeleton,
         surface: match entry.source.source_surface {
             crate::SnapshotSurface::Focused => crate::SnapshotSurface::Window,
             surface => surface,
@@ -102,7 +96,7 @@ fn select<'a>(
     root: &RefEntry,
 ) -> Result<&'a ObservedNode, AdapterError> {
     if !tree.is_complete() {
-        return Err(incomplete());
+        return Err(unreadable(entry));
     }
     if entry.identity.basis == Some(IdentityBasis::Positional) {
         let relative = entry
@@ -149,7 +143,7 @@ fn select<'a>(
         }
     }
     if unknown {
-        return Err(incomplete());
+        return Err(unreadable(entry));
     }
     let selected = selected.ok_or_else(stale)?;
     retained_object_verdict(entry, selected)?;
@@ -160,7 +154,7 @@ fn retained_object_verdict(entry: &RefEntry, node: &ObservedNode) -> Result<(), 
     match retained_object_match(entry, &node.evidence.identifiers) {
         IdentityMatch::Match => Ok(()),
         IdentityMatch::NoMatch => Err(stale()),
-        IdentityMatch::Unknown => Err(incomplete()),
+        IdentityMatch::Unknown => Err(unreadable(entry)),
     }
 }
 
@@ -192,7 +186,10 @@ pub fn resolve_anchor(
     let options = crate::TreeOptions {
         max_depth: 0,
         include_bounds: true,
-        skeleton: entry.scope.census_depth.is_some(),
+        skeleton: entry
+            .scope
+            .census_depth
+            .is_some_and(|census| census.skeleton),
         surface: entry.source.source_surface,
         ..Default::default()
     };
@@ -209,9 +206,9 @@ pub fn resolve_anchor(
         .first()
         .and_then(|index| hydrated.nodes.get(*index as usize))
         .filter(|_| hydrated.roots.len() == 1)
-        .ok_or_else(incomplete)?;
+        .ok_or_else(|| unreadable(entry))?;
     if live.evidence.role.is_unknown() {
-        return Err(incomplete());
+        return Err(unreadable(entry));
     }
     if live.evidence.role.known() != Some(&entry.identity.role) {
         return Err(stale());
@@ -226,11 +223,11 @@ pub fn resolve_anchor(
         ) {
             IdentityMatch::Match => {}
             IdentityMatch::NoMatch => return Err(stale()),
-            IdentityMatch::Unknown => return Err(incomplete()),
+            IdentityMatch::Unknown => return Err(unreadable(entry)),
         }
     } else if !positional_matches(entry, live) {
         return Err(stale());
-    } else if recorded_identity_is_meaningful(entry) {
+    } else if entry_fields_are_meaningful(entry) {
         match crate::refs::ref_identity_observed::observed_identity_match(
             entry,
             &live.evidence.name,
@@ -240,25 +237,11 @@ pub fn resolve_anchor(
         ) {
             IdentityMatch::Match => {}
             IdentityMatch::NoMatch => return Err(stale()),
-            IdentityMatch::Unknown => return Err(incomplete()),
+            IdentityMatch::Unknown => return Err(unreadable(entry)),
         }
     }
     retained_object_verdict(entry, live)?;
     Ok(handle)
-}
-
-fn recorded_identity_is_meaningful(entry: &RefEntry) -> bool {
-    crate::refs::ref_identity::identity_fields_are_meaningful(
-        &entry.identity.role,
-        entry.identity.name.as_deref(),
-        entry.identity.value.as_deref(),
-        entry.identity.description.as_deref(),
-        entry
-            .identity
-            .native_id
-            .as_ref()
-            .map(|id| id.value.as_str()),
-    )
 }
 
 fn positional_matches(entry: &RefEntry, node: &ObservedNode) -> bool {
@@ -276,7 +259,11 @@ fn stale() -> AdapterError {
         .with_details(serde_json::json!({ "complete": true }))
 }
 
-fn incomplete() -> AdapterError {
+fn unreadable(entry: &RefEntry) -> AdapterError {
+    crate::refs::resolve_errors::identity_unknown_error(entry)
+}
+
+fn descendants_omitted() -> AdapterError {
     AdapterError::timeout("The ref's source subtree could not be counted completely")
         .with_details(serde_json::json!({ "kind": "scoped_ref_incomplete", "retryable": false }))
 }

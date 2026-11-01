@@ -54,7 +54,10 @@ fn census_scoped_hover_confirms_the_receiver_despite_a_deeper_twin() {
         .push(twin_parent);
     let mut entry = map.get("@e2").unwrap().clone();
     entry.scope.root_ref = None;
-    entry.scope.census_depth = Some(2);
+    entry.scope.census_depth = Some(crate::refs::ref_census::Census {
+        depth: 2,
+        skeleton: true,
+    });
     let point = ResolvedPoint {
         point: crate::Point { x: 10.0, y: 10.0 },
         focused: false,

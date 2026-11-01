@@ -158,13 +158,10 @@ fn attempt<S: Source>(
     let frame = source.open_window(entry)?;
     basis_gate(&entry.identity)?;
     let unique_live = requires_live_uniqueness(&entry.identity);
-    let path_unread = if path_tier_applies(entry) {
-        path_tier(source, &frame, entry, deadline)?
-    } else {
-        false
-    };
+    let path_tier_runs = path_tier_applies(entry) && !unique_live;
+    let path_unread = path_tier_runs && path_tier(source, &frame, entry, deadline)?;
     let mut searched = source.search(&frame, entry)?;
-    if path_tier_applies(entry) && !unique_live {
+    if path_tier_runs {
         without_nested_relatives(&mut searched.candidates, &entry.scope.path);
     }
     let unread = path_unread || searched.unread_region;

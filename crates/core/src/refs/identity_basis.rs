@@ -11,3 +11,9 @@ pub enum IdentityBasis {
     Ambiguous,
     Positional,
 }
+
+impl IdentityBasis {
+    pub(crate) fn is_proven(self) -> bool {
+        matches!(self, Self::NativeId | Self::Name | Self::Description)
+    }
+}

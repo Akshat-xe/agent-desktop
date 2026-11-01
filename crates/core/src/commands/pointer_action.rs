@@ -33,14 +33,7 @@ fn resolve_point_from_entry(
     } = request;
     let mut handle = resolve_handle_within_deadline(adapter, entry, deadline, ref_id, context)
         .inspect_err(|err| {
-            let _ = context.trace_lazy("ref.resolve.error", || {
-                json!({
-                    "ref": ref_id,
-                    "code": err.code.as_str(),
-                    "message": err.message.clone(),
-                    "details": err.details.clone()
-                })
-            });
+            crate::ref_action::ref_action_wait_support::trace_resolve_error(context, ref_id, err);
         })?;
     context.trace_lazy("ref.resolve.ok", || json!({ "ref": ref_id }))?;
     let crate::PointerObservation {

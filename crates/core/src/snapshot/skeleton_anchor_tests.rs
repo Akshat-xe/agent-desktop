@@ -85,9 +85,9 @@ fn unlabeled_bounded_boundary_gets_drill_ref() {
 }
 
 /// A uniquely named boundary records a name basis from the observed skeleton nodes; a twin
-/// among them makes it ambiguous, and an ambiguous entry keeps the rect that could locate it.
+/// among them leaves nothing that could resolve, so neither twin is offered as a drill target.
 #[test]
-fn a_named_boundary_with_a_skeleton_twin_is_ambiguous_and_keeps_its_rect() {
+fn a_named_boundary_with_a_skeleton_twin_gets_no_drill_ref() {
     let mut boundary = node("group");
     boundary.identity.name = Some("Sidebar".into());
     boundary.children_count = Some(5);
@@ -113,14 +113,13 @@ fn a_named_boundary_with_a_skeleton_twin_is_ambiguous_and_keeps_its_rect() {
     let mut refmap = RefMap::new();
     let result = ref_alloc::allocate_refs(root, &mut refmap, &run_config(false, false)).unwrap();
 
-    let boundary = &result.children[0];
-    let entry = refmap.get(boundary.ref_id.as_deref().unwrap()).unwrap();
-    assert_eq!(entry.identity.basis, Some(crate::IdentityBasis::Ambiguous));
-    assert!(!crate::refs::ref_identity::has_meaningful_identity(entry));
     assert!(
-        entry.geometry.bounds.is_some(),
-        "an entry whose identity is not proven keeps the geometry that could still locate it"
+        result
+            .children
+            .iter()
+            .all(|boundary| boundary.ref_id.is_none())
     );
+    assert!(refmap.is_empty());
 
     let mut button = node("button");
     button.identity.name = Some("Save".into());

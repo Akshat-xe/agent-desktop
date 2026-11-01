@@ -206,31 +206,20 @@ fn resolve_window_surface(
     Ok(element)
 }
 
-/// A focused capture walks the recorded window only after its ownership is proven.
-fn admit_focused_owner(
-    recorded_id: &str,
-    owner_window_number: Option<i64>,
-) -> Result<SnapshotSurface, AdapterError> {
-    if crate::system::window::window_ax_state::observes_recorded_window(
-        recorded_id,
-        owner_window_number,
-    ) {
-        return Ok(SnapshotSurface::Window);
-    }
-    Err(crate::system::window::window_resolve::window_identity_mismatch(recorded_id))
-}
-
-/// Returns the owner handle whose number was verified, so the walk uses that exact window.
+/// Returns the owner handle whose number was verified, so a focused capture walks that exact window.
 fn verified_focused_owner<T>(
     recorded_id: &str,
     owner: Option<T>,
     number_of: impl FnOnce(&T) -> Result<Option<i64>, AdapterError>,
 ) -> Result<T, AdapterError> {
-    let Some(owner) = owner else {
-        return Err(crate::system::window::window_resolve::window_identity_mismatch(recorded_id));
-    };
-    admit_focused_owner(recorded_id, number_of(&owner)?)?;
-    Ok(owner)
+    let mismatch = || crate::system::window::window_resolve::window_identity_mismatch(recorded_id);
+    let owner = owner.ok_or_else(mismatch)?;
+    let number = number_of(&owner)?;
+    if crate::system::window::window_ax_state::observes_recorded_window(recorded_id, number) {
+        Ok(owner)
+    } else {
+        Err(mismatch())
+    }
 }
 
 #[cfg(test)]

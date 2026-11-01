@@ -261,43 +261,14 @@ fn expired_action_deadline_does_not_suppress_drag_cancellation() {
 }
 
 fn ref_entry(pid: u32) -> RefEntry {
-    RefEntry {
-        process: crate::RefProcess {
-            pid: crate::ProcessId::new(pid),
-            process_instance: Some("test-instance".into()),
-        },
-        identity: crate::RefEntryIdentity {
-            basis: Some(crate::IdentityBasis::Name),
-            retained_object: None,
-            role: "button".into(),
-            name: Some("Item".into()),
-            value: None,
-            description: None,
-            native_id: None,
-        },
-        geometry: crate::RefGeometry {
-            bounds_space: None,
-            bounds: None,
-            bounds_hash: None,
-        },
-        capabilities: crate::RefCapabilities {
-            states: vec![],
-            available_actions: vec![capability::CLICK.into()],
-        },
-        source: crate::RefSource {
-            source_app: Some(format!("App {pid}")),
-            source_window_id: Some(format!("w-{pid}")),
-            source_window_title: Some(format!("Window {pid}")),
-            source_window_bounds_hash: None,
-            source_surface: crate::adapter::SnapshotSurface::Window,
-        },
-        scope: crate::RefScope {
-            root_ref: None,
-            path_is_absolute: false,
-            census_depth: None,
-            path: smallvec::SmallVec::new(),
-        },
-    }
+    let mut entry = crate::adapter::minimal_ref_entry("button", Some("Item"));
+    entry.process.pid = crate::ProcessId::new(pid);
+    entry.capabilities.available_actions = vec![capability::CLICK.into()];
+    entry.source.source_app = Some(format!("App {pid}"));
+    entry.source.source_window_id = Some(format!("w-{pid}"));
+    entry.source.source_window_title = Some(format!("Window {pid}"));
+    entry.source.source_surface = crate::adapter::SnapshotSurface::Window;
+    entry
 }
 
 fn cross_app_snapshot() -> String {

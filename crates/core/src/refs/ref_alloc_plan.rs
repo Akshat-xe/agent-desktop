@@ -2,21 +2,25 @@
 //! ref records. The census counts every element a live search could match.
 
 use crate::AccessibilityNode;
+use crate::IdentityBasis;
 use crate::refs::identity_basis_counts::IdentityBasisCounts;
-use crate::refs::ref_alloc::{can_receive_observed_ref, identity_from_node};
+use crate::refs::ref_alloc::{can_receive_observed_ref, identity_from_node, is_ref_able};
+use crate::refs::ref_census::Census;
 use std::collections::HashSet;
 
 pub(crate) struct RefAllocPlan {
     skeleton_anchors: HashSet<Vec<usize>>,
     counts: IdentityBasisCounts,
     anchor_counts: IdentityBasisCounts,
+    census: Option<Census>,
 }
 
 impl RefAllocPlan {
     pub(crate) fn new(
         root: &AccessibilityNode,
-        skeleton_anchors: HashSet<Vec<usize>>,
+        plan_anchors: bool,
         complete: bool,
+        census: Option<Census>,
     ) -> Self {
         let mut counts = IdentityBasisCounts::new();
         let mut anchor_counts = IdentityBasisCounts::new();
@@ -25,31 +29,84 @@ impl RefAllocPlan {
             anchor_counts.mark_incomplete();
         }
         Self::count_look_alikes(root, &mut counts, &mut anchor_counts);
-        Self {
-            skeleton_anchors,
+        let mut plan = Self {
+            skeleton_anchors: HashSet::new(),
             counts,
             anchor_counts,
+            census,
+        };
+        if plan_anchors {
+            let mut anchors = HashSet::new();
+            plan.plan_skeleton_anchors(root, &mut Vec::new(), &mut anchors);
+            plan.skeleton_anchors = anchors;
         }
+        plan
     }
 
     pub(crate) fn is_skeleton_anchor(&self, path: &[usize]) -> bool {
         self.skeleton_anchors.contains(path)
     }
 
-    /// Records the entry's basis. In a skeleton snapshot, an entry whose look-alikes were
-    /// counted only over the observed depth keeps that basis and the depth, so it resolves by
-    /// a live count over the same depth instead of window-wide.
-    pub(crate) fn record_basis(&self, entry: &mut crate::RefEntry, skeleton_depth: Option<u8>) {
-        let basis = self.counts.basis(&entry.identity);
+    /// Records the entry's basis. In a snapshot cut by depth, an entry whose look-alikes were
+    /// counted only over the observed depth keeps that basis and the census, so it resolves by
+    /// a live count that replays the same observation instead of counting window-wide.
+    pub(crate) fn record_basis(&self, entry: &mut crate::RefEntry) {
+        let (basis, census) = self.basis_and_census(&entry.identity);
         entry.identity.basis = Some(basis);
-        let Some(depth) = skeleton_depth else { return };
-        let observed = self.anchor_counts.basis(&entry.identity);
-        entry.identity.basis = Some(observed);
-        if observed != basis
-            && crate::refs::identity_basis_gate::requires_live_uniqueness(&entry.identity)
-        {
-            entry.scope.census_depth = Some(depth);
+        entry.scope.census_depth = census;
+    }
+
+    fn basis_and_census(
+        &self,
+        identity: &crate::RefEntryIdentity,
+    ) -> (IdentityBasis, Option<Census>) {
+        let basis = self.counts.basis(identity);
+        let Some(census) = self.census else {
+            return (basis, None);
+        };
+        let observed = self.anchor_counts.basis(identity);
+        (
+            observed,
+            (observed != basis && observed.is_proven()).then_some(census),
+        )
+    }
+
+    fn is_drillable_anchor(&self, node: &AccessibilityNode) -> bool {
+        let identity = identity_from_node(node);
+        let (basis, _) = self.basis_and_census(&identity);
+        can_receive_observed_ref(node)
+            && (basis.is_proven()
+                || (basis == IdentityBasis::Positional
+                    && node
+                        .presentation
+                        .bounds
+                        .and_then(|bounds| bounds.bounds_hash())
+                        .is_some()))
+    }
+
+    fn plan_skeleton_anchors(
+        &self,
+        node: &AccessibilityNode,
+        path: &mut Vec<usize>,
+        anchors: &mut HashSet<Vec<usize>>,
+    ) -> bool {
+        let mut uncovered_boundary = node.children_count.is_some();
+        for (index, child) in node.children.iter().enumerate() {
+            path.push(index);
+            uncovered_boundary |= self.plan_skeleton_anchors(child, path, anchors);
+            path.pop();
         }
+        if !uncovered_boundary {
+            return false;
+        }
+        if can_receive_observed_ref(node) && is_ref_able(node) {
+            return false;
+        }
+        if !path.is_empty() && self.is_drillable_anchor(node) {
+            anchors.insert(path.clone());
+            return false;
+        }
+        true
     }
 
     fn count_look_alikes(

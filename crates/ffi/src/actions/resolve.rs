@@ -14,7 +14,9 @@ use agent_desktop_core::{
 const MAX_REF_FIELD_BYTES: usize = 65_536;
 const MAX_REF_TOKEN_BYTES: usize = 256;
 
-/// Resolves an element using process-generation and typed native-id evidence.
+/// Resolves an element using process-generation and typed native-id evidence. Only an entry
+/// with a native id can resolve: name or description evidence alone is refused as ambiguous,
+/// because the caller supplies no capture-time uniqueness proof.
 ///
 /// # Safety
 ///
@@ -66,24 +68,8 @@ unsafe fn resolve_core_entry(
         ));
         return error::last_error_code();
     }
-    match adapter.inner.resolve_element_strict(entry, deadline) {
-        Ok(handle) => {
-            match crate::actions::native_handle::into_ffi_handle(adapter_id, handle, process) {
-                Ok(token) => {
-                    unsafe { (*out).ptr = token };
-                    AdResult::Ok
-                }
-                Err(error) => {
-                    error::set_last_error(&error);
-                    error::last_error_code()
-                }
-            }
-        }
-        Err(error) => {
-            error::set_last_error(&error);
-            error::last_error_code()
-        }
-    }
+    let resolved = adapter.inner.resolve_element_strict(entry, deadline);
+    unsafe { crate::actions::native_handle::publish_resolved(adapter_id, resolved, process, out) }
 }
 
 pub(crate) unsafe fn core_ref_entry_from_exact(
@@ -313,7 +299,8 @@ unsafe fn decode_core_ref_entry(
             path,
         },
     };
-    if !agent_desktop_core::refs::ref_identity::has_meaningful_identity(&decoded)
+    if decoded.identity.basis == Some(IdentityBasis::Positional)
+        && !agent_desktop_core::refs::ref_identity::has_meaningful_identity(&decoded)
         && (bounds_space != Some(required_space) || bounds.is_none())
     {
         return Err(AdapterError::new(
@@ -324,23 +311,20 @@ unsafe fn decode_core_ref_entry(
     Ok(decoded)
 }
 
-/// The basis a caller-supplied entry can prove on its own: the strongest non-blank identity
-/// field it carries. Snapshot uniqueness is unprovable here, so the live search must find one match.
+/// The basis a caller-supplied entry can prove on its own. Only a native id is unique at
+/// capture; name or description evidence derives `Ambiguous`, which is refused before any live search.
 fn identity_basis(
     native_id: Option<&ElementIdentifier>,
     stable_name: Option<&str>,
     description: Option<&str>,
 ) -> IdentityBasis {
     if native_id.is_some_and(|identifier| !identifier.value.trim().is_empty()) {
-        return IdentityBasis::NativeId;
+        IdentityBasis::NativeId
+    } else if stable_name.is_some() || description.is_some_and(|value| !value.trim().is_empty()) {
+        IdentityBasis::Ambiguous
+    } else {
+        IdentityBasis::Positional
     }
-    if stable_name.is_some() {
-        return IdentityBasis::Name;
-    }
-    if description.is_some_and(|value| !value.trim().is_empty()) {
-        return IdentityBasis::Description;
-    }
-    IdentityBasis::Positional
 }
 
 fn process_identity(

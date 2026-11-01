@@ -9,34 +9,6 @@ use crate::{
     adapter::{ActionOps, InputOps, ObservationOps, SystemOps},
 };
 
-struct IdentifierSwapAdapter;
-
-impl ObservationOps for IdentifierSwapAdapter {
-    fn observe_tree(
-        &self,
-        root: ObservationRoot<'_>,
-        _request: &ObservationRequest,
-    ) -> Result<ObservedTree, AdapterError> {
-        Ok(match root {
-            ObservationRoot::Window(_) => surveyed_pair(),
-            ObservationRoot::Element { .. } => hydrated_anchor(root),
-        })
-    }
-
-    fn resolve_locator_anchor(
-        &self,
-        entry: &crate::RefEntry,
-        _deadline: crate::Deadline,
-    ) -> Result<crate::NativeHandle, AdapterError> {
-        assert_eq!(recorded_identifier(entry), Some("unique-a"));
-        Ok(crate::NativeHandle::null())
-    }
-}
-
-impl ActionOps for IdentifierSwapAdapter {}
-impl InputOps for IdentifierSwapAdapter {}
-impl SystemOps for IdentifierSwapAdapter {}
-
 fn recorded_identifier(entry: &crate::RefEntry) -> Option<&str> {
     entry
         .identity
@@ -72,68 +44,23 @@ fn button_evidence(identifiers: &[(crate::IdentifierKind, &str)]) -> LocatorEvid
     evidence
 }
 
-fn surveyed_pair() -> ObservedTree {
-    test_support::tree(
-        vec![
-            test_support::node(0, evidence("window", None), vec![1, 2], &[]),
-            test_support::node(
-                1,
-                button_evidence(&[(crate::IdentifierKind::AxIdentifier, "unique-a")]),
-                Vec::new(),
-                &[0],
-            ),
-            test_support::node(
-                2,
-                button_evidence(&[(crate::IdentifierKind::AxDomIdentifier, "shared")]),
-                Vec::new(),
-                &[1],
-            ),
-        ],
-        vec![0],
-        true,
-    )
-}
-
-fn hydrated_anchor(root: ObservationRoot<'_>) -> ObservedTree {
+#[test]
+fn hydration_keeps_the_identifier_the_survey_proved_instead_of_a_newly_preferred_one() {
     let mut hydrated = button_evidence(&[
         (crate::IdentifierKind::AxDomIdentifier, "shared"),
         (crate::IdentifierKind::AxIdentifier, "unique-a"),
     ]);
     hydrated.states = LocatorField::Known(Vec::new());
-    let mut tree = test_support::tree(
-        vec![test_support::node(0, hydrated, Vec::new(), &[])],
-        vec![0],
-        true,
-    );
-    tree.source = ObservationSource::from_root(&root, crate::SnapshotSurface::Window);
-    tree
-}
-
-#[test]
-fn hydration_keeps_the_identifier_the_survey_proved_instead_of_a_newly_preferred_one() {
-    let adapter = IdentifierSwapAdapter;
-    let query = LocatorQuery {
-        identity: crate::IdentityPredicate {
-            role: Some("button".into()),
-            ..Default::default()
-        },
-        ..Default::default()
-    };
-    let request = LocatorResolveRequest {
-        selection: LocatorSelection::First,
-        deadline: crate::Deadline::after(5_000).unwrap(),
-        max_raw_depth: 50,
-        surface: None,
-        materialization: LocatorMaterialization::SelectedMatches,
+    let adapter = RecheckAdapter {
+        survey: vec![
+            button_evidence(&[(crate::IdentifierKind::AxIdentifier, "unique-a")]),
+            button_evidence(&[(crate::IdentifierKind::AxDomIdentifier, "shared")]),
+        ],
+        hydrated,
     };
 
-    let resolution = resolve_query(
-        &adapter,
-        &query,
-        ObservationRoot::Window(&test_support::window()),
-        &request,
-    )
-    .expect("selected hydration should keep the surveyed identity");
+    let resolution =
+        resolve_selected(&adapter).expect("selected hydration should keep the surveyed identity");
 
     let entry = resolution
         .refmap

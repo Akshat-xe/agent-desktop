@@ -93,6 +93,29 @@ pub(crate) fn into_ffi_handle(
     Ok(std::ptr::with_exposed_provenance(id))
 }
 
+/// Writes a resolved handle into `out`, or records the resolution error and returns its code.
+///
+/// # Safety
+///
+/// `out` must be writable.
+pub(crate) unsafe fn publish_resolved(
+    owner_adapter_id: usize,
+    resolved: Result<NativeHandle, agent_desktop_core::AdapterError>,
+    process: ProcessIdentity,
+    out: *mut AdNativeHandle,
+) -> AdResult {
+    match resolved.and_then(|handle| into_ffi_handle(owner_adapter_id, handle, process)) {
+        Ok(token) => {
+            unsafe { (*out).ptr = token };
+            AdResult::Ok
+        }
+        Err(error) => {
+            set_last_error(&error);
+            crate::error::last_error_code()
+        }
+    }
+}
+
 pub(crate) fn acquire_ffi_handle(
     owner_adapter_id: usize,
     handle: &AdNativeHandle,
