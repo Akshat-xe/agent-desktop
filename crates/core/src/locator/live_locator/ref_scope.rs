@@ -5,48 +5,23 @@ use crate::{
     refs::ref_identity::{identity_match, retained_object_match},
 };
 
-/// A scope root together with the live handle and the anchor entry carrying its verified
-/// current path, which can differ from the path recorded when the ref was captured.
-pub(crate) struct ScopeRoot<'a> {
-    pub(crate) captured: &'a RefEntry,
-    pub(crate) current: RefEntry,
-    pub(crate) handle: NativeHandle,
-}
-
-#[cfg(test)]
-impl<'a> ScopeRoot<'a> {
-    pub(crate) fn new(captured: &'a RefEntry, handle: NativeHandle) -> Self {
-        Self {
-            captured,
-            current: captured.clone(),
-            handle,
-        }
-    }
-}
-
-fn into_adapter(error: crate::AppError) -> AdapterError {
-    match error {
-        crate::AppError::Adapter(error) => error,
-        error => AdapterError::internal(error.to_string()),
-    }
-}
-
-pub(crate) fn resolve_in_root<'a>(
+pub(crate) fn resolve_in_root(
     adapter: &dyn PlatformAdapter,
-    entry: &'a RefEntry,
-    root: &ScopeRoot<'_>,
+    entry: &RefEntry,
+    root: &RefEntry,
+    root_handle: &NativeHandle,
     deadline: Deadline,
-) -> Result<ScopeRoot<'a>, AdapterError> {
-    pin_root(adapter, &root.current, deadline)?;
+) -> Result<NativeHandle, AdapterError> {
+    pin_root(adapter, root, deadline)?;
     let observation_root = ObservationRoot::Element {
-        handle: &root.handle,
-        entry: &root.current,
+        handle: root_handle,
+        entry: root,
         root_ref: entry.scope.root_ref.as_deref(),
     };
     let options = crate::TreeOptions {
         max_depth: 50,
         include_bounds: true,
-        surface: root.current.source.source_surface,
+        surface: root.source.source_surface,
         ..Default::default()
     };
     let tree = crate::tree::renderer_accessibility::observe_tree(
@@ -54,58 +29,24 @@ pub(crate) fn resolve_in_root<'a>(
         observation_root,
         &ObservationRequest::snapshot(&options, deadline).validate()?,
     )
-    .map_err(into_adapter)?;
+    .map_err(|error| match error {
+        crate::AppError::Adapter(error) => error,
+        error => AdapterError::internal(error.to_string()),
+    })?;
     if requires_live_uniqueness(&entry.identity) && tree.omits_descendants() {
         return Err(incomplete());
     }
-    let selected = select(&tree, entry, root.captured)?;
+    let selected = select(&tree, entry, root)?;
     let mut anchor =
         super::materialize::ref_entry(selected, &tree.source, &crate::LocatorQuery::default());
     anchor.identity = entry.identity.clone();
     anchor.geometry = entry.geometry.clone();
     let handle = resolve_anchor(adapter, &anchor, deadline)?;
-    pin_root(adapter, &root.current, deadline)?;
+    pin_root(adapter, root, deadline)?;
     if deadline.is_expired() {
         return Err(deadline.timeout_error());
     }
-    Ok(ScopeRoot {
-        captured: entry,
-        current: anchor,
-        handle,
-    })
-}
-
-/// Resolves the first scope root and finds its current path, relocating it through its
-/// window when its recorded path no longer holds it (a sibling was inserted before it).
-pub(crate) fn resolve_first_root<'a>(
-    adapter: &dyn PlatformAdapter,
-    root: &'a RefEntry,
-    deadline: Deadline,
-) -> Result<ScopeRoot<'a>, AdapterError> {
-    if let Some(depth) = root.scope.census_depth {
-        let (handle, current) = locate_in_window(adapter, root, depth, deadline)?;
-        return Ok(ScopeRoot {
-            captured: root,
-            current,
-            handle,
-        });
-    }
-    let handle = adapter.resolve_element_strict(root, deadline)?;
-    let current = match resolve_anchor(adapter, root, deadline) {
-        Ok(_) => root.clone(),
-        Err(error) if error.code == crate::ErrorCode::PlatformNotSupported => root.clone(),
-        Err(error) if error.code == crate::ErrorCode::StaleRef => {
-            let depth = u8::try_from(root.scope.path.len())
-                .map_err(|_| AdapterError::stale_ref_because("Ref path is too deep to relocate"))?;
-            locate_in_window(adapter, root, depth, deadline)?.1
-        }
-        Err(error) => return Err(error),
-    };
-    Ok(ScopeRoot {
-        captured: root,
-        current,
-        handle,
-    })
+    Ok(handle)
 }
 
 /// Resolves an entry whose basis was proven over the first `depth` skeleton levels by observing
@@ -116,15 +57,10 @@ pub(crate) fn resolve_by_census(
     depth: u8,
     deadline: Deadline,
 ) -> Result<NativeHandle, AdapterError> {
-    locate_in_window(adapter, entry, depth, deadline).map(|(handle, _)| handle)
-}
-
-fn locate_in_window(
-    adapter: &dyn PlatformAdapter,
-    entry: &RefEntry,
-    depth: u8,
-    deadline: Deadline,
-) -> Result<(NativeHandle, RefEntry), AdapterError> {
+    let into_adapter = |error| match error {
+        crate::AppError::Adapter(error) => error,
+        error => AdapterError::internal(error.to_string()),
+    };
     let window = crate::snapshot::snapshot_ref::resolve_result_window(entry, adapter, deadline)
         .map_err(into_adapter)?;
     let options = crate::TreeOptions {
@@ -146,16 +82,15 @@ fn locate_in_window(
     anchor.identity = entry.identity.clone();
     anchor.geometry = entry.geometry.clone();
     anchor.scope.census_depth = entry.scope.census_depth;
-    let handle = resolve_anchor(adapter, &anchor, deadline)?;
-    Ok((handle, anchor))
+    resolve_anchor(adapter, &anchor, deadline)
 }
 
 pub(crate) fn pin_root(
     adapter: &dyn PlatformAdapter,
-    current: &RefEntry,
+    root: &RefEntry,
     deadline: Deadline,
 ) -> Result<(), AdapterError> {
-    resolve_anchor(adapter, current, deadline).map(|_| ())
+    resolve_anchor(adapter, root, deadline).map(|_| ())
 }
 
 fn select<'a>(

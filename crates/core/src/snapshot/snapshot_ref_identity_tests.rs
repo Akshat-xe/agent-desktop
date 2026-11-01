@@ -89,34 +89,17 @@ fn incomplete_drill_does_not_replace_saved_refs() {
 }
 
 #[test]
-fn moved_root_keeps_its_drilled_children_and_ignores_a_twin_at_the_old_path() {
+fn moved_root_cannot_redirect_hydration_to_a_twin_at_the_old_path() {
     let _home = HomeGuard::new();
     let (id, _) = save_map();
     let adapter = DrillAdapter::new();
     let mut outside = node("group", "Other");
     outside.children.push(node("button", "Save"));
     adapter.tree.lock().unwrap().children.insert(0, outside);
-    click(&adapter, &format!("@{id}:e2")).unwrap();
-    assert_eq!(*adapter.actions.lock().unwrap(), vec![vec![1, 0]]);
-}
-
-#[test]
-fn drilling_a_moved_root_allocates_refs_under_its_live_path() {
-    let _home = HomeGuard::new();
-    let (id, _) = save_map();
-    let adapter = DrillAdapter::new();
-    adapter
-        .tree
-        .lock()
-        .unwrap()
-        .children
-        .insert(0, node("group", "Other"));
-    let result = run_from_ref(&adapter, &TreeOptions::default(), "@e1", Some(&id)).unwrap();
-    let button = (1..8)
-        .filter_map(|n| result.refmap.get(&format!("@e{n}")))
-        .find(|entry| entry.identity.role == "button")
-        .map(|entry| entry.scope.path.to_vec());
-    assert_eq!(button, Some(vec![1, 0]));
+    let error = click(&adapter, &format!("@{id}:e2")).unwrap_err();
+    assert_eq!(error.code(), "STALE_REF");
+    assert!(adapter.actions.lock().unwrap().is_empty());
+    assert!(error.suggestion().unwrap().contains("Drill the root"));
 }
 
 #[test]

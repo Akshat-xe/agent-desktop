@@ -101,3 +101,21 @@ fn unknown_identifier_source_prevents_false_not_found() {
     assert!(!resolution.meta.complete);
     assert_eq!(resolution.meta.total_matches, 0);
 }
+
+#[test]
+fn a_selected_field_with_an_unread_value_does_not_record_its_name() {
+    let mut field = evidence("textfield", Some("draft"));
+    field.value = super::LocatorField::Unknown;
+    field.identifiers = IdentifierEvidence::new(["field-1".into()], Some(0), true);
+    let mut request = request();
+    request.selection = LocatorSelection::First;
+    let resolution = evaluate_locator_tree(
+        tree(vec![node(0, field, vec![], &[])], vec![0], true),
+        &LocatorQuery::default(),
+        &request,
+    )
+    .unwrap();
+    let identity = &resolution.matches[0].entry.identity;
+    assert!(identity.native_id.is_some());
+    assert_eq!(identity.name, None);
+}

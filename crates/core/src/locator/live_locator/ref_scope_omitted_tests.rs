@@ -49,7 +49,8 @@ fn a_full_count_with_omitted_descendants_never_selects_a_match() {
         resolve_in_root(
             &OmittedChildrenAdapter { omit },
             &entry,
-            &ScopeRoot::new(&root, NativeHandle::new(Vec::<usize>::new())),
+            &root,
+            &NativeHandle::new(Vec::<usize>::new()),
             Deadline::standard().unwrap(),
         )
         .err()

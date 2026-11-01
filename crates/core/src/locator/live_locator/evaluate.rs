@@ -93,7 +93,13 @@ pub fn evaluate_locator_tree(
             .get(index)
             .ok_or_else(|| AdapterError::internal("selected locator node is out of bounds"))?;
         let mut entry = ref_entry(node, &tree.source, &normalized);
-        entry.identity.basis = Some(counts.basis(&entry.identity));
+        let basis = counts.basis(&entry.identity);
+        entry.identity.basis = Some(basis);
+        crate::refs::ref_identity::withhold_unverified_name(
+            &mut entry.identity,
+            node.evidence.value.is_unknown(),
+            Some(basis),
+        );
         selected_matches.push(LocatorMatch {
             data,
             document_order: node.document_order,

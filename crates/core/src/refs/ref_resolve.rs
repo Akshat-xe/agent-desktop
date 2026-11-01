@@ -1,7 +1,6 @@
 use crate::{
-    AdapterError, CommandContext, Deadline, NativeHandle, PlatformAdapter, RefEntry,
-    locator::live_locator::ref_scope, refs::RefMap, refs::identity_basis_gate::basis_gate,
-    refs::refs_store::RefStore,
+    AdapterError, CommandContext, Deadline, NativeHandle, PlatformAdapter, RefEntry, refs::RefMap,
+    refs::identity_basis_gate::basis_gate, refs::refs_store::RefStore,
 };
 
 /// Resolves a saved ref to its live element, running the identity-basis gate first. Every
@@ -29,18 +28,24 @@ pub fn resolve(
             "Scoped ref no longer belongs to its source snapshot",
         ));
     }
-    resolve_in_map(adapter, entry, &map, deadline).map(|(handle, _)| handle)
+    resolve_in_map(adapter, entry, &map, deadline)
 }
 
-/// Resolves a drill root and returns its handle with the anchor entry carrying its verified
-/// current path, so refs allocated below it extend the live path rather than the recorded one.
 pub(crate) fn resolve_drill_root(
     adapter: &dyn PlatformAdapter,
     entry: &RefEntry,
     map: &RefMap,
     deadline: Deadline,
-) -> Result<(NativeHandle, RefEntry), AdapterError> {
+) -> Result<NativeHandle, AdapterError> {
     resolve_in_map(adapter, entry, map, deadline)
+}
+
+/// Points a stale scoped ref at re-drilling its root, since a moved root is never followed.
+fn redrill(error: AdapterError) -> AdapterError {
+    if error.code == crate::ErrorCode::StaleRef {
+        return error.with_suggestion("Drill the root ref again (or re-run the find), then retry.");
+    }
+    error
 }
 
 fn resolve_unscoped(
@@ -49,7 +54,9 @@ fn resolve_unscoped(
     deadline: Deadline,
 ) -> Result<NativeHandle, AdapterError> {
     match entry.scope.census_depth {
-        Some(depth) => ref_scope::resolve_by_census(adapter, entry, depth, deadline),
+        Some(depth) => crate::locator::live_locator::ref_scope::resolve_by_census(
+            adapter, entry, depth, deadline,
+        ),
         None => adapter.resolve_element_strict(entry, deadline),
     }
 }
@@ -59,7 +66,7 @@ fn resolve_in_map(
     entry: &RefEntry,
     map: &RefMap,
     deadline: Deadline,
-) -> Result<(NativeHandle, RefEntry), AdapterError> {
+) -> Result<NativeHandle, AdapterError> {
     basis_gate(&entry.identity)?;
     let mut ancestors = Vec::new();
     let mut current = entry;
@@ -82,23 +89,24 @@ fn resolve_in_map(
         current = root;
     }
     let mut roots = ancestors.iter().rev();
-    let Some(first) = roots.next() else {
-        let root = ref_scope::resolve_first_root(adapter, entry, deadline)?;
-        return Ok((root.handle, root.current));
+    let Some(mut root) = roots.next() else {
+        return resolve_unscoped(adapter, entry, deadline);
     };
-    let mut scope_root = ref_scope::resolve_first_root(adapter, first, deadline)?;
-    let mut pinned = vec![scope_root.current.clone()];
+    let mut handle = resolve_unscoped(adapter, root, deadline).map_err(redrill)?;
     for target in roots.chain(std::iter::once(entry)) {
         basis_gate(&target.identity)?;
-        scope_root = ref_scope::resolve_in_root(adapter, target, &scope_root, deadline)?;
-        pinned.push(scope_root.current.clone());
+        handle = crate::locator::live_locator::ref_scope::resolve_in_root(
+            adapter, target, root, &handle, deadline,
+        )
+        .map_err(redrill)?;
+        root = target;
     }
-    pinned.truncate(pinned.len().saturating_sub(2));
-    for anchor in &pinned {
-        ref_scope::pin_root(adapter, anchor, deadline)?;
+    for ancestor in ancestors.iter().skip(1) {
+        crate::locator::live_locator::ref_scope::pin_root(adapter, ancestor, deadline)
+            .map_err(redrill)?;
     }
     if deadline.is_expired() {
         return Err(deadline.timeout_error());
     }
-    Ok((scope_root.handle, scope_root.current))
+    Ok(handle)
 }
