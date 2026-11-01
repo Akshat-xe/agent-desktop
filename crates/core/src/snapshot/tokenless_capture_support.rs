@@ -240,10 +240,3 @@ pub(super) fn resolve(
         None,
     )
 }
-
-pub(super) fn refusal(adapter: &CaptureAdapter, entry: &RefEntry) -> AdapterError {
-    match resolve(adapter, entry) {
-        Ok(_) => panic!("an unproven ref must be refused"),
-        Err(error) => error,
-    }
-}

@@ -389,6 +389,8 @@ fn entry_hash() -> u64 {
     .unwrap()
 }
 
+#[path = "ref_alloc_anchor_tests.rs"]
+mod anchor_tests;
 #[path = "ref_alloc_bounds_tests.rs"]
 mod bounds_tests;
 #[path = "ref_alloc_ordering_tests.rs"]

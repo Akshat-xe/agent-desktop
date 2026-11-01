@@ -1,11 +1,10 @@
 use std::sync::atomic::Ordering;
 
 use super::tokenless_capture_support::*;
-use crate::ErrorCode;
 use crate::refs::refs_test_support::HomeGuard;
 
 #[test]
-fn an_incomplete_window_gives_no_unique_refs() {
+fn an_incomplete_window_offers_no_drill_anchor() {
     let _guard = HomeGuard::new();
     let mut hidden = node("scrollarea", "Feed");
     hidden.children_count = Some(3);
@@ -16,17 +15,10 @@ fn an_incomplete_window_gives_no_unique_refs() {
 
     let captured = snapshot(&adapter);
     assert!(!captured.complete, "the window was not read whole");
-    let (_, anchor) = named(&captured.refmap, "Sidebar");
-    assert!(
-        !anchor.identity.unique_at_capture,
-        "an unread region proves nothing, and no narrower census may stand in"
-    );
-
-    let refused = refusal(&adapter, anchor);
-    assert_eq!(refused.code, ErrorCode::AmbiguousTarget);
     assert_eq!(
-        refused.details.expect("details")["kind"],
-        "identity_not_unique"
+        captured.refmap.len(),
+        0,
+        "an unread region proves nothing, so no anchor is handed out"
     );
 }
 

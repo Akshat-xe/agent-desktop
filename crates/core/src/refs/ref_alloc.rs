@@ -1,6 +1,6 @@
 use crate::AccessibilityNode;
 use crate::refs::ref_capture_proof::CaptureProof;
-use crate::refs::ref_identity::has_meaningful_identity;
+use crate::refs::ref_identity::{has_meaningful_identity, is_element_token};
 use crate::refs::{RefEntry, RefMap};
 use std::collections::HashSet;
 
@@ -203,11 +203,7 @@ fn selects_tokenless_at(
     path: &mut Vec<usize>,
     plan: &AllocationPlan<'_>,
 ) -> bool {
-    let tokenless = !node
-        .identity
-        .retained_object
-        .as_deref()
-        .is_some_and(crate::refs::ref_identity::is_element_token);
+    let tokenless = !carries_element_token(node);
     if tokenless && (is_ref_able(node) || plan.skeleton_anchors.contains(path.as_slice())) {
         return true;
     }
@@ -247,6 +243,15 @@ impl<'a> AllocationPlan<'a> {
         self.capture
             .is_some_and(|capture| capture.proves(entry, path))
     }
+
+    /// Whether a candidate boundary node is offered as a drill target: a later
+    /// resolve re-identifies it only through an element token or through the
+    /// capture finding its identity exactly once. Geometry is not identity and a
+    /// twin cannot be re-identified, so neither is offered; candidates are
+    /// planned without this gate because a caller costs the census from them.
+    fn drillable(&self, node: &AccessibilityNode, entry: &RefEntry, path: &[usize]) -> bool {
+        carries_element_token(node) || self.proven(entry, path)
+    }
 }
 
 fn plan_skeleton_anchors(
@@ -266,41 +271,43 @@ fn plan_skeleton_anchors(
     if can_receive_observed_ref(node) && is_ref_able(node) {
         return false;
     }
-    if !path.is_empty() && is_resolvable_skeleton_anchor(node) {
+    if !path.is_empty() && can_receive_observed_ref(node) && carries_identity_evidence(node) {
         anchors.insert(path.clone());
         return false;
     }
     true
 }
 
-/// A skeleton anchor is offered as a drill target because it carries
-/// evidence a later resolve can re-identify it by. When that evidence is
-/// geometry alone, the entry must keep its bounds: dropping them because the
-/// caller did not ask to *see* bounds leaves a ref this predicate approved
-/// and nothing can resolve, which is a drill target that fails on its own
-/// snapshot. The ref-able path guards the same strip with the same
-/// condition.
-fn is_resolvable_skeleton_anchor(node: &AccessibilityNode) -> bool {
-    can_receive_observed_ref(node)
-        && (has_meaningful_text(node.identity.name.as_deref())
-            || has_meaningful_text(node.identity.description.as_deref())
-            || node.identity.native_id.as_ref().is_some_and(|identifier| {
-                identifier.kind != crate::IdentifierKind::Unknown
-                    && !identifier.value.trim().is_empty()
-            })
-            || node
-                .presentation
-                .bounds
-                .and_then(|bounds| bounds.bounds_hash())
-                .is_some())
-}
-
-fn can_receive_observed_ref(node: &AccessibilityNode) -> bool {
-    crate::Role::is_canonical(&node.role) && node.role != "unknown"
+/// Whether a boundary container carries anything a census could prove it by: an
+/// element token, a recorded name, description or native identifier, or bounds.
+/// Without one it is no drill target, so it earns neither a ref nor a census.
+fn carries_identity_evidence(node: &AccessibilityNode) -> bool {
+    carries_element_token(node)
+        || has_meaningful_text(node.identity.name.as_deref())
+        || has_meaningful_text(node.identity.description.as_deref())
+        || node.identity.native_id.as_ref().is_some_and(|identifier| {
+            identifier.kind != crate::IdentifierKind::Unknown && !identifier.value.trim().is_empty()
+        })
+        || node
+            .presentation
+            .bounds
+            .and_then(|bounds| bounds.bounds_hash())
+            .is_some()
 }
 
 fn has_meaningful_text(value: Option<&str>) -> bool {
     value.is_some_and(|text| !text.trim().is_empty())
+}
+
+fn carries_element_token(node: &AccessibilityNode) -> bool {
+    node.identity
+        .retained_object
+        .as_deref()
+        .is_some_and(is_element_token)
+}
+
+fn can_receive_observed_ref(node: &AccessibilityNode) -> bool {
+    crate::Role::is_canonical(&node.role) && node.role != "unknown"
 }
 
 fn allocate_refs_at_path(
@@ -333,10 +340,12 @@ fn allocate_refs_at_path(
         let mut entry = ref_entry_from_node(&node, &config.source, None, path);
         entry.capabilities.available_actions = vec![];
         entry.identity.unique_at_capture = plan.proven(&entry, path);
-        if !config.options.include_bounds && has_meaningful_identity(&entry) {
-            entry.geometry.bounds = None;
+        if plan.drillable(&node, &entry, path) {
+            if !config.options.include_bounds && has_meaningful_identity(&entry) {
+                entry.geometry.bounds = None;
+            }
+            node.ref_id = allocate_observed_ref(refmap, entry)?;
         }
-        node.ref_id = allocate_observed_ref(refmap, entry)?;
     }
 
     if !config.options.include_bounds {

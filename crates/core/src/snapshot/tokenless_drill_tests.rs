@@ -1,7 +1,6 @@
 use std::sync::atomic::Ordering;
 
 use super::tokenless_capture_support::*;
-use crate::ErrorCode;
 use crate::refs::refs_test_support::HomeGuard;
 use crate::snapshot::snapshot_ref::run_from_ref;
 
@@ -50,15 +49,15 @@ fn a_skeleton_anchor_resolves_and_its_drill_resolves() {
 }
 
 #[test]
-fn a_twin_below_the_skeleton_depth_makes_the_anchor_not_unique() {
+fn a_twin_below_the_skeleton_depth_is_not_offered_as_an_anchor() {
     let _guard = HomeGuard::new();
     let adapter = CaptureAdapter::new(twinned_window());
 
     let captured = snapshot(&adapter);
-    let (anchor_ref, anchor) = named(&captured.refmap, "Sidebar");
-    assert!(
-        !anchor.identity.unique_at_capture,
-        "a twin the shallow walk cannot see still makes the anchor ambiguous"
+    assert_eq!(
+        captured.refmap.len(),
+        1,
+        "the twin is never handed out as a drill target, so only the proven anchor remains"
     );
     let (_, toolbar) = named(&captured.refmap, "Toolbar");
     assert!(
@@ -66,29 +65,9 @@ fn a_twin_below_the_skeleton_depth_makes_the_anchor_not_unique() {
         "the census that refuses the twin still proves its neighbour"
     );
 
-    let refused = refusal(&adapter, anchor);
-    assert_eq!(refused.code, ErrorCode::AmbiguousTarget);
-    assert_eq!(
-        refused.details.expect("details")["kind"],
-        "identity_not_unique"
-    );
     resolve(&adapter, toolbar).expect("a proven anchor resolves");
-
-    let snapshot_id = save(&captured.refmap);
-    let drill = match run_from_ref(&adapter, &drill_opts(), &anchor_ref, Some(&snapshot_id)) {
-        Ok(_) => panic!("an ambiguous anchor cannot be drilled either"),
-        Err(error) => error,
-    };
-    match drill {
-        crate::AppError::Adapter(error) => {
-            assert_eq!(error.code, ErrorCode::AmbiguousTarget);
-            assert_eq!(
-                error.details.expect("details")["kind"],
-                "identity_not_unique"
-            );
-        }
-        other => panic!("expected an adapter refusal, got {other:?}"),
-    }
+    assert_eq!(adapter.anchored().len(), 1);
+    assert_eq!(adapter.anchored()[0].scope.path.as_slice(), &[0, 0, 1]);
 }
 
 #[test]
