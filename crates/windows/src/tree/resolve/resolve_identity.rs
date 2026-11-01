@@ -6,11 +6,14 @@ use agent_desktop_core::{AdapterError, Deadline, LocatorEvidence, NativeHandle, 
 use super::resolve_match::{
     admitted_outcome, ambiguous_target_error, candidate_outcome, role_admission, stale_ref_error,
 };
+use super::resolve_search::descent::{DescentPolicy, DescentVerdict, ExpiryPolicy};
 use super::resolve_search::{
     MAX_RESOLVE_DEPTH, NodeAdmission, SearchContext, enumerate_children, identity_unknown_error,
     resolve_walk_budget,
 };
 use super::{SearchVerdict, into_verified_handle, resolve_window_root};
+use crate::system::runtime::hresult::ReadDisposition;
+use crate::tree::automation::{UiaFailure, uia_failure_disposition};
 use crate::tree::element::UIAElement;
 use crate::tree::walk::walker::{TreeSource, WalkBudget};
 use crate::tree::walk::walker_source::UiaTreeSource;
@@ -69,6 +72,32 @@ pub(crate) fn admit_identity_candidate(
     }
 }
 
+/// The uniqueness search's descent policy: only the end-of-list signal establishes that a child
+/// list was read whole. The observation walk that issued the ref settles completeness on
+/// `is_exhaustion()` alone, so a list it counted as truncated must not read as complete here;
+/// `E_POINTER`, `E_INVALIDARG` and `UIA_E_NOTSUPPORTED` are provider answers about one read, not
+/// proof that a subtree is empty, and a look-alike may be sitting behind any of them.
+pub(crate) const IDENTITY_SEARCH_DESCENT: DescentPolicy = DescentPolicy {
+    classify: identity_descent_verdict,
+    on_expiry: ExpiryPolicy::Unfinish,
+    descend_context: "descend to a stored ref",
+    sibling_context: "walk a stored ref's siblings",
+};
+
+/// Classifies a descent failure for the uniqueness count: the end-of-list signal ends the list,
+/// a terminal failure is the attempt's answer, and every other failure leaves the region unread.
+fn identity_descent_verdict(failure: UiaFailure) -> DescentVerdict {
+    if failure.is_exhaustion() {
+        return DescentVerdict::Settled;
+    }
+    match uia_failure_disposition(failure) {
+        ReadDisposition::Terminal => DescentVerdict::Surfaced,
+        ReadDisposition::SettledAbsence
+        | ReadDisposition::Retryable
+        | ReadDisposition::Unavailable => DescentVerdict::Unfinished,
+    }
+}
+
 /// Counts every candidate the recorded identity admits and records every region it could not read.
 /// A second match ends the walk, so the settled `AMBIGUOUS_TARGET` verdict is never overwritten.
 fn search_source_scope<S: TreeSource>(
@@ -98,7 +127,13 @@ fn search_source_scope<S: TreeSource>(
         *unread_region |= boundary_hides_descendants(ctx.source, element);
         return Ok(());
     }
-    let children = enumerate_children(ctx.source, element, ctx.budget, unread_region)?;
+    let children = enumerate_children(
+        ctx.source,
+        element,
+        ctx.budget,
+        unread_region,
+        &IDENTITY_SEARCH_DESCENT,
+    )?;
     *unread_region |= sibling_list_was_cut(ctx.source, &children, ctx.budget);
     for child in &children {
         if match_count_is_conclusive(found.len()) {
@@ -154,3 +189,7 @@ mod count_tests;
 #[cfg(all(test, target_os = "windows"))]
 #[path = "resolve_identity_scope_tests.rs"]
 mod scope_tests;
+
+#[cfg(all(test, target_os = "windows"))]
+#[path = "resolve_identity_enumeration_tests.rs"]
+mod enumeration_tests;

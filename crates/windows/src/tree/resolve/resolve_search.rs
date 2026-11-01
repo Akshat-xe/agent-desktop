@@ -310,7 +310,13 @@ pub(crate) fn search_under(
     }
 
     if child_search_is_reachable(depth) {
-        let children = enumerate_children(ctx.source, element, ctx.budget, unread_region)?;
+        let children = enumerate_children(
+            ctx.source,
+            element,
+            ctx.budget,
+            unread_region,
+            &SEARCH_DESCENT,
+        )?;
         for child in children {
             search_under(ctx, &child, depth + 1, out, unread_region)?;
         }
@@ -320,13 +326,20 @@ pub(crate) fn search_under(
 
 /// Enumerates one element's children for the search, honouring the sibling cap
 /// as a hard bound on pathological lists.
+///
+/// The policy is the caller's: the positional search settles on the read
+/// disposition table ([`SEARCH_DESCENT`]), while the uniqueness count passes
+/// its own [`super::resolve_identity::IDENTITY_SEARCH_DESCENT`], because a
+/// count that proves an identity is unique may settle on nothing short of the
+/// end-of-list signal.
 pub(crate) fn enumerate_children<S: TreeSource>(
     source: &S,
     element: &S::Node,
     budget: &WalkBudget,
     unread_region: &mut bool,
+    policy: &DescentPolicy,
 ) -> Result<Vec<S::Node>, AdapterError> {
-    let read = descent::read_children(source, element, budget, &SEARCH_DESCENT, None)?;
+    let read = descent::read_children(source, element, budget, policy, None)?;
     *unread_region |= !read.complete;
     Ok(read.elements)
 }

@@ -5,7 +5,7 @@ use crate::tree::resolve::pair_window::{
     DuplicatePairWindow, NAME_MARKER, PairGeometry, TITLE_MARKER, automation_id, collect_marked,
 };
 use crate::tree::resolve::resolve_search::{
-    NodeAdmission, admit_node, enumerate_children, geometry_contradicts,
+    NodeAdmission, SEARCH_DESCENT, admit_node, enumerate_children, geometry_contradicts,
 };
 
 /// The bounds tie-break returns the stored candidate, not the first one collected, and an identity
@@ -140,7 +140,8 @@ fn catalogue_marked(
         out.push((path, evidence));
     }
     let mut ignored = false;
-    let Ok(children) = enumerate_children(source, element, budget, &mut ignored) else {
+    let Ok(children) = enumerate_children(source, element, budget, &mut ignored, &SEARCH_DESCENT)
+    else {
         return;
     };
     for (index, child) in children.iter().enumerate() {

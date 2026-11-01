@@ -304,6 +304,7 @@ fn find_secure(
         element,
         budget,
         &mut ignored,
+        &crate::tree::resolve::resolve_search::SEARCH_DESCENT,
     )?;
     for (index, child) in children.iter().enumerate() {
         prefix.push(index);

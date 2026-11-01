@@ -13,7 +13,8 @@ use crate::tree::walk::walker::{
 };
 #[cfg(target_os = "windows")]
 use crate::tree::{
-    element::UIAElement, resolve::resolve_search::enumerate_children,
+    element::UIAElement,
+    resolve::resolve_search::{SEARCH_DESCENT, enumerate_children},
     walk::walker_source::UiaTreeSource,
 };
 #[cfg(target_os = "windows")]
@@ -33,8 +34,8 @@ pub(crate) const REAL_FAILURE: UiaFailure = UiaFailure::Hresult(E_FAIL);
 /// struct field cap.
 #[derive(Default)]
 struct EnumerationFaults {
-    first_child: HashSet<i32>,
-    next_sibling: HashSet<i32>,
+    first_child: HashMap<i32, UiaFailure>,
+    next_sibling: HashMap<i32, UiaFailure>,
     first_child_delay: HashMap<i32, std::time::Duration>,
 }
 
@@ -100,12 +101,24 @@ impl FakeTree {
     }
 
     pub(crate) fn faulting_on_first_child(mut self, node: i32) -> Self {
-        self.faults.first_child.insert(node);
+        self.faults.first_child.insert(node, REAL_FAILURE);
+        self
+    }
+
+    /// The same failure, with the code chosen by the caller: a provider that answers something
+    /// other than the measured transport fault.
+    pub(crate) fn faulting_on_first_child_with(mut self, node: i32, failure: UiaFailure) -> Self {
+        self.faults.first_child.insert(node, failure);
         self
     }
 
     pub(crate) fn faulting_on_next_sibling(mut self, node: i32) -> Self {
-        self.faults.next_sibling.insert(node);
+        self.faults.next_sibling.insert(node, REAL_FAILURE);
+        self
+    }
+
+    pub(crate) fn faulting_on_next_sibling_with(mut self, node: i32, failure: UiaFailure) -> Self {
+        self.faults.next_sibling.insert(node, failure);
         self
     }
 
@@ -135,15 +148,15 @@ impl TreeSource for FakeTree {
         if let Some(delay) = self.faults.first_child_delay.get(node) {
             std::thread::sleep(*delay);
         }
-        if self.faults.first_child.contains(node) {
-            return Err(REAL_FAILURE);
+        if let Some(failure) = self.faults.first_child.get(node) {
+            return Err(*failure);
         }
         self.first.get(node).copied().ok_or(EXHAUSTION)
     }
 
     fn next_sibling(&self, node: &i32) -> Result<i32, UiaFailure> {
-        if self.faults.next_sibling.contains(node) {
-            return Err(REAL_FAILURE);
+        if let Some(failure) = self.faults.next_sibling.get(node) {
+            return Err(*failure);
         }
         self.next.get(node).copied().ok_or(EXHAUSTION)
     }
@@ -301,7 +314,13 @@ fn scan_at<T>(
         return Ok(Some(value));
     }
     let mut ignored = false;
-    let children = enumerate_children(source, element, limits.budget, &mut ignored)?;
+    let children = enumerate_children(
+        source,
+        element,
+        limits.budget,
+        &mut ignored,
+        &SEARCH_DESCENT,
+    )?;
     for (index, child) in children.iter().enumerate() {
         prefix.push(index);
         let found = scan_at(source, child, limits, prefix, visit)?;
@@ -351,7 +370,13 @@ fn walk_all_at(
     let (_, evidence, _) = source.evidence(element);
     visit(prefix, evidence);
     let mut ignored = false;
-    let Ok(children) = enumerate_children(source, element, limits.budget, &mut ignored) else {
+    let Ok(children) = enumerate_children(
+        source,
+        element,
+        limits.budget,
+        &mut ignored,
+        &SEARCH_DESCENT,
+    ) else {
         return;
     };
     for (index, child) in children.iter().enumerate() {
