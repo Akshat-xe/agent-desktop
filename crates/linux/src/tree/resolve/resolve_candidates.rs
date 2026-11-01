@@ -6,7 +6,7 @@ use crate::tree::element::bounded::collect_bounded;
 use crate::tree::properties::read_purpose::ReadPurpose;
 use crate::tree::vocabulary::roles::may_resolve_to;
 use crate::tree::walk::walker_expand::read_observed;
-use crate::tree::{AtspiElement, ObservedRead, Walk, WalkLimits, WalkedNode};
+use crate::tree::{AtspiElement, Field, ObservedRead, Walk, WalkLimits, WalkedNode};
 
 const NODES_IN_FLIGHT: usize = 8;
 
@@ -28,6 +28,15 @@ fn targets(node: &WalkedNode<ObservedRead>, entry: &RefEntry, found: &mut Vec<At
     }
 }
 
+/// Marks the reads a number-refuted node never needed as absent, so its role reads as the plain role
+/// the number gives instead of unknown. No refinement can move that number to the stored role.
+fn refute_by_number(read: &mut ObservedRead) {
+    let traits = &mut read.node.traits;
+    traits.states = Field::Absent;
+    traits.interfaces = Field::Absent;
+    traits.role_name = Field::Absent;
+}
+
 fn fill(
     node: &mut WalkedNode<ObservedRead>,
     entry: &RefEntry,
@@ -37,6 +46,8 @@ fn fill(
         if let Some(read) = reads.next() {
             node.payload = read;
         }
+    } else {
+        refute_by_number(&mut node.payload);
     }
     for child in &mut node.children {
         fill(child, entry, reads);
