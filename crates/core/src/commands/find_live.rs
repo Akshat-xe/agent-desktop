@@ -37,21 +37,7 @@ pub(super) fn execute(
     let deadline = traversal_deadline(args)?;
     let request = resolve_request(args, deadline);
     let mut resolution = match args.root.as_deref() {
-        Some(root_ref) => {
-            let (_, local_root_ref) = crate::refs::ref_token::resolve_ref_target(root_ref)?;
-            let entry = crate::commands::helpers::load_ref_entry(root_ref, context)?;
-            let handle = adapter.resolve_element_strict(&entry, deadline)?;
-            resolve_query(
-                adapter,
-                query,
-                ObservationRoot::Element {
-                    handle: &handle,
-                    entry: &entry,
-                    root_ref: Some(&local_root_ref),
-                },
-                &request,
-            )?
-        }
+        Some(root_ref) => rooted_resolution(adapter, query, root_ref, &request, context)?,
         None => {
             let windows = snapshot::surface_windows(
                 adapter,
@@ -84,6 +70,29 @@ pub(super) fn execute(
     }
     emit_resolution(context, &resolution, snapshot_id.as_deref(), ref_count)?;
     format_response(args, query, resolution, snapshot_id.as_deref())
+}
+
+/// A rooted find draws its matches from the root's own subtree, and the read that
+/// finds the root answers them too. The root is re-identified over one complete
+/// whole-window observation - a token root through its token, a tokenless root
+/// through its predicate - and the query runs scoped to that node: the refs the
+/// find publishes are then proven by the one observation it took, never by counts
+/// joined from two reads. A token root takes the same path, because a token says
+/// nothing about whether the descendants it contains carry one.
+fn rooted_resolution(
+    adapter: &dyn PlatformAdapter,
+    query: &LocatorQuery,
+    root_ref: &str,
+    request: &LocatorResolveRequest,
+    context: &CommandContext,
+) -> Result<LocatorResolution, AppError> {
+    let entry = crate::commands::helpers::load_ref_entry(root_ref, context)?;
+    crate::locator::live_locator::resolve_query_from(adapter, query, request, |deadline| {
+        let (_, tree, index) =
+            crate::refs::resolve_saved_ref::observe_saved_ref(adapter, &entry, deadline, None)
+                .map_err(AppError::Adapter)?;
+        crate::locator::live_locator::ObservedObservation::under(tree, index)
+    })
 }
 
 fn resolve_request(args: &FindArgs, deadline: crate::Deadline) -> LocatorResolveRequest {

@@ -2,14 +2,10 @@ use agent_desktop_core::{
     AdapterError, EvidenceRequirements, IdentityMatch, NativeHandle, RefEntry,
     refs::ref_identity::{has_stable_text_identity, identity_match},
 };
-use rustc_hash::FxHashSet;
 
 use super::resolve_classify::classify_candidates;
+use super::resolve_errors::identity_unknown as identity_unknown_error;
 pub(in crate::tree) use super::resolve_errors::incomplete_traversal as incomplete_traversal_error;
-use super::resolve_errors::{
-    identity_unknown as identity_unknown_error,
-    native_identifier_role_reuse as native_identifier_role_reuse_error,
-};
 use super::resolve_read_context::ResolveReadContext;
 use crate::tree::AXElement;
 use crate::tree::element_dedupe::push_unique;
@@ -126,146 +122,6 @@ fn record_path_child_read(
 }
 
 #[cfg(target_os = "macos")]
-pub(in crate::tree) fn find_entry_in_roots(
-    roots: &[AXElement],
-    entry: &RefEntry,
-    resolve_depth: u8,
-    source_window_verified: bool,
-    read_context: &mut ResolveReadContext,
-) -> Result<NativeHandle, AdapterError> {
-    let mut matches = Vec::new();
-    let mut incomplete = None;
-    let mut identifier_role_reuse = false;
-    for root in roots {
-        if should_stop_collecting(matches.len(), entry) {
-            break;
-        }
-        let mut ancestors = FxHashSet::default();
-        let mut context = CollectContext {
-            entry,
-            max_depth: resolve_depth,
-            ancestors: &mut ancestors,
-            matches: &mut matches,
-            incomplete: &mut incomplete,
-            identifier_role_reuse: &mut identifier_role_reuse,
-            read_context,
-        };
-        collect_elements_recursive(root, 0, &mut context)?;
-    }
-    if should_stop_collecting(matches.len(), entry) {
-        return classify_candidates(
-            matches,
-            entry,
-            source_window_verified,
-            read_context.deadline,
-        );
-    }
-    if let Some(error) = incomplete {
-        return Err(error);
-    }
-    if identifier_role_reuse && matches.is_empty() {
-        return Err(native_identifier_role_reuse_error(entry));
-    }
-    classify_candidates(
-        matches,
-        entry,
-        source_window_verified,
-        read_context.deadline,
-    )
-}
-
-#[cfg(target_os = "macos")]
-struct CollectContext<'a> {
-    entry: &'a RefEntry,
-    max_depth: u8,
-    ancestors: &'a mut FxHashSet<usize>,
-    matches: &'a mut Vec<AXElement>,
-    incomplete: &'a mut Option<AdapterError>,
-    identifier_role_reuse: &'a mut bool,
-    read_context: &'a mut ResolveReadContext,
-}
-
-#[cfg(target_os = "macos")]
-fn collect_elements_recursive(
-    element: &AXElement,
-    depth: u8,
-    context: &mut CollectContext<'_>,
-) -> Result<(), AdapterError> {
-    if should_stop_collecting(context.matches.len(), context.entry) {
-        return Ok(());
-    }
-    crate::tree::locator_deadline::remaining(context.read_context.deadline)?;
-    let pointer = element.0 as usize;
-    if !context.ancestors.insert(pointer) {
-        return Ok(());
-    }
-
-    let read = read_node(
-        element,
-        identity_requirements(context.entry),
-        context.read_context,
-    )?;
-    if read.invalid_element {
-        mark_incomplete(
-            context,
-            incomplete_traversal_error("invalid_element", depth),
-        );
-        context.ancestors.remove(&pointer);
-        return Ok(());
-    }
-
-    if native_identifier_reused_by_different_role(context.entry, &read.evidence) {
-        *context.identifier_role_reuse = true;
-    }
-
-    match read.evidence.role.known() {
-        Some(role) => {
-            if role == &context.entry.identity.role {
-                match super::retained::candidate_match(element, context.entry, &read.evidence)? {
-                    IdentityMatch::Match => {
-                        push_unique(context.matches, element.clone());
-                    }
-                    IdentityMatch::Unknown => {
-                        if provisional_geometry_candidate(context.entry) {
-                            push_unique(context.matches, element.clone());
-                        } else {
-                            mark_incomplete(context, identity_unknown_error(context.entry));
-                        }
-                    }
-                    IdentityMatch::NoMatch => {}
-                }
-            }
-        }
-        None if read.evidence.role.is_unknown() => {
-            mark_incomplete(context, incomplete_traversal_error("role", depth));
-        }
-        None => {}
-    }
-
-    if depth >= context.max_depth {
-        if !read.child_read.elements.is_empty()
-            || !read.child_read.complete
-            || read.child_read.truncated()
-        {
-            mark_incomplete(context, incomplete_traversal_error("depth_limit", depth));
-        }
-    } else {
-        if !read.child_read.complete || read.child_read.truncated() {
-            mark_incomplete(context, incomplete_traversal_error("children", depth));
-        }
-        for child in &read.child_read.elements {
-            collect_elements_recursive(child, depth.saturating_add(1), context)?;
-            if should_stop_collecting(context.matches.len(), context.entry) {
-                break;
-            }
-        }
-    }
-
-    context.ancestors.remove(&pointer);
-    Ok(())
-}
-
-#[cfg(target_os = "macos")]
 fn candidate_identity(
     element: &AXElement,
     entry: &RefEntry,
@@ -302,25 +158,6 @@ pub(in crate::tree) fn match_native_or_text_identity(
         &evidence.description,
         &evidence.identifiers,
     )
-}
-
-pub(in crate::tree) fn native_identifier_reused_by_different_role(
-    entry: &RefEntry,
-    evidence: &agent_desktop_core::LocatorEvidence,
-) -> bool {
-    let Some(expected) = entry.identity.native_id.as_ref() else {
-        return false;
-    };
-    evidence
-        .role
-        .known()
-        .is_some_and(|role| role != &entry.identity.role)
-        && evidence.identifiers.is_complete()
-        && evidence
-            .identifiers
-            .identifiers()
-            .iter()
-            .any(|identifier| identifier == expected)
 }
 
 /// Whether bounds alone may stand in for an element whose identity is unknown.
@@ -376,12 +213,6 @@ fn identity_requirements(entry: &RefEntry) -> EvidenceRequirements {
 
 pub(in crate::tree) fn should_stop_collecting(match_count: usize, entry: &RefEntry) -> bool {
     match_count > 1 && entry.geometry.bounds_hash.is_none()
-}
-
-fn mark_incomplete(context: &mut CollectContext<'_>, error: AdapterError) {
-    if context.incomplete.is_none() {
-        *context.incomplete = Some(error);
-    }
 }
 
 #[cfg(all(test, target_os = "macos"))]

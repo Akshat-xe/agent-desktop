@@ -43,6 +43,7 @@ pub(super) fn entry(pid: u32) -> RefEntry {
             value: None,
             description: None,
             native_id: None,
+            unique_at_capture: true,
         },
         geometry: crate::RefGeometry {
             bounds_space: None,
@@ -92,6 +93,7 @@ impl ObservationOps for PngAdapter {
     }
 
     crate::adapter::complete_live_observation!("button", "Run", [capability::CLICK]);
+    crate::adapter::saved_ref_scope!("button", Some("Run"));
 }
 
 impl ActionOps for PngAdapter {
@@ -155,6 +157,7 @@ impl ObservationOps for FailingScreenshotAdapter {
     }
 
     crate::adapter::complete_live_observation!("button", "Run", [capability::CLICK]);
+    crate::adapter::saved_ref_scope!("button", Some("Run"));
 }
 
 impl ActionOps for FailingScreenshotAdapter {

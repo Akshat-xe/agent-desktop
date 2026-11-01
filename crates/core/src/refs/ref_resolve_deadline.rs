@@ -20,11 +20,17 @@ pub(crate) fn resolve_within_deadline(
     adapter: &dyn PlatformAdapter,
     entry: &RefEntry,
     deadline: Deadline,
+    lease: Option<&crate::InteractionLease>,
 ) -> ResolveAttemptOutcome {
     if deadline.remaining_slice(RESOLVE_ATTEMPT).is_err() {
         return ResolveAttemptOutcome::DeadlinePassed;
     }
-    match adapter.resolve_element_strict(entry, deadline.capped(RESOLVE_ATTEMPT)) {
+    match crate::refs::resolve_saved_ref::resolve_saved_ref(
+        adapter,
+        entry,
+        deadline.capped(RESOLVE_ATTEMPT),
+        lease,
+    ) {
         Ok(_) if deadline.is_expired() => ResolveAttemptOutcome::DeadlinePassed,
         Ok(handle) => ResolveAttemptOutcome::Resolved(handle),
         Err(error) => classify_error(error, deadline),

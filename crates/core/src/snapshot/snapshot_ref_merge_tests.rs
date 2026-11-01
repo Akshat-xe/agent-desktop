@@ -35,13 +35,13 @@ fn test_drilldown_refmap_matches_golden_fixture() {
     let _guard = HomeGuard::new();
     let mut seed = RefMap::new();
     seed.allocate(ref_entry_from_node(
-        &named("group", "Sidebar"),
+        &drilled("group", "Sidebar"),
         &source("Fixture"),
         None,
         &[0],
     ));
     seed.allocate(ref_entry_from_node(
-        &named("group", "Toolbar"),
+        &drilled("group", "Toolbar"),
         &source("Fixture"),
         None,
         &[1],

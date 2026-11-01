@@ -15,6 +15,7 @@ fn node(role: &str) -> AccessibilityNode {
 
 fn run_config(compact: bool, interactive_only: bool) -> RefAllocConfig<'static> {
     RefAllocConfig {
+        capture: None,
         options: crate::refs::ref_alloc_options::RefAllocOptions {
             include_bounds: false,
             interactive_only,
@@ -39,6 +40,56 @@ fn run_config(compact: bool, interactive_only: bool) -> RefAllocConfig<'static> 
 fn run_compact(tree: AccessibilityNode) -> AccessibilityNode {
     let mut refmap = RefMap::new();
     ref_alloc::allocate_refs(tree, &mut refmap, &run_config(true, false)).unwrap()
+}
+
+fn window_info() -> crate::WindowInfo {
+    crate::WindowInfo {
+        id: "w-1".into(),
+        title: "Test Window".into(),
+        app: "Fixture".into(),
+        pid: crate::ProcessId::new(1),
+        process_instance: Some("test-instance".into()),
+        bounds: None,
+        state: crate::WindowState::default(),
+    }
+}
+
+/// The whole-window observation a snapshot counts before it presents a cut: a
+/// boundary no longer hides children from it, so the census sees every node.
+fn uncut(mut tree: AccessibilityNode) -> AccessibilityNode {
+    tree.children_count = None;
+    tree.children = tree.children.into_iter().map(uncut).collect();
+    tree
+}
+
+/// Allocates over the capture proof a snapshot takes before it allocates. An
+/// entry that cannot re-identify itself by an element token is published only
+/// from such a proof, so a fixture that expects one needs this capture.
+fn run_captured(tree: AccessibilityNode) -> (AccessibilityNode, RefMap) {
+    run_captured_with(tree, run_config(false, false))
+}
+
+fn run_captured_with(
+    tree: AccessibilityNode,
+    config: RefAllocConfig<'_>,
+) -> (AccessibilityNode, RefMap) {
+    let observed = crate::adapter::observed_tree(
+        &crate::locator::live_locator::ObservationRoot::Window(&window_info()),
+        uncut(tree.clone()),
+    )
+    .expect("the fixture observes");
+    let proof = crate::refs::ref_capture_proof::CaptureProof::new(&observed);
+    let mut refmap = RefMap::new();
+    let result = ref_alloc::allocate_refs(
+        tree,
+        &mut refmap,
+        &RefAllocConfig {
+            capture: Some(&proof),
+            ..config
+        },
+    )
+    .expect("the tree allocates");
+    (result, refmap)
 }
 
 fn run_compact_interactive(tree: AccessibilityNode) -> AccessibilityNode {
@@ -177,14 +228,14 @@ fn test_skeleton_named_container_gets_ref() {
     let mut root = node("window");
     root.children = vec![container];
 
-    let mut refmap = RefMap::new();
-    let result = ref_alloc::allocate_refs(root, &mut refmap, &run_config(false, false)).unwrap();
+    let (result, refmap) = run_captured(root);
 
     assert!(result.children[0].ref_id.is_some());
     assert_eq!(refmap.len(), 1);
     let entry = refmap
         .get(result.children[0].ref_id.as_deref().unwrap())
         .unwrap();
+    assert!(entry.identity.unique_at_capture);
     assert!(entry.capabilities.available_actions.is_empty());
 }
 
@@ -212,6 +263,7 @@ fn test_skeleton_anchor_suppressed_in_drilldown() {
 
     let mut refmap = RefMap::new();
     let config = RefAllocConfig {
+        capture: None,
         options: crate::refs::ref_alloc_options::RefAllocOptions {
             include_bounds: false,
             interactive_only: false,
@@ -248,8 +300,7 @@ fn test_skeleton_described_container_gets_ref() {
     let mut root = node("window");
     root.children = vec![container];
 
-    let mut refmap = RefMap::new();
-    let result = ref_alloc::allocate_refs(root, &mut refmap, &run_config(false, false)).unwrap();
+    let (result, refmap) = run_captured(root);
 
     assert!(result.children[0].ref_id.is_some());
     assert_eq!(refmap.len(), 1);
@@ -295,8 +346,8 @@ fn test_skeleton_fixture_matches_golden() {
     root.identity.name = Some("Test Window".into());
     root.children = vec![sidebar, described, content];
 
-    let mut refmap = RefMap::new();
     let config = RefAllocConfig {
+        capture: None,
         options: crate::refs::ref_alloc_options::RefAllocOptions {
             include_bounds: false,
             interactive_only: false,
@@ -316,7 +367,7 @@ fn test_skeleton_fixture_matches_golden() {
             path_prefix: &[],
         },
     };
-    let result = ref_alloc::allocate_refs(root, &mut refmap, &config).unwrap();
+    let (result, refmap) = run_captured_with(root, config);
 
     assert_eq!(refmap.len(), 4, "should allocate 4 refs total");
     let result_value = serde_json::to_value(&result).unwrap();

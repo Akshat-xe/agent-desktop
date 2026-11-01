@@ -71,11 +71,7 @@ impl ObservationRequest {
         Self {
             deadline,
             max_raw_depth: 50,
-            max_logical_depth: if options.skeleton {
-                options.max_depth.min(3)
-            } else {
-                options.max_depth
-            },
+            max_logical_depth: Self::snapshot_logical_depth(options),
             surface: options.surface,
             evidence_plan: EvidencePlan::uniform(EvidenceRequirements::snapshot()),
             budget: ObservationBudget::default(),
@@ -83,6 +79,16 @@ impl ObservationRequest {
                 skeleton: options.skeleton,
                 force_renderer_accessibility: options.force_renderer_accessibility,
             },
+        }
+    }
+
+    /// The logical depth a snapshot request presents for these options: a
+    /// skeleton is an overview, so it never presents more than three levels.
+    pub fn snapshot_logical_depth(options: &TreeOptions) -> u8 {
+        if options.skeleton {
+            options.max_depth.min(3)
+        } else {
+            options.max_depth
         }
     }
 

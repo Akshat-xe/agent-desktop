@@ -5,6 +5,7 @@ use crate::context::CommandContext;
 use crate::ref_action::ref_action_context::RefActionContext;
 use crate::ref_action::ref_action_wait_support::{after_scroll, trace_scroll_error};
 use crate::refs::RefEntry;
+use crate::refs::resolve_saved_ref::resolve_saved_ref;
 use crate::{AdapterError, AppError, actionability};
 use serde_json::json;
 
@@ -70,9 +71,7 @@ pub(crate) fn dispatch_resolved(
         .filter(|instance| !instance.is_empty())
         .ok_or_else(|| AdapterError::stale_ref_because("target process instance is unavailable"))?;
     let expected_process = crate::ProcessIdentity::new(target.entry.process.pid, process_instance);
-    let mut handle = target
-        .adapter
-        .resolve_element_strict(target.entry, target.deadline)
+    let mut handle = resolve_saved_ref(target.adapter, target.entry, target.deadline, Some(lease))
         .map_err(mark_pre_dispatch_resolution_failure)
         .inspect_err(|error| {
             crate::ref_action::ref_action_wait_support::trace_resolve_error(
@@ -110,10 +109,10 @@ pub(crate) fn dispatch_resolved(
             };
             handle = match recovered {
                 Some(handle) => handle,
-                None => target
-                    .adapter
-                    .resolve_element_strict(target.entry, target.deadline)
-                    .map_err(after_scroll)?,
+                None => {
+                    resolve_saved_ref(target.adapter, target.entry, target.deadline, Some(lease))
+                        .map_err(after_scroll)?
+                }
             };
             let scrolled_target = ResolvedRefAction::new(target, &handle);
             stable_preflight(&scrolled_target, &request)

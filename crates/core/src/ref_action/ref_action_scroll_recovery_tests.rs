@@ -60,6 +60,7 @@ impl ObservationOps for ScrollRecoveryAdapter {
             available_actions: vec![capability::EXPAND.into()],
         })
     }
+    crate::adapter::saved_ref_scope!("menuitem", Some("File"));
 }
 
 impl ActionOps for ScrollRecoveryAdapter {

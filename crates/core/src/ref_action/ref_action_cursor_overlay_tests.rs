@@ -52,6 +52,7 @@ impl ObservationOps for CursorAdapter {
             offscreen: Some(false),
         }
     );
+    crate::adapter::saved_ref_scope!("textfield", Some("Run"));
 }
 
 impl ActionOps for CursorAdapter {
@@ -76,7 +77,6 @@ impl ActionOps for CursorAdapter {
 }
 
 impl InputOps for CursorAdapter {}
-
 impl SystemOps for CursorAdapter {
     crate::adapter::guarded_interaction_lease!();
     crate::adapter::exact_window_focus!();
@@ -114,6 +114,7 @@ fn entry() -> RefEntry {
             value: None,
             description: None,
             native_id: None,
+            unique_at_capture: true,
         },
         geometry: crate::RefGeometry {
             bounds_space: None,
@@ -126,7 +127,7 @@ fn entry() -> RefEntry {
         },
         source: crate::RefSource {
             source_app: Some("Fixture".into()),
-            source_window_id: Some("w-42".into()),
+            source_window_id: Some("w-1".into()),
             source_window_title: Some("Fixture".into()),
             source_window_bounds_hash: None,
             source_surface: SnapshotSurface::Window,
@@ -306,6 +307,7 @@ impl ObservationOps for NoOverlaySupportAdapter {
         "Run",
         [capability::CLICK, capability::SET_VALUE]
     );
+    crate::adapter::saved_ref_scope!("textfield", Some("Run"));
 }
 
 impl ActionOps for NoOverlaySupportAdapter {

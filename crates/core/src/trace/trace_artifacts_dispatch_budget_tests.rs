@@ -45,6 +45,7 @@ impl ObservationOps for DeadlineConsumingScreenshotAdapter {
         "Run",
         [crate::actions::capability::CLICK]
     );
+    crate::adapter::saved_ref_scope!("button", Some("Run"));
 }
 
 impl ActionOps for DeadlineConsumingScreenshotAdapter {

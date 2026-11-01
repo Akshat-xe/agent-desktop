@@ -70,6 +70,7 @@ impl ObservationOps for HitTestOutcomeAdapter {
     ) -> Result<HitTestResult, AdapterError> {
         self.outcome.clone()
     }
+    crate::adapter::saved_ref_scope!("button", Some("Target"));
 }
 
 impl ActionOps for HitTestOutcomeAdapter {}
@@ -91,6 +92,7 @@ fn ref_snapshot(pid: u32) -> String {
             value: None,
             description: None,
             native_id: None,
+            unique_at_capture: true,
         },
         geometry: crate::RefGeometry {
             bounds_space: None,
@@ -253,6 +255,7 @@ fn focus_ref_entry() -> RefEntry {
             value: None,
             description: None,
             native_id: None,
+            unique_at_capture: true,
         },
         geometry: crate::RefGeometry {
             bounds_space: None,

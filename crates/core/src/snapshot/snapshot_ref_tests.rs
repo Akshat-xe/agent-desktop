@@ -37,6 +37,12 @@ fn named(role: &str, name: &str) -> AccessibilityNode {
     n
 }
 
+fn drilled(role: &str, name: &str) -> AccessibilityNode {
+    let mut n = named(role, name);
+    n.identity.retained_object = Some(format!("axtok1:{role}-{name}"));
+    n
+}
+
 fn source(app: &'static str) -> crate::refs::ref_alloc_source::RefAllocSource<'static> {
     crate::refs::ref_alloc_source::RefAllocSource {
         pid: crate::ProcessId::new(42),
@@ -192,9 +198,14 @@ fn local_ref(ref_id: &str) -> String {
 
 fn seed_skeleton_refmap() -> RefMap {
     let mut map = RefMap::new();
-    let anchor = ref_entry_from_node(&named("group", "Sidebar"), &source("TestApp"), None, &[0]);
+    let anchor = ref_entry_from_node(&drilled("group", "Sidebar"), &source("TestApp"), None, &[0]);
     let _ = map.allocate(anchor);
-    let other = ref_entry_from_node(&named("button", "Toolbar"), &source("TestApp"), None, &[1]);
+    let other = ref_entry_from_node(
+        &drilled("button", "Toolbar"),
+        &source("TestApp"),
+        None,
+        &[1],
+    );
     let _ = map.allocate(other);
     map
 }
@@ -349,6 +360,35 @@ fn test_run_from_ref_re_drill_replaces_drill_refs_only() {
     assert!(
         on_disk.get(&local_ref(&first_button_ref)).is_none(),
         "first drill ref must be invalidated by remove_by_root_ref"
+    );
+}
+
+#[test]
+fn a_tokenless_drill_refuses_a_depth_no_walk_supports() {
+    use crate::snapshot::tokenless_capture_support as tokenless;
+
+    let _guard = HomeGuard::new();
+    let adapter = tokenless::CaptureAdapter::new(tokenless::anchored_window());
+    let captured = tokenless::snapshot(&adapter);
+    let (anchor_ref, _) = tokenless::named(&captured.refmap, "Sidebar");
+    let snapshot_id = tokenless::save(&captured.refmap);
+    let too_deep = TreeOptions {
+        max_depth: 51,
+        ..drill_opts()
+    };
+    let walks_before = adapter.captures();
+
+    let drill = run_from_ref(&adapter, &too_deep, &anchor_ref, Some(&snapshot_id));
+
+    match drill {
+        Ok(_) => panic!("a depth no snapshotted walk reaches must be refused"),
+        Err(AppError::Adapter(error)) => assert_eq!(error.code, crate::ErrorCode::InvalidArgs),
+        Err(other) => panic!("expected Adapter(InvalidArgs), got {other:?}"),
+    }
+    assert_eq!(
+        adapter.captures(),
+        walks_before,
+        "the refusal must land before the drill observes anything"
     );
 }
 

@@ -32,6 +32,7 @@ fn snapshot_with_ref(role: &str, available_actions: &[&str]) -> String {
             value: None,
             description: None,
             native_id: None,
+            unique_at_capture: true,
         },
         geometry: crate::RefGeometry {
             bounds_space: None,
@@ -95,6 +96,7 @@ impl ObservationOps for StaleThenOkAdapter {
             crate::actions::capability::SET_VALUE
         ]
     );
+    crate::adapter::saved_ref_scope!(nodes: &[("button", Some("Target"), None), ("textfield", Some("Target"), None)]);
 }
 
 impl ActionOps for StaleThenOkAdapter {
@@ -156,6 +158,7 @@ impl ObservationOps for PolicyCaptureAdapter {
             offscreen: Some(false),
         }
     );
+    crate::adapter::saved_ref_scope!(nodes: &[("button", Some("Target"), None), ("textfield", Some("Target"), None)]);
 }
 
 impl ActionOps for PolicyCaptureAdapter {

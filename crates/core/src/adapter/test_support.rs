@@ -149,6 +149,7 @@ pub(crate) fn minimal_ref_entry(role: &str, name: Option<&str>) -> crate::RefEnt
             value: None,
             description: None,
             native_id: None,
+            unique_at_capture: true,
         },
         geometry: crate::RefGeometry {
             bounds_space: None,
@@ -250,12 +251,17 @@ pub(crate) fn observed_tree(
 
     fn subtree(node: crate::AccessibilityNode) -> ObservedSubtree {
         let native_id = node.identity.native_id.clone();
+        let retained = node.identity.retained_object.clone();
+        let typed = IdentifierEvidence::typed(native_id, Some(0), true);
         let evidence = LocatorEvidence {
             role: LocatorField::Known(node.role),
             name: field(node.identity.name),
             description: field(node.identity.description),
             value: field(node.identity.value),
-            identifiers: IdentifierEvidence::typed(native_id, Some(0), true),
+            identifiers: match retained {
+                Some(token) => typed.with_retained_object(token),
+                None => typed,
+            },
             states: LocatorField::Known(node.presentation.states),
             ref_evidence: LocatorRefEvidence {
                 window_bounds: LocatorField::Absent,

@@ -11,25 +11,31 @@ pub(crate) fn materialize_refmap(
     query: &LocatorQuery,
     selected: Option<&[usize]>,
 ) -> Result<(RefMap, bool), crate::AdapterError> {
-    let source = &tree.source;
-    let nodes = &mut tree.nodes;
     let mut refmap = RefMap::new();
     let mut complete = true;
-    let indices = selected
-        .map(|indices| indices.to_vec())
-        .unwrap_or_else(|| (0..nodes.len()).collect());
-    for index in indices {
-        let node = &nodes[index];
-        let (addressable, known) = addressability(&node.evidence);
-        complete &= known;
-        if !addressable {
-            continue;
+    let indices: Vec<usize> = selected
+        .map(<[usize]>::to_vec)
+        .unwrap_or_else(|| (0..tree.nodes.len()).collect());
+    let mut planned = Vec::with_capacity(indices.len());
+    {
+        let proof = crate::refs::ref_capture_proof::CaptureProof::new(tree);
+        for index in indices {
+            let node = &tree.nodes[index];
+            let (addressable, known) = addressability(&node.evidence);
+            complete &= known;
+            if !addressable {
+                continue;
+            }
+            let mut entry = ref_entry(node, &tree.source, query);
+            entry.identity.unique_at_capture = proof.proves_node(&entry, index);
+            planned.push((index, entry));
         }
-        let entry = ref_entry(node, source, query);
+    }
+    for (index, entry) in planned {
         let ref_id = refmap.try_allocate(entry).map_err(|error| {
             crate::AdapterError::new(crate::ErrorCode::InvalidArgs, error.to_string())
         })?;
-        nodes[index].ref_id = Some(ref_id);
+        tree.nodes[index].ref_id = Some(ref_id);
     }
     Ok((refmap, complete))
 }
@@ -93,6 +99,7 @@ pub(crate) fn ref_entry(
             value: node.evidence.value.meaningful_string(),
             description: node.evidence.description.meaningful_string(),
             native_id: identifier,
+            unique_at_capture: false,
         },
         geometry: crate::RefGeometry {
             bounds,
