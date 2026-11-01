@@ -70,17 +70,19 @@ pub(crate) fn dispatch_resolved(
         .filter(|instance| !instance.is_empty())
         .ok_or_else(|| AdapterError::stale_ref_because("target process instance is unavailable"))?;
     let expected_process = crate::ProcessIdentity::new(target.entry.process.pid, process_instance);
-    let mut handle = target
-        .adapter
-        .resolve_element_strict(target.entry, target.deadline)
-        .map_err(mark_pre_dispatch_resolution_failure)
-        .inspect_err(|error| {
-            crate::ref_action::ref_action_wait_support::trace_resolve_error(
-                target.context,
-                target.ref_id,
-                error,
-            )
-        })?;
+    let mut handle = crate::refs::resolve_saved_ref::resolve_saved_ref(
+        target.adapter,
+        target.entry,
+        target.deadline,
+    )
+    .map_err(mark_pre_dispatch_resolution_failure)
+    .inspect_err(|error| {
+        crate::ref_action::ref_action_wait_support::trace_resolve_error(
+            target.context,
+            target.ref_id,
+            error,
+        )
+    })?;
     crate::ref_action::ref_action_wait_support::trace_resolve_ok(target.context, target.ref_id);
     let initial_target = ResolvedRefAction::new(target, &handle);
     let preflight = match stable_preflight(&initial_target, &request) {
@@ -110,10 +112,12 @@ pub(crate) fn dispatch_resolved(
             };
             handle = match recovered {
                 Some(handle) => handle,
-                None => target
-                    .adapter
-                    .resolve_element_strict(target.entry, target.deadline)
-                    .map_err(after_scroll)?,
+                None => crate::refs::resolve_saved_ref::resolve_saved_ref(
+                    target.adapter,
+                    target.entry,
+                    target.deadline,
+                )
+                .map_err(after_scroll)?,
             };
             let scrolled_target = ResolvedRefAction::new(target, &handle);
             stable_preflight(&scrolled_target, &request)

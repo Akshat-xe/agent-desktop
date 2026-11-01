@@ -130,7 +130,7 @@ fn finish<T>(
     result.map_err(|error| map_error(attribute, error))
 }
 
-fn map_error(attribute: &str, error: i32) -> AdapterError {
+pub(crate) fn map_error(attribute: &str, error: i32) -> AdapterError {
     use accessibility_sys::{
         kAXErrorAPIDisabled, kAXErrorCannotComplete, kAXErrorInvalidUIElement,
     };

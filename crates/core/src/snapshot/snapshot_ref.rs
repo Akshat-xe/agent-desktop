@@ -54,7 +54,7 @@ pub fn run_from_ref_with_context(
 
     let deadline = crate::Deadline::after(timeout_ms)?;
     let window = resolve_result_window(&entry, adapter, deadline)?;
-    let handle = adapter.resolve_element_strict(&entry, deadline)?;
+    let handle = crate::refs::resolve_saved_ref::resolve_saved_ref(adapter, &entry, deadline)?;
 
     let observation_options = opts.with_ref_identity_bounds();
     let raw_tree = crate::tree::renderer_accessibility::observe_tree(
@@ -92,6 +92,7 @@ pub fn run_from_ref_with_context(
             root_ref_id: Some(&local_root_ref),
             path_prefix: path_prefix.as_slice(),
         },
+        observation_complete: false,
     };
 
     let (mut tree, refmap) = store.update_existing_snapshot(

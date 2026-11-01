@@ -8,4 +8,5 @@ pub(crate) struct RefAllocConfig<'a> {
     pub(crate) options: RefAllocOptions,
     pub(crate) source: RefAllocSource<'a>,
     pub(crate) scope: RefAllocScope<'a>,
+    pub(crate) observation_complete: bool,
 }

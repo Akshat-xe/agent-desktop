@@ -331,10 +331,12 @@ pub(crate) mod ref_alloc_config;
 pub(crate) mod ref_alloc_options;
 pub(crate) mod ref_alloc_scope;
 pub(crate) mod ref_alloc_source;
+pub(crate) mod ref_alloc_unique;
 pub(crate) mod ref_allocation;
 pub(crate) mod ref_capabilities;
 pub(crate) mod ref_entry;
 pub(crate) mod ref_entry_identity;
+pub(crate) mod ref_full_predicate;
 pub(crate) mod ref_geometry;
 pub mod ref_identity;
 pub(crate) mod ref_identity_match;
@@ -350,6 +352,7 @@ pub(crate) mod refs_test_support;
 pub(crate) mod refs_validate;
 pub(crate) mod resolve_attempt_outcome;
 pub mod resolve_errors;
+pub mod resolve_saved_ref;
 #[cfg(test)]
 #[path = "refs_tests.rs"]
 mod tests;

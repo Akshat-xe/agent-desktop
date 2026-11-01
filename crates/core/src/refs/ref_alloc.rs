@@ -33,6 +33,7 @@ pub(crate) fn ref_entry_from_node(
                 .native_id
                 .clone()
                 .filter(|id| !id.value.trim().is_empty()),
+            unique_at_capture: false,
         },
         geometry: crate::RefGeometry {
             bounds,
@@ -175,17 +176,40 @@ pub(crate) fn allocate_refs(
     refmap: &mut RefMap,
     config: &RefAllocConfig,
 ) -> Result<AccessibilityNode, crate::AppError> {
-    let mut skeleton_anchors = HashSet::new();
-    if config.scope.root_ref_id.is_none() {
-        plan_skeleton_anchors(&node, &mut Vec::new(), &mut skeleton_anchors);
-    }
+    let plan = AllocationPlan::new(&node, config);
     allocate_refs_at_path(
         node,
         refmap,
         config,
         &mut config.scope.path_prefix.to_vec(),
-        &skeleton_anchors,
+        &plan,
     )
+}
+
+/// What one allocation decides once for every node it visits: which boundary
+/// nodes anchor a skeleton, and which entries a complete capture found exactly
+/// one match for.
+struct AllocationPlan {
+    skeleton_anchors: HashSet<Vec<usize>>,
+    unique_entries: HashSet<Vec<usize>>,
+}
+
+impl AllocationPlan {
+    fn new(node: &AccessibilityNode, config: &RefAllocConfig) -> Self {
+        let mut skeleton_anchors = HashSet::new();
+        if config.scope.root_ref_id.is_none() {
+            plan_skeleton_anchors(node, &mut Vec::new(), &mut skeleton_anchors);
+        }
+        let unique_entries = if config.observation_complete && config.scope.root_ref_id.is_none() {
+            crate::refs::ref_alloc_unique::unique_capture_paths(node)
+        } else {
+            HashSet::new()
+        };
+        Self {
+            skeleton_anchors,
+            unique_entries,
+        }
+    }
 }
 
 fn plan_skeleton_anchors(
@@ -247,7 +271,7 @@ fn allocate_refs_at_path(
     refmap: &mut RefMap,
     config: &RefAllocConfig,
     path: &mut Vec<usize>,
-    skeleton_anchors: &HashSet<Vec<usize>>,
+    plan: &AllocationPlan,
 ) -> Result<AccessibilityNode, crate::AppError> {
     let node_is_ref_able = is_ref_able(&node);
 
@@ -259,13 +283,14 @@ fn allocate_refs_at_path(
             path,
         );
         entry.scope.path_is_absolute = config.scope.root_ref_id.is_some();
+        entry.identity.unique_at_capture = plan.unique_entries.contains(path);
         if !config.options.include_bounds && has_meaningful_identity(&entry) {
             entry.geometry.bounds = None;
         }
         node.ref_id = allocate_observed_ref(refmap, entry)?;
     }
 
-    let is_skeleton_anchor = !node_is_ref_able && skeleton_anchors.contains(path.as_slice());
+    let is_skeleton_anchor = !node_is_ref_able && plan.skeleton_anchors.contains(path.as_slice());
 
     if is_skeleton_anchor {
         let mut entry = ref_entry_from_node(&node, &config.source, None, path);
@@ -284,7 +309,7 @@ fn allocate_refs_at_path(
     for (idx, child) in node.children.into_iter().enumerate() {
         let collapsible = config.options.compact && is_collapsible(&child);
         path.push(idx);
-        let child = allocate_refs_at_path(child, refmap, config, path, skeleton_anchors)?;
+        let child = allocate_refs_at_path(child, refmap, config, path, plan)?;
         path.pop();
         if collapsible {
             if let Some(child) = child.children.into_iter().next() {

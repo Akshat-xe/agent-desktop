@@ -356,14 +356,14 @@ mod retained_tests {
     }
 
     #[test]
-    fn missing_retained_identity_cannot_pass_hydration_through_geometry() {
+    fn a_positional_retained_object_is_not_hydration_identity() {
         let mut observed = evidence("textfield", None);
         observed.identifiers = observed.identifiers.with_retained_object("host:1".into());
         let observed = node(0, observed, vec![], &[]);
         let tree = tree(vec![observed.clone()], vec![0], true);
         let entry =
             super::super::materialize::ref_entry(&observed, &tree.source, &LocatorQuery::default());
-        assert!(anchor_matches(&entry, &observed));
+        assert!(!anchor_matches(&entry, &observed));
         let mut replacement = observed;
         replacement.evidence.identifiers = crate::IdentifierEvidence::absent();
         assert!(!anchor_matches(&entry, &replacement));

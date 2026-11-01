@@ -48,6 +48,7 @@ impl ObservationOps for StaleThenOkAdapter {
             offscreen: Some(false),
         }
     );
+    crate::adapter::saved_ref_scope!("textfield", Some("Target"));
 }
 
 impl ActionOps for StaleThenOkAdapter {
@@ -200,7 +201,7 @@ fn windowed_snapshot_id() -> String {
     entry.geometry.bounds_hash = bounds.bounds_hash();
     entry.capabilities.available_actions = vec!["SetValue".into()];
     entry.source.source_app = Some("Fixture".into());
-    entry.source.source_window_id = Some("w-42".into());
+    entry.source.source_window_id = Some("w-1".into());
     entry.source.source_window_title = Some("Fixture".into());
     let mut refmap = crate::refs::RefMap::new();
     refmap.allocate(entry);

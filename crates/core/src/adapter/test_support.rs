@@ -149,6 +149,7 @@ pub(crate) fn minimal_ref_entry(role: &str, name: Option<&str>) -> crate::RefEnt
             value: None,
             description: None,
             native_id: None,
+            unique_at_capture: true,
         },
         geometry: crate::RefGeometry {
             bounds_space: None,

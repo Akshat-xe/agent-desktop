@@ -15,6 +15,7 @@ fn node(role: &str) -> AccessibilityNode {
 
 fn run_config(compact: bool, interactive_only: bool) -> RefAllocConfig<'static> {
     RefAllocConfig {
+        observation_complete: false,
         options: crate::refs::ref_alloc_options::RefAllocOptions {
             include_bounds: false,
             interactive_only,
@@ -212,6 +213,7 @@ fn test_skeleton_anchor_suppressed_in_drilldown() {
 
     let mut refmap = RefMap::new();
     let config = RefAllocConfig {
+        observation_complete: false,
         options: crate::refs::ref_alloc_options::RefAllocOptions {
             include_bounds: false,
             interactive_only: false,
@@ -297,6 +299,7 @@ fn test_skeleton_fixture_matches_golden() {
 
     let mut refmap = RefMap::new();
     let config = RefAllocConfig {
+        observation_complete: false,
         options: crate::refs::ref_alloc_options::RefAllocOptions {
             include_bounds: false,
             interactive_only: false,

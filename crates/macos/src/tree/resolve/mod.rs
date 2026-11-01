@@ -48,7 +48,6 @@ pub(crate) fn resolve_locator_anchor_with_deadline(
 
 #[cfg(target_os = "macos")]
 fn verify_process_instance(entry: &RefEntry) -> Result<(), AdapterError> {
-    super::resolve::retained::validate(entry.identity.retained_object.as_deref())?;
     let Some(instance) = entry.process.process_instance.as_deref() else {
         return Err(AdapterError::stale_ref_because(
             "Saved target has no process instance identity",
@@ -72,6 +71,15 @@ fn resolve_once(entry: &RefEntry, deadline: Instant) -> Result<NativeHandle, Ada
     let started = Instant::now();
     crate::tree::locator_deadline::remaining(deadline)?;
     let mut read_context = ResolveReadContext::new(deadline);
+    match super::resolve::retained_resolve::resolve_saved_token(entry, deadline) {
+        Ok(Some(handle)) => {
+            return finish_resolution(Ok(handle), &mut read_context, started, "remote_token", true);
+        }
+        Ok(None) => {}
+        Err(error) => {
+            return finish_resolution(Err(error), &mut read_context, started, "remote_token", true);
+        }
+    }
     if can_use_path_fast_path(entry) {
         let roots = match candidate_roots(entry, &mut read_context) {
             Ok(roots) => roots,
@@ -304,7 +312,7 @@ pub(super) mod resolve_roots;
 pub(super) mod resolve_search;
 pub(super) mod resolve_source_app;
 pub(crate) mod retained;
-pub(super) mod retained_store;
+pub(super) mod retained_resolve;
 #[cfg(test)]
 #[path = "resolve_tests.rs"]
 mod tests;

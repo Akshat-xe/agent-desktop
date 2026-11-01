@@ -70,6 +70,10 @@ impl ObservationOps for LiveStateAdapter {
         }
         Ok(*self.bounds.lock().unwrap())
     }
+    crate::adapter::saved_ref_scope!(nodes: &[
+        ("checkbox", Some("Target"), None),
+        ("cell", Some("Disclosure"), None),
+    ]);
 }
 
 impl ActionOps for LiveStateAdapter {}
@@ -97,6 +101,7 @@ fn entry(states: Vec<String>, value: Option<&str>, actions: Vec<&str>) -> RefEnt
             value: value.map(str::to_string),
             description: None,
             native_id: None,
+            unique_at_capture: true,
         },
         geometry: crate::RefGeometry {
             bounds_space: None,

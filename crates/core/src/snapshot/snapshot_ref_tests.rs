@@ -37,6 +37,12 @@ fn named(role: &str, name: &str) -> AccessibilityNode {
     n
 }
 
+fn drilled(role: &str, name: &str) -> AccessibilityNode {
+    let mut n = named(role, name);
+    n.identity.retained_object = Some(format!("axtok1:{role}-{name}"));
+    n
+}
+
 fn source(app: &'static str) -> crate::refs::ref_alloc_source::RefAllocSource<'static> {
     crate::refs::ref_alloc_source::RefAllocSource {
         pid: crate::ProcessId::new(42),
@@ -192,9 +198,14 @@ fn local_ref(ref_id: &str) -> String {
 
 fn seed_skeleton_refmap() -> RefMap {
     let mut map = RefMap::new();
-    let anchor = ref_entry_from_node(&named("group", "Sidebar"), &source("TestApp"), None, &[0]);
+    let anchor = ref_entry_from_node(&drilled("group", "Sidebar"), &source("TestApp"), None, &[0]);
     let _ = map.allocate(anchor);
-    let other = ref_entry_from_node(&named("button", "Toolbar"), &source("TestApp"), None, &[1]);
+    let other = ref_entry_from_node(
+        &drilled("button", "Toolbar"),
+        &source("TestApp"),
+        None,
+        &[1],
+    );
     let _ = map.allocate(other);
     map
 }

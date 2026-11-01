@@ -93,6 +93,7 @@ pub(crate) fn ref_entry(
             value: node.evidence.value.meaningful_string(),
             description: node.evidence.description.meaningful_string(),
             native_id: identifier,
+            unique_at_capture: false,
         },
         geometry: crate::RefGeometry {
             bounds,

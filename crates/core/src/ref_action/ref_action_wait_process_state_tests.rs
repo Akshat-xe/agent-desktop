@@ -26,6 +26,7 @@ fn entry() -> RefEntry {
             value: None,
             description: None,
             native_id: None,
+            unique_at_capture: true,
         },
         geometry: crate::RefGeometry {
             bounds_space: None,
@@ -69,6 +70,7 @@ impl ObservationOps for UnresponsiveProcessAdapter {
     ) -> Result<NativeHandle, AdapterError> {
         Err(AdapterError::stale_ref("@e1"))
     }
+    crate::adapter::saved_ref_scope!("button", Some("Run"));
 }
 
 fn app(name: &str) -> AppInfo {
@@ -163,6 +165,7 @@ impl ObservationOps for RecycledPidAdapter {
     ) -> Result<NativeHandle, AdapterError> {
         Err(AdapterError::stale_ref("@e1"))
     }
+    crate::adapter::saved_ref_scope!("button", Some("Run"));
 }
 
 impl ActionOps for RecycledPidAdapter {}
@@ -241,6 +244,7 @@ impl ObservationOps for TerminatedProcessAdapter {
     ) -> Result<NativeHandle, AdapterError> {
         Err(AdapterError::stale_ref("@e1"))
     }
+    crate::adapter::saved_ref_scope!("button", Some("Run"));
 }
 
 impl ActionOps for TerminatedProcessAdapter {}

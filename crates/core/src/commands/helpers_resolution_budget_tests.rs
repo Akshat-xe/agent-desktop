@@ -18,6 +18,7 @@ impl ObservationOps for BudgetAdapter {
             .push((deadline.timeout_ms(), deadline.was_capped()));
         Ok(NativeHandle::null())
     }
+    crate::adapter::saved_ref_scope!("button", Some("OK"));
 }
 impl ActionOps for BudgetAdapter {}
 impl InputOps for BudgetAdapter {}

@@ -32,6 +32,7 @@ pub(super) fn entry(
             value: None,
             description: None,
             native_id: None,
+            unique_at_capture: false,
         },
         geometry: RefGeometry {
             bounds_space: None,

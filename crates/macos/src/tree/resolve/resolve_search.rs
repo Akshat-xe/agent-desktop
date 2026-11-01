@@ -323,6 +323,9 @@ pub(in crate::tree) fn native_identifier_reused_by_different_role(
             .any(|identifier| identifier == expected)
 }
 
+/// Whether bounds alone may stand in for an element whose identity is unknown.
+/// A ref that recorded a token never qualifies: only that token may match it,
+/// which `has_meaningful_identity` already enforces.
 fn provisional_geometry_candidate(entry: &RefEntry) -> bool {
     entry.geometry.bounds_hash.is_some()
         && !agent_desktop_core::refs::ref_identity::has_meaningful_identity(entry)
@@ -380,3 +383,7 @@ fn mark_incomplete(context: &mut CollectContext<'_>, error: AdapterError) {
         *context.incomplete = Some(error);
     }
 }
+
+#[cfg(all(test, target_os = "macos"))]
+#[path = "resolve_search_tests.rs"]
+mod tests;

@@ -69,6 +69,7 @@ pub fn build(
             root_ref_id: None,
             path_prefix: &[],
         },
+        observation_complete: complete,
     };
     let mut tree = ref_alloc::allocate_refs(raw_tree, &mut refmap, &config)?;
 
@@ -351,3 +352,7 @@ mod window_tests;
 #[cfg(test)]
 #[path = "snapshot_surface_window_tests.rs"]
 mod surface_window_tests;
+
+#[cfg(test)]
+#[path = "snapshot_unique_capture_tests.rs"]
+mod unique_capture_tests;

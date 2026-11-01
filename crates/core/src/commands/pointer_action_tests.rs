@@ -58,6 +58,7 @@ fn point_ref_snapshot() -> String {
             value: None,
             description: None,
             native_id: None,
+            unique_at_capture: true,
         },
         geometry: crate::RefGeometry {
             bounds_space: None,
@@ -124,6 +125,7 @@ impl ObservationOps for TerminalAfterRetryAdapter {
             .with_suggestion("Run 'snapshot' to refresh, then retry with the updated ref.")
             .with_disposition(DeliverySemantics::not_delivered()))
     }
+    crate::adapter::saved_ref_scope!("button", Some("Target"));
 }
 
 impl ActionOps for TerminalAfterRetryAdapter {}
@@ -192,6 +194,7 @@ impl ObservationOps for UnresponsiveThenReadyAdapter {
     ) -> Result<HitTestResult, AdapterError> {
         Ok(HitTestResult::ReachesTarget)
     }
+    crate::adapter::saved_ref_scope!("button", Some("Target"));
 }
 
 impl ActionOps for UnresponsiveThenReadyAdapter {}
@@ -245,6 +248,7 @@ impl ObservationOps for ZeroSizeUnscrollableAdapter {
             height: 0.0,
         }))
     }
+    crate::adapter::saved_ref_scope!("button", Some("Target"));
 }
 
 impl ActionOps for ZeroSizeUnscrollableAdapter {

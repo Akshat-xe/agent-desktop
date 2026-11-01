@@ -75,7 +75,7 @@ pub(crate) fn resolve_handle_within_deadline(
     if deadline.is_expired() {
         return Err(deadline.timeout_error());
     }
-    adapter.resolve_element_strict(entry, deadline)
+    crate::refs::resolve_saved_ref::resolve_saved_ref(adapter, entry, deadline)
 }
 
 pub(crate) fn execute_ref_action_with_context(

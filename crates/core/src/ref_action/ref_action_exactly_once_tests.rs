@@ -126,6 +126,7 @@ impl ObservationOps for DispatchGuardAdapter {
     ) -> Result<crate::adapter::hit_test::HitTestResult, AdapterError> {
         Ok(crate::adapter::hit_test::HitTestResult::ReachesTarget)
     }
+    crate::adapter::saved_ref_scope!("button", Some("Run"));
 }
 
 impl ActionOps for DispatchGuardAdapter {
@@ -206,6 +207,7 @@ fn entry() -> RefEntry {
             value: None,
             description: None,
             native_id: None,
+            unique_at_capture: true,
         },
         geometry: crate::RefGeometry {
             bounds_space: None,
