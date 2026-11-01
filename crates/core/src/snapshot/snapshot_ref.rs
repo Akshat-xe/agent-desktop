@@ -169,14 +169,18 @@ pub(crate) fn resolve_result_window(
             deadline,
         );
     };
-    let candidates = adapter
-        .list_windows(
+    let listed = if super::is_shell_surface(entry.source.source_surface) {
+        vec![adapter.resolve_shell_surface(entry.source.source_surface, deadline)?]
+    } else {
+        adapter.list_windows(
             &WindowFilter {
                 focused_only: false,
                 app: entry.source.source_app.clone(),
             },
             deadline,
         )?
+    };
+    let candidates = listed
         .into_iter()
         .filter(|window| window.id == window_id && window.pid == entry.process.pid)
         .collect();

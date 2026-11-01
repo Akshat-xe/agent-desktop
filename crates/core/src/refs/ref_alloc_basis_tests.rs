@@ -143,6 +143,19 @@ fn a_unique_identifier_is_the_native_id_basis() {
         basis_of(&tree, &refmap, &[1]),
         Some(IdentityBasis::Ambiguous)
     );
+    let mixed = window_with(vec![
+        entry("button", Some("Save"), Some("save-button"), None),
+        entry("button", Some("Save"), None, None),
+    ]);
+    let (tree, refmap) = run(mixed, &allocation(None));
+    assert_eq!(
+        basis_of(&tree, &refmap, &[0]),
+        Some(IdentityBasis::NativeId)
+    );
+    assert_eq!(
+        basis_of(&tree, &refmap, &[1]),
+        Some(IdentityBasis::Ambiguous)
+    );
     let distinct = window_with(vec![
         entry("button", Some("Save"), None, None),
         entry("button", Some("Cancel"), None, None),

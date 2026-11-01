@@ -132,7 +132,7 @@ pub(crate) fn resolve_window_for_surface(
 /// the kinds an adapter may resolve directly, with no owning application and
 /// no window in the inventory. Derived from the [`SnapshotSurface`] variant
 /// alone - never from a platform check - so the seam stays platform-neutral.
-fn is_shell_surface(surface: crate::SnapshotSurface) -> bool {
+pub(crate) fn is_shell_surface(surface: crate::SnapshotSurface) -> bool {
     matches!(
         surface,
         crate::SnapshotSurface::StartMenu

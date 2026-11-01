@@ -4,6 +4,7 @@ use crate::adapter::{ActionOps, InputOps, ObservationOps, SystemOps};
 struct CensusAdapter {
     window_instance: &'static str,
     other_window_focused: bool,
+    shell_only: bool,
 }
 
 impl ObservationOps for CensusAdapter {
@@ -12,10 +13,18 @@ impl ObservationOps for CensusAdapter {
         _filter: &crate::WindowFilter,
         _deadline: Deadline,
     ) -> Result<Vec<crate::WindowInfo>, AdapterError> {
-        let mut window = super::super::test_support::window();
-        window.pid = crate::ProcessId::new(1);
-        window.process_instance = Some(self.window_instance.into());
-        Ok(vec![window])
+        if self.shell_only {
+            return Ok(vec![]);
+        }
+        Ok(vec![self.window()])
+    }
+
+    fn resolve_shell_surface(
+        &self,
+        _surface: crate::SnapshotSurface,
+        _deadline: Deadline,
+    ) -> Result<crate::WindowInfo, AdapterError> {
+        Ok(self.window())
     }
 
     fn resolve_locator_anchor(
@@ -52,6 +61,15 @@ impl ObservationOps for CensusAdapter {
     }
 }
 
+impl CensusAdapter {
+    fn window(&self) -> crate::WindowInfo {
+        let mut window = super::super::test_support::window();
+        window.pid = crate::ProcessId::new(1);
+        window.process_instance = Some(self.window_instance.into());
+        window
+    }
+}
+
 impl ActionOps for CensusAdapter {}
 impl InputOps for CensusAdapter {}
 impl SystemOps for CensusAdapter {}
@@ -76,11 +94,13 @@ fn a_reused_pid_and_window_id_in_a_new_process_never_resolves() {
     let live = CensusAdapter {
         window_instance: "test-instance",
         other_window_focused: false,
+        shell_only: false,
     };
     assert!(resolve(&live, &entry).is_ok());
     let replaced = CensusAdapter {
         window_instance: "replacement-instance",
         other_window_focused: false,
+        shell_only: false,
     };
     assert_eq!(
         resolve(&replaced, &entry).err().unwrap().code,
@@ -94,6 +114,26 @@ fn a_focused_census_ref_replays_over_its_window_after_focus_moves() {
     let adapter = CensusAdapter {
         window_instance: "test-instance",
         other_window_focused: true,
+        shell_only: false,
     };
     assert!(resolve(&adapter, &entry).is_ok());
+}
+
+#[test]
+fn a_shell_surface_census_ref_replays_over_the_shell_window() {
+    let entry = census_entry(crate::SnapshotSurface::Taskbar);
+    let adapter = CensusAdapter {
+        window_instance: "test-instance",
+        other_window_focused: false,
+        shell_only: true,
+    };
+    assert!(resolve(&adapter, &entry).is_ok());
+    let replaced = CensusAdapter {
+        window_instance: "replacement-instance",
+        ..adapter
+    };
+    assert_eq!(
+        resolve(&replaced, &entry).err().unwrap().code,
+        crate::ErrorCode::StaleRef
+    );
 }

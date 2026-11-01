@@ -78,13 +78,11 @@ fn execute_uses_live_locator_tree_and_persists_its_full_refmap() {
         .as_str()
         .expect("find refs must carry their snapshot namespace");
     assert_eq!(matches[0]["ref_id"], format!("@{snapshot_id}:e1"));
+    let stored = RefStore::new().unwrap().load_snapshot(snapshot_id).unwrap();
+    assert_eq!(stored.len(), 1);
     assert_eq!(
-        RefStore::new()
-            .unwrap()
-            .load_snapshot(snapshot_id)
-            .unwrap()
-            .len(),
-        1
+        stored.get("@e1").unwrap().identity.basis,
+        Some(crate::IdentityBasis::Name)
     );
     assert_eq!(RefStore::new().unwrap().load_latest().unwrap().len(), 1);
 }
