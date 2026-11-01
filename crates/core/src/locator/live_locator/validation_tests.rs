@@ -165,6 +165,7 @@ fn element_root_derives_surface_with_relative_depth_budgets() {
         scope: crate::RefScope {
             root_ref: None,
             path_is_absolute: true,
+            census_depth: None,
             path: smallvec::smallvec![3, 4, 5],
         },
     };

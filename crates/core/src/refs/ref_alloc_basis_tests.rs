@@ -26,6 +26,7 @@ fn allocation_with(root_ref_id: Option<&str>, complete: bool) -> RefAllocConfig<
             include_bounds: true,
             interactive_only: false,
             compact: false,
+            skeleton_depth: None,
         },
         source: crate::refs::ref_alloc_source::RefAllocSource {
             pid: crate::ProcessId::new(7),

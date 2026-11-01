@@ -79,10 +79,27 @@ impl ObservationOps for DrillAdapter {
     fn observe_tree(
         &self,
         root: ObservationRoot<'_>,
-        _request: &ObservationRequest,
+        request: &ObservationRequest,
     ) -> Result<ObservedTree, AdapterError> {
+        fn prune(node: &mut AccessibilityNode, depth: u8, limit: u8) {
+            if depth == limit {
+                if !node.children.is_empty() {
+                    node.children_count = Some(node.children.len() as u32);
+                }
+                node.children.clear();
+            }
+            for child in &mut node.children {
+                prune(child, depth + 1, limit);
+            }
+        }
         let node = match root {
-            ObservationRoot::Window(_) => self.tree.lock().unwrap().clone(),
+            ObservationRoot::Window(_) => {
+                let mut tree = self.tree.lock().unwrap().clone();
+                if request.observation_mode.skeleton {
+                    prune(&mut tree, 0, request.max_logical_depth);
+                }
+                tree
+            }
             ObservationRoot::Element { handle, .. } => {
                 self.at(handle.downcast_ref::<Vec<usize>>().unwrap())?
             }
@@ -227,7 +244,7 @@ pub(crate) fn save_map() -> (String, crate::refs::RefMap) {
     root.process.pid = ProcessId::new(42);
     root.source.source_app = Some("TestApp".into());
     root.source.source_window_id = Some("w-42".into());
-    root.identity.basis = Some(IdentityBasis::Ambiguous);
+    root.identity.basis = Some(IdentityBasis::Name);
     root.scope.path = smallvec::smallvec![0];
     map.allocate(root.clone());
     let mut target = root;

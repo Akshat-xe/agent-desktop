@@ -63,6 +63,7 @@ pub(crate) fn ref_entry_from_node(
         scope: crate::RefScope {
             root_ref,
             path_is_absolute: false,
+            census_depth: None,
             path: smallvec::SmallVec::from_slice(path),
         },
     }
@@ -282,7 +283,14 @@ fn allocate_refs_at_path(
     if is_skeleton_anchor {
         let mut entry = ref_entry_from_node(&node, &config.source, None, path);
         entry.capabilities.available_actions = vec![];
-        entry.identity.basis = Some(plan.basis(&entry.identity));
+        if let Some(depth) = config.options.skeleton_depth {
+            entry.identity.basis = Some(plan.anchor_basis(&entry.identity));
+            if crate::refs::identity_basis_gate::requires_live_uniqueness(&entry.identity) {
+                entry.scope.census_depth = Some(depth);
+            }
+        } else {
+            entry.identity.basis = Some(plan.basis(&entry.identity));
+        }
         if !config.options.include_bounds && has_meaningful_identity(&entry) {
             entry.geometry.bounds = None;
         }

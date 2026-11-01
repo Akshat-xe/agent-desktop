@@ -36,6 +36,7 @@ fn action_availability_makes_toggle_and_expand_applicable() {
         scope: crate::RefScope {
             root_ref: None,
             path_is_absolute: false,
+            census_depth: None,
             path: smallvec::SmallVec::new(),
         },
     });

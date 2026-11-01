@@ -53,6 +53,7 @@ fn snapshot_with_ref(role: &str, available_actions: &[&str]) -> String {
         scope: crate::RefScope {
             root_ref: None,
             path_is_absolute: false,
+            census_depth: None,
             path: smallvec::SmallVec::new(),
         },
     });

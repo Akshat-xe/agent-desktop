@@ -191,6 +191,7 @@ fn save_ref_in_store(store: RefStore, states: Vec<String>) -> String {
         scope: crate::RefScope {
             root_ref: None,
             path_is_absolute: false,
+            census_depth: None,
             path: smallvec::SmallVec::new(),
         },
     });

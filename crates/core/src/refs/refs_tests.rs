@@ -38,6 +38,7 @@ pub(super) fn entry(role: &str, name: Option<&str>) -> RefEntry {
         scope: crate::RefScope {
             root_ref: None,
             path_is_absolute: false,
+            census_depth: None,
             path: smallvec::SmallVec::new(),
         },
     }
@@ -218,6 +219,7 @@ fn test_save_load_roundtrip_with_home_override() {
         scope: crate::RefScope {
             root_ref: None,
             path_is_absolute: false,
+            census_depth: None,
             path: smallvec::SmallVec::new(),
         },
     });

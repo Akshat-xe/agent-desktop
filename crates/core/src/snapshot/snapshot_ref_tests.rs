@@ -192,9 +192,13 @@ fn local_ref(ref_id: &str) -> String {
 
 fn seed_skeleton_refmap() -> RefMap {
     let mut map = RefMap::new();
-    let anchor = ref_entry_from_node(&named("group", "Sidebar"), &source("TestApp"), None, &[0]);
+    let mut anchor =
+        ref_entry_from_node(&named("group", "Sidebar"), &source("TestApp"), None, &[0]);
+    anchor.identity.basis = Some(crate::IdentityBasis::Name);
     let _ = map.allocate(anchor);
-    let other = ref_entry_from_node(&named("button", "Toolbar"), &source("TestApp"), None, &[1]);
+    let mut other =
+        ref_entry_from_node(&named("button", "Toolbar"), &source("TestApp"), None, &[1]);
+    other.identity.basis = Some(crate::IdentityBasis::Name);
     let _ = map.allocate(other);
     map
 }

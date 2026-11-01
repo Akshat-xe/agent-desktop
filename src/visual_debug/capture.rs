@@ -45,7 +45,13 @@ pub(super) fn click_before(
 ) -> Result<(WindowInfo, Value), AppError> {
     let deadline = Deadline::standard()?;
     let entry = RefStore::for_session(context.session_id())?.load_ref(&args.ref_id)?;
-    let handle = adapter.resolve_element_strict(&entry, deadline)?;
+    let handle = agent_desktop_core::refs::ref_resolve::resolve(
+        adapter,
+        &entry,
+        &args.ref_id,
+        context,
+        deadline,
+    )?;
     let bounds = adapter.get_element_bounds(&handle, deadline)?;
     let window = window_for_entry(&entry, adapter, deadline)?;
     let node = json!({

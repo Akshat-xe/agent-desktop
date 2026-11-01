@@ -35,6 +35,7 @@ fn minimal_entry(role: &str) -> RefEntry {
         scope: crate::RefScope {
             root_ref: None,
             path_is_absolute: false,
+            census_depth: None,
             path: smallvec::SmallVec::new(),
         },
     }
@@ -212,6 +213,7 @@ fn ref_entry_full_roundtrip_preserves_all_fields() {
         scope: crate::RefScope {
             root_ref: Some("@e5".into()),
             path_is_absolute: true,
+            census_depth: None,
             path: smallvec::SmallVec::from_slice(&[2, 0, 1]),
         },
     };

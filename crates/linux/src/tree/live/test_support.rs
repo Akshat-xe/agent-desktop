@@ -135,6 +135,7 @@ pub(crate) fn ref_entry(role: &str) -> RefEntry {
         scope: agent_desktop_core::RefScope {
             root_ref: None,
             path_is_absolute: false,
+            census_depth: None,
             path: agent_desktop_core::refs::RefPath::default(),
         },
     }

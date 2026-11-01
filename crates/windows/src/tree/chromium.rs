@@ -231,6 +231,7 @@ mod tests {
                 scope: agent_desktop_core::RefScope {
                     root_ref: None,
                     path_is_absolute: true,
+                    census_depth: None,
                     path: agent_desktop_core::refs::RefPath::default(),
                 },
             }));

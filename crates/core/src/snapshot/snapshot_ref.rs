@@ -78,6 +78,7 @@ pub fn run_from_ref_with_context(
             include_bounds: opts.include_bounds,
             interactive_only: opts.interactive_only,
             compact: opts.compact,
+            skeleton_depth: None,
         },
         source: RefAllocSource {
             pid: entry.process.pid,
@@ -134,7 +135,7 @@ pub fn run_from_ref_with_context(
 /// The drill result reports the window the ref was captured from, so it must
 /// resolve that exact window — not any window of the process. Resolving before
 /// observation keeps a failed drill from persisting refs it never returns.
-fn resolve_result_window(
+pub(crate) fn resolve_result_window(
     entry: &crate::refs::RefEntry,
     adapter: &dyn PlatformAdapter,
     deadline: crate::Deadline,
@@ -192,3 +193,7 @@ pub(crate) mod identity_test_support;
 #[cfg(test)]
 #[path = "snapshot_ref_identity_tests.rs"]
 mod identity_tests;
+
+#[cfg(test)]
+#[path = "snapshot_ref_capture_identity_tests.rs"]
+mod capture_identity_tests;

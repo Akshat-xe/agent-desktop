@@ -102,14 +102,10 @@ fn moved_root_cannot_redirect_hydration_to_a_twin_at_the_old_path() {
 }
 
 #[test]
-fn drill_root_exception_never_authorizes_an_ambiguous_action_or_a_legacy_drill() {
+fn legacy_skeleton_anchor_cannot_be_drilled() {
     let _home = HomeGuard::new();
-    let (id, map) = save_map();
+    let (_, map) = save_map();
     let adapter = DrillAdapter::new();
-    assert_eq!(
-        click(&adapter, &format!("@{id}:e1")).unwrap_err().code(),
-        "AMBIGUOUS_TARGET"
-    );
     let mut legacy = map.get("@e1").unwrap().clone();
     legacy.identity.basis = None;
     let mut map = crate::refs::RefMap::new();

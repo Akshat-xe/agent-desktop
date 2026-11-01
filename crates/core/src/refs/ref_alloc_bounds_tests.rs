@@ -14,6 +14,7 @@ fn a_nameless_positive_area_ref_allocated_with_bounds_hidden_keeps_its_only_iden
             include_bounds: false,
             interactive_only: false,
             compact: false,
+            skeleton_depth: None,
         },
         source: crate::refs::ref_alloc_source::RefAllocSource {
             pid: crate::ProcessId::new(7),
@@ -61,6 +62,7 @@ fn a_ref_with_its_own_identity_still_has_its_rect_stripped() {
             include_bounds: false,
             interactive_only: false,
             compact: false,
+            skeleton_depth: None,
         },
         source: crate::refs::ref_alloc_source::RefAllocSource {
             pid: crate::ProcessId::new(7),

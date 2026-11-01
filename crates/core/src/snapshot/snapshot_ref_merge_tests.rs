@@ -34,18 +34,12 @@ fn test_drilldown_refmap_matches_golden_fixture() {
 
     let _guard = HomeGuard::new();
     let mut seed = RefMap::new();
-    seed.allocate(ref_entry_from_node(
-        &named("group", "Sidebar"),
-        &source("Fixture"),
-        None,
-        &[0],
-    ));
-    seed.allocate(ref_entry_from_node(
-        &named("group", "Toolbar"),
-        &source("Fixture"),
-        None,
-        &[1],
-    ));
+    for (name, path) in [("Sidebar", 0), ("Toolbar", 1)] {
+        let mut anchor =
+            ref_entry_from_node(&named("group", name), &source("Fixture"), None, &[path]);
+        anchor.identity.basis = Some(crate::IdentityBasis::Name);
+        seed.allocate(anchor);
+    }
     let snapshot_id = save_latest(seed);
 
     let mut sidebar_subtree = named("outline", "Sidebar");

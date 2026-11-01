@@ -174,6 +174,7 @@ pub(crate) fn minimal_ref_entry(role: &str, name: Option<&str>) -> crate::RefEnt
         scope: crate::RefScope {
             root_ref: None,
             path_is_absolute: false,
+            census_depth: None,
             path: crate::refs::RefPath::default(),
         },
     }

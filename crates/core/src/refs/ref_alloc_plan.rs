@@ -9,6 +9,7 @@ use std::collections::HashSet;
 pub(crate) struct RefAllocPlan {
     skeleton_anchors: HashSet<Vec<usize>>,
     counts: IdentityBasisCounts,
+    anchor_counts: IdentityBasisCounts,
 }
 
 impl RefAllocPlan {
@@ -18,13 +19,16 @@ impl RefAllocPlan {
         complete: bool,
     ) -> Self {
         let mut counts = IdentityBasisCounts::new();
+        let mut anchor_counts = IdentityBasisCounts::new();
         if !complete {
             counts.mark_incomplete();
+            anchor_counts.mark_incomplete();
         }
-        Self::count_look_alikes(root, &mut counts);
+        Self::count_look_alikes(root, &mut counts, &mut anchor_counts);
         Self {
             skeleton_anchors,
             counts,
+            anchor_counts,
         }
     }
 
@@ -36,19 +40,34 @@ impl RefAllocPlan {
         self.counts.basis(identity)
     }
 
-    fn count_look_alikes(node: &AccessibilityNode, counts: &mut IdentityBasisCounts) {
+    /// The basis for a skeleton anchor, counted over the observed nodes only. Anchors resolve
+    /// by a window-wide live count, so an unobserved deeper twin refuses at resolution
+    /// instead of being chosen.
+    pub(crate) fn anchor_basis(&self, identity: &RefEntryIdentity) -> IdentityBasis {
+        self.anchor_counts.basis(identity)
+    }
+
+    fn count_look_alikes(
+        node: &AccessibilityNode,
+        counts: &mut IdentityBasisCounts,
+        anchor_counts: &mut IdentityBasisCounts,
+    ) {
         if node.subtree_truncated || node.children_count.is_some_and(|count| count > 0) {
             counts.mark_incomplete();
         }
         if node.identity.unread.role {
             counts.mark_incomplete();
+            anchor_counts.mark_incomplete();
         }
         mark_unread(counts, node);
+        mark_unread(anchor_counts, node);
         if can_receive_observed_ref(node) {
-            counts.record(&identity_from_node(node), &node.identity.native_ids);
+            let identity = identity_from_node(node);
+            counts.record(&identity, &node.identity.native_ids);
+            anchor_counts.record(&identity, &node.identity.native_ids);
         }
         for child in &node.children {
-            Self::count_look_alikes(child, counts);
+            Self::count_look_alikes(child, counts, anchor_counts);
         }
     }
 }

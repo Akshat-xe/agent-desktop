@@ -254,6 +254,7 @@ fn entry() -> RefEntry {
         scope: crate::RefScope {
             root_ref: None,
             path_is_absolute: true,
+            census_depth: None,
             path: smallvec::SmallVec::new(),
         },
     }

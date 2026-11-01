@@ -55,6 +55,7 @@ pub fn build(
             include_bounds: opts.include_bounds,
             interactive_only: opts.interactive_only,
             compact: opts.compact,
+            skeleton_depth: opts.skeleton.then_some(request.max_logical_depth),
         },
         source: RefAllocSource {
             pid: window.pid,

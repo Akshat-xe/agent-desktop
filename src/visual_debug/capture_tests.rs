@@ -154,7 +154,7 @@ fn saved_snapshot_and_click_capture_use_exact_source_evidence() {
     let window = window();
     let entry: RefEntry = serde_json::from_value(json!({
         "pid": 5, "process_instance": "test-instance", "role": "button", "name": "Save",
-        "path": [0], "source_surface": "window", "source_window_id": "w-test",
+        "basis": "name", "path": [0], "source_surface": "window", "source_window_id": "w-test",
         "source_window_bounds_hash": window.bounds.unwrap().bounds_hash(),
         "states": [], "available_actions": ["Click"], "bounds": window.bounds,
         "bounds_hash": window.bounds.unwrap().bounds_hash()
@@ -190,6 +190,27 @@ fn saved_snapshot_and_click_capture_use_exact_source_evidence() {
     let (_, frame) = click_before(&args, &adapter, &context).unwrap();
     assert_eq!(frame["nodes"][0]["kind"], "target");
     assert_eq!(frame["nodes"][0]["bounds"], json!(window.bounds));
+
+    let mut legacy: RefEntry =
+        serde_json::from_value(serde_json::to_value(refs.get("@e1").unwrap()).unwrap()).unwrap();
+    legacy.identity.basis = None;
+    let mut legacy_refs = agent_desktop_core::refs::RefMap::new();
+    legacy_refs.try_allocate(legacy).unwrap();
+    RefStore::new()
+        .unwrap()
+        .save_snapshot("slegacy", &legacy_refs)
+        .unwrap();
+    let crate::cli::Commands::Click(legacy_args) =
+        crate::Cli::try_parse_from(["agent-desktop", "click", "@slegacy:e1"])
+            .unwrap()
+            .command
+            .unwrap()
+    else {
+        panic!()
+    };
+    assert!(
+        matches!(click_before(&legacy_args, &adapter, &context), Err(AppError::Adapter(error)) if error.code == agent_desktop_core::ErrorCode::StaleRef)
+    );
 }
 
 #[test]

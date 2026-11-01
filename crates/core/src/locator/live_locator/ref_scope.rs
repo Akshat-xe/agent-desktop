@@ -46,6 +46,41 @@ pub(crate) fn resolve_in_root(
     Ok(handle)
 }
 
+/// Resolves an entry whose basis was proven over the first `depth` skeleton levels by observing
+/// its window the same way and requiring exactly one match inside that depth.
+pub(crate) fn resolve_by_census(
+    adapter: &dyn PlatformAdapter,
+    entry: &RefEntry,
+    depth: u8,
+    deadline: Deadline,
+) -> Result<NativeHandle, AdapterError> {
+    let into_adapter = |error| match error {
+        crate::AppError::Adapter(error) => error,
+        error => AdapterError::internal(error.to_string()),
+    };
+    let window = crate::snapshot::snapshot_ref::resolve_result_window(entry, adapter, deadline)
+        .map_err(into_adapter)?;
+    let options = crate::TreeOptions {
+        max_depth: depth,
+        include_bounds: true,
+        skeleton: true,
+        surface: entry.source.source_surface,
+        ..Default::default()
+    };
+    let tree = crate::tree::renderer_accessibility::observe_tree(
+        adapter,
+        ObservationRoot::Window(&window),
+        &ObservationRequest::snapshot(&options, deadline).validate()?,
+    )
+    .map_err(into_adapter)?;
+    let selected = select(&tree, entry, entry)?;
+    let mut anchor =
+        super::materialize::ref_entry(selected, &tree.source, &crate::LocatorQuery::default());
+    anchor.identity = entry.identity.clone();
+    anchor.geometry = entry.geometry.clone();
+    resolve_anchor(adapter, &anchor, deadline)
+}
+
 pub(crate) fn pin_root(
     adapter: &dyn PlatformAdapter,
     root: &RefEntry,

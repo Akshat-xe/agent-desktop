@@ -39,6 +39,7 @@ fn entry(token: Option<String>) -> RefEntry {
         scope: agent_desktop_core::RefScope {
             root_ref: None,
             path_is_absolute: false,
+            census_depth: None,
             path: Default::default(),
         },
     }

@@ -269,6 +269,7 @@ fn blank_secure_entry(fixture: &HostedFixture) -> RefEntry {
         scope: agent_desktop_core::RefScope {
             root_ref: None,
             path_is_absolute: true,
+            census_depth: None,
             path,
         },
     }

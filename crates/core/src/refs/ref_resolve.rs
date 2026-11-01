@@ -1,20 +1,21 @@
 use crate::{
-    AdapterError, CommandContext, Deadline, IdentityBasis, NativeHandle, PlatformAdapter, RefEntry,
-    refs::RefMap, refs::identity_basis_counts::IdentityBasisCounts,
+    AdapterError, CommandContext, Deadline, NativeHandle, PlatformAdapter, RefEntry, refs::RefMap,
     refs::identity_basis_gate::basis_gate, refs::refs_store::RefStore,
 };
 
-pub(crate) fn resolve(
+/// Resolves a saved ref to its live element, running the identity-basis gate first. Every
+/// ref-resolving caller goes through here.
+pub fn resolve(
     adapter: &dyn PlatformAdapter,
     entry: &RefEntry,
     ref_id: &str,
     context: &CommandContext,
     deadline: Deadline,
 ) -> Result<NativeHandle, AdapterError> {
-    if entry.scope.root_ref.is_none() {
-        return adapter.resolve_element_strict(entry, deadline);
-    }
     basis_gate(&entry.identity)?;
+    if entry.scope.root_ref.is_none() {
+        return resolve_unscoped(adapter, entry, deadline);
+    }
     let (snapshot, local) = crate::refs::ref_token::resolve_ref_target(ref_id)
         .map_err(|_| AdapterError::stale_ref_because("Scoped ref has no source snapshot"))?;
     let map = RefStore::for_session(context.session_id())
@@ -36,7 +37,20 @@ pub(crate) fn resolve_drill_root(
     map: &RefMap,
     deadline: Deadline,
 ) -> Result<NativeHandle, AdapterError> {
-    resolve_in_map(adapter, &root_probe(entry), map, deadline)
+    resolve_in_map(adapter, entry, map, deadline)
+}
+
+fn resolve_unscoped(
+    adapter: &dyn PlatformAdapter,
+    entry: &RefEntry,
+    deadline: Deadline,
+) -> Result<NativeHandle, AdapterError> {
+    match entry.scope.census_depth {
+        Some(depth) => crate::locator::live_locator::ref_scope::resolve_by_census(
+            adapter, entry, depth, deadline,
+        ),
+        None => adapter.resolve_element_strict(entry, deadline),
+    }
 }
 
 fn resolve_in_map(
@@ -63,14 +77,14 @@ fn resolve_in_map(
                 "Scoped ref's root has a different source",
             ));
         }
-        ancestors.push(root_probe(root));
+        ancestors.push(root.clone());
         current = root;
     }
     let mut roots = ancestors.iter().rev();
     let Some(mut root) = roots.next() else {
-        return adapter.resolve_element_strict(entry, deadline);
+        return resolve_unscoped(adapter, entry, deadline);
     };
-    let mut handle = adapter.resolve_element_strict(root, deadline)?;
+    let mut handle = resolve_unscoped(adapter, root, deadline)?;
     for target in roots.chain(std::iter::once(entry)) {
         basis_gate(&target.identity)?;
         handle = crate::locator::live_locator::ref_scope::resolve_in_root(
@@ -85,17 +99,4 @@ fn resolve_in_map(
         return Err(deadline.timeout_error());
     }
     Ok(handle)
-}
-
-fn root_probe(entry: &RefEntry) -> RefEntry {
-    let mut probe = entry.clone();
-    if probe.identity.basis == Some(IdentityBasis::Ambiguous) {
-        let mut fields = IdentityBasisCounts::new();
-        fields.record(&probe.identity, &[]);
-        let basis = fields.basis(&probe.identity);
-        if basis != IdentityBasis::Positional {
-            probe.identity.basis = Some(basis);
-        }
-    }
-    probe
 }

@@ -195,6 +195,7 @@ fn entry(bounds: Rect) -> RefEntry {
         scope: RefScope {
             root_ref: None,
             path_is_absolute: true,
+            census_depth: None,
             path: Default::default(),
         },
     }

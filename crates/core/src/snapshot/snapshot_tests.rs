@@ -19,6 +19,7 @@ fn run_config(compact: bool, interactive_only: bool) -> RefAllocConfig<'static> 
             include_bounds: false,
             interactive_only,
             compact,
+            skeleton_depth: Some(3),
         },
         source: crate::refs::ref_alloc_source::RefAllocSource {
             pid: crate::ProcessId::new(1),
@@ -217,6 +218,7 @@ fn test_skeleton_anchor_suppressed_in_drilldown() {
             include_bounds: false,
             interactive_only: false,
             compact: false,
+            skeleton_depth: None,
         },
         source: crate::refs::ref_alloc_source::RefAllocSource {
             pid: crate::ProcessId::new(1),
@@ -303,6 +305,7 @@ fn test_skeleton_fixture_matches_golden() {
             include_bounds: false,
             interactive_only: false,
             compact: false,
+            skeleton_depth: Some(3),
         },
         source: crate::refs::ref_alloc_source::RefAllocSource {
             pid: crate::ProcessId::new(42),

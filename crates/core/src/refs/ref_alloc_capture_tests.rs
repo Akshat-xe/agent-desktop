@@ -84,6 +84,7 @@ fn allocation() -> RefAllocConfig<'static> {
             include_bounds: true,
             interactive_only: false,
             compact: false,
+            skeleton_depth: None,
         },
         source: crate::refs::ref_alloc_source::RefAllocSource {
             pid: crate::ProcessId::new(42),

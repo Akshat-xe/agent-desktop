@@ -146,6 +146,7 @@ fn core_entry(basis: Option<IdentityBasis>) -> RefEntry {
         scope: RefScope {
             root_ref: None,
             path_is_absolute: false,
+            census_depth: None,
             path: Default::default(),
         },
     }

@@ -303,6 +303,7 @@ unsafe fn decode_core_ref_entry(
         scope: RefScope {
             root_ref,
             path_is_absolute: entry.scope.path_is_absolute,
+            census_depth: None,
             path,
         },
     };

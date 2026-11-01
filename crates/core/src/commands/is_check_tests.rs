@@ -118,6 +118,7 @@ fn entry(states: Vec<String>, value: Option<&str>, actions: Vec<&str>) -> RefEnt
         scope: crate::RefScope {
             root_ref: None,
             path_is_absolute: false,
+            census_depth: None,
             path: smallvec::SmallVec::new(),
         },
     }

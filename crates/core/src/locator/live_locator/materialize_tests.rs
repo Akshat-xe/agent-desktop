@@ -334,6 +334,7 @@ fn source_entry() -> RefEntry {
         scope: crate::RefScope {
             root_ref: None,
             path_is_absolute: false,
+            census_depth: None,
             path: RefPath::from_slice(&[3]),
         },
     }

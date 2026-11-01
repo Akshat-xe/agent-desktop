@@ -11,7 +11,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub type RefPath = SmallVec<[usize; 8]>;
-pub(crate) mod ref_resolve;
+pub mod ref_resolve;
 mod ref_root_chain;
 
 pub(crate) const MAX_REFMAP_BYTES: u64 = 1_048_576;

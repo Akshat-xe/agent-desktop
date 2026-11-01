@@ -6,9 +6,11 @@ fn seed_skeleton_refmap_on_window(window_id: Option<&'static str>) -> RefMap {
         ..source("TestApp")
     };
     let mut map = RefMap::new();
-    let anchor = ref_entry_from_node(&named("group", "Sidebar"), &src, None, &[0]);
+    let mut anchor = ref_entry_from_node(&named("group", "Sidebar"), &src, None, &[0]);
+    anchor.identity.basis = Some(crate::IdentityBasis::Name);
     let _ = map.allocate(anchor);
-    let other = ref_entry_from_node(&named("button", "Toolbar"), &src, None, &[1]);
+    let mut other = ref_entry_from_node(&named("button", "Toolbar"), &src, None, &[1]);
+    other.identity.basis = Some(crate::IdentityBasis::Name);
     let _ = map.allocate(other);
     map
 }

@@ -84,10 +84,10 @@ fn unlabeled_bounded_boundary_gets_drill_ref() {
     assert!(entry.geometry.bounds_hash.is_some());
 }
 
-/// A boundary whose children were not walked can hide a look-alike, so it records an
-/// ambiguous basis and keeps its rect; a fully walked element still has its rect stripped.
+/// A uniquely named boundary records a name basis from the observed skeleton nodes; a twin
+/// among them makes it ambiguous, and an ambiguous entry keeps the rect that could locate it.
 #[test]
-fn a_named_boundary_with_omitted_children_keeps_its_rect() {
+fn a_named_boundary_with_a_skeleton_twin_is_ambiguous_and_keeps_its_rect() {
     let mut boundary = node("group");
     boundary.identity.name = Some("Sidebar".into());
     boundary.children_count = Some(5);
@@ -97,8 +97,18 @@ fn a_named_boundary_with_omitted_children_keeps_its_rect() {
         width: 300.0,
         height: 400.0,
     });
+    let unique = {
+        let mut root = node("window");
+        root.children = vec![boundary.clone()];
+        let mut refmap = RefMap::new();
+        let result =
+            ref_alloc::allocate_refs(root, &mut refmap, &run_config(false, false)).unwrap();
+        let id = result.children[0].ref_id.clone().unwrap();
+        refmap.get(&id).unwrap().identity.basis
+    };
+    assert_eq!(unique, Some(crate::IdentityBasis::Name));
     let mut root = node("window");
-    root.children = vec![boundary];
+    root.children = vec![boundary.clone(), boundary];
 
     let mut refmap = RefMap::new();
     let result = ref_alloc::allocate_refs(root, &mut refmap, &run_config(false, false)).unwrap();

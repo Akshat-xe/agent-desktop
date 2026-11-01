@@ -10,9 +10,7 @@ use crate::{
         scroll, scroll_to, select, set_value, toggle, triple_click, type_text, uncheck,
     },
     context::CommandContext,
-    refs::refs_store::RefStore,
-    refs::refs_test_support::HomeGuard,
-    refs::{RefEntry, RefMap},
+    refs::{RefEntry, RefMap, refs_store::RefStore, refs_test_support::HomeGuard},
 };
 use std::sync::Mutex;
 
@@ -175,6 +173,7 @@ fn snapshot_id() -> String {
         scope: crate::RefScope {
             root_ref: None,
             path_is_absolute: false,
+            census_depth: None,
             path: smallvec::SmallVec::new(),
         },
     });
