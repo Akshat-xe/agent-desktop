@@ -138,7 +138,7 @@ fn a_cut_short_count_under_the_lease_waits_again_within_the_budget() {
 }
 
 #[test]
-fn a_budget_spent_after_a_refusal_reports_that_refusal_as_its_cause() {
+fn a_budget_spent_after_a_refusal_reports_that_refusal() {
     let mut adapter = DispatchReadAdapter::new(false);
     adapter.disabled_after_a_read = true;
 
@@ -146,9 +146,9 @@ fn a_budget_spent_after_a_refusal_reports_that_refusal_as_its_cause() {
 
     assert_eq!(error.code, ErrorCode::Timeout);
     let details = error.details.expect("timeout details");
-    assert_eq!(details["cause"]["code"], "TIMEOUT");
+    assert_eq!(details["refusal"]["code"], "TIMEOUT");
     assert_eq!(
-        details["cause"]["details"]["kind"],
+        details["refusal"]["details"]["kind"],
         "resolution_identity_unknown"
     );
     assert_eq!(adapter.dispatches.load(Ordering::SeqCst), 0);

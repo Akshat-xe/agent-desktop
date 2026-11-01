@@ -144,26 +144,28 @@ fn resolves_again(error: &AdapterError, deadline: Deadline) -> bool {
 }
 
 /// Carries the dispatch-time refusal that sent the action back to the wait as
-/// `details.cause`, so a budget that runs out there still reports why the ref
-/// was not acted on.
+/// `details.refusal`, so a budget that runs out there still reports why the
+/// ref was not acted on.
 fn with_refusal(mut error: AdapterError, refusal: Option<&AdapterError>) -> AdapterError {
     let Some(refusal) = refusal else {
         return error;
     };
-    let cause = serde_json::json!({
+    let mut recorded = serde_json::json!({
         "code": refusal.code.as_str(),
         "message": refusal.message,
-        "details": refusal.details,
     });
+    if let (Some(object), Some(details)) = (recorded.as_object_mut(), &refusal.details) {
+        object.insert("details".into(), details.clone());
+    }
     let mut details = error
         .details
         .take()
         .unwrap_or_else(|| serde_json::json!({}));
     match details.as_object_mut() {
         Some(object) => {
-            object.insert("cause".into(), cause);
+            object.insert("refusal".into(), recorded);
         }
-        None => details = serde_json::json!({ "error_details": details, "cause": cause }),
+        None => details = serde_json::json!({ "error_details": details, "refusal": recorded }),
     }
     error.with_details(details)
 }

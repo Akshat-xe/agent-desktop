@@ -77,6 +77,20 @@ impl ObservationOps for RuleAdapter {
         }
     }
 
+    fn validate_saved_ref_context(
+        &self,
+        entry: &RefEntry,
+        observed_token: Option<&str>,
+    ) -> Result<(), AdapterError> {
+        if entry.source.source_surface == crate::SnapshotSurface::Menu
+            && entry.identity.retained_object.as_deref() != observed_token
+        {
+            return Err(AdapterError::stale_ref_because("menu context changed")
+                .with_details(serde_json::json!({ "retryable": false })));
+        }
+        Ok(())
+    }
+
     fn resolve_element_strict(
         &self,
         _entry: &RefEntry,
@@ -110,7 +124,11 @@ impl ObservationOps for RuleAdapter {
 
 impl ActionOps for RuleAdapter {}
 impl InputOps for RuleAdapter {}
-impl SystemOps for RuleAdapter {}
+impl SystemOps for RuleAdapter {
+    fn supported_surfaces(&self) -> Vec<crate::SnapshotSurface> {
+        vec![crate::SnapshotSurface::Window, crate::SnapshotSurface::Menu]
+    }
+}
 
 pub(super) fn window() -> WindowInfo {
     WindowInfo {

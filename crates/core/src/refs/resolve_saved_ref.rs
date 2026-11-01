@@ -104,6 +104,11 @@ pub(crate) fn observe_saved_ref(
     };
     let observed = observe_whole_window(adapter, &base, &window, deadline, lease)?;
     let index = saved_ref_node(entry, token, &observed)?;
+    let node = observed
+        .nodes
+        .get(index)
+        .ok_or_else(|| AdapterError::internal("saved ref match is missing from the observation"))?;
+    adapter.validate_saved_ref_context(entry, node.evidence.identifiers.retained_object())?;
     Ok((window, observed, index))
 }
 
@@ -380,6 +385,10 @@ mod tests;
 #[cfg(test)]
 #[path = "resolve_saved_ref_window_tests.rs"]
 mod window_tests;
+
+#[cfg(test)]
+#[path = "resolve_saved_ref_context_tests.rs"]
+mod context_tests;
 
 #[cfg(test)]
 #[path = "resolve_saved_ref_test_support.rs"]

@@ -94,6 +94,34 @@ impl Source for MenuSource<'_> {
     }
 }
 
+/// Validates the popup binding carried by the matching node in core's shared
+/// observation. A unique text match in another popup cannot authorize a rooted
+/// find or drill, even though neither operation needs a native handle.
+pub(crate) fn validate_observed_context(
+    entry: &RefEntry,
+    observed_token: Option<&str>,
+) -> Result<(), AdapterError> {
+    if !is_menu_entry(entry) {
+        return Ok(());
+    }
+    let captured = entry
+        .identity
+        .retained_object
+        .as_deref()
+        .and_then(MenuContext::decode)
+        .filter(|(_, object)| !object.is_empty());
+    let observed = observed_token
+        .and_then(MenuContext::decode)
+        .filter(|(_, object)| !object.is_empty());
+    match (captured, observed) {
+        (Some((captured, _)), Some((observed, _))) if captured.matches(&observed) => Ok(()),
+        (captured, observed) => Err(context_changed(
+            captured.is_some_and(|(context, _)| context.is_complete())
+                && observed.is_some_and(|(context, _)| context.is_complete()),
+        )),
+    }
+}
+
 fn context_changed(complete: bool) -> AdapterError {
     AdapterError::stale_ref_because("The open menu no longer proves the captured context")
         .with_suggestion("Keep the menu open, take a fresh menu snapshot, and use the new ref")
