@@ -1,7 +1,8 @@
 use crate::{
     ElementIdentifier, IdentityMatch, RefEntry,
-    locator::live_locator::{LocatorEvidence, LocatorField},
+    locator::live_locator::LocatorField,
     refs::ref_identity::{equality_match, meaningful_field, stable_name, stable_name_field},
+    refs::ref_live_predicate::LivePredicate,
     tree::accname::non_blank,
 };
 
@@ -90,47 +91,6 @@ impl<'a> FullPredicate<'a> {
             | (u8::from(self.name.is_some()) << 1)
             | (u8::from(self.description.is_some()) << 2);
         self
-    }
-}
-
-/// What a live element reports for the fields a predicate records, with the
-/// identifier read's completeness kept so an unread field answers `Unknown`.
-pub(crate) struct LivePredicate<'a> {
-    role: LocatorField<&'a str>,
-    name: LocatorField<&'a str>,
-    value: LocatorField<&'a str>,
-    description: LocatorField<&'a str>,
-    native_ids: &'a [ElementIdentifier],
-    native_ids_complete: bool,
-}
-
-impl<'a> LivePredicate<'a> {
-    pub(crate) fn observed(evidence: &'a LocatorEvidence) -> Self {
-        Self {
-            role: meaningful_field(&evidence.role),
-            name: meaningful_field(&evidence.name),
-            value: meaningful_field(&evidence.value),
-            description: meaningful_field(&evidence.description),
-            native_ids: evidence.identifiers.identifiers(),
-            native_ids_complete: evidence.identifiers.is_complete(),
-        }
-    }
-
-    pub(crate) fn role(&self) -> &LocatorField<&'a str> {
-        &self.role
-    }
-
-    /// The stable name a predicate carrying `role` compares this element by.
-    pub(crate) fn stable_name(&self, role: &str) -> LocatorField<&str> {
-        stable_name_field(role, &self.name, &self.value)
-    }
-
-    pub(crate) fn description(&self) -> &LocatorField<&'a str> {
-        &self.description
-    }
-
-    pub(crate) fn native_ids_complete(&self) -> bool {
-        self.native_ids_complete
     }
 }
 

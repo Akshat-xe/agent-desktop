@@ -374,6 +374,7 @@ pub(crate) mod ref_full_predicate;
 pub(crate) mod ref_geometry;
 pub mod ref_identity;
 pub(crate) mod ref_identity_match;
+pub(crate) mod ref_live_predicate;
 pub(crate) mod ref_process;
 pub(crate) mod ref_resolve_deadline;
 pub(crate) mod ref_scope;
@@ -388,12 +389,11 @@ pub(crate) mod resolve_attempt_outcome;
 pub mod resolve_errors;
 pub mod resolve_saved_ref;
 #[cfg(test)]
-#[path = "refs_tests.rs"]
-mod tests;
-
-#[cfg(test)]
 #[path = "refs_serde_tests.rs"]
 mod serde_tests;
+#[cfg(test)]
+#[path = "refs_tests.rs"]
+mod tests;
 
 #[cfg(test)]
 #[path = "refs_size_tests.rs"]

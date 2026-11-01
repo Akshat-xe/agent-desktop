@@ -1,7 +1,7 @@
 use crate::{
     AppError, WindowInfo,
     adapter::{PlatformAdapter, TreeOptions},
-    locator::live_locator::{ObservationRequest, ObservationRoot, ObservedNode, ObservedTree},
+    locator::live_locator::{ObservationRequest, ObservationRoot, ObservedTree},
 };
 
 /// One window capture: the observation every ref is counted against, plus the
@@ -95,7 +95,7 @@ fn observe_window(
 /// re-observed. A presentation whose selected entries all carry a token resolves
 /// through the tokens and keeps its single shallow walk.
 fn needs_whole_window(observed: &ObservedTree) -> bool {
-    let cut = !observed.is_complete() || observed.nodes.iter().any(ObservedNode::omits_descendants);
+    let cut = !observed.is_exhaustive();
     let mut presented = observed.clone();
     cut && presented
         .project_partial()

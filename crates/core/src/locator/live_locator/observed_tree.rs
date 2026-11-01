@@ -47,6 +47,14 @@ impl ObservedTree {
         self.structurally_complete
     }
 
+    /// Whether this observation read the whole window: complete, and with no
+    /// container whose descendants it left unread. A capture proof and a
+    /// tokenless resolution both rest on it, because both count evidence over
+    /// every node the window holds.
+    pub(crate) fn is_exhaustive(&self) -> bool {
+        self.structurally_complete && !self.nodes.iter().any(ObservedNode::omits_descendants)
+    }
+
     pub fn into_accessibility_tree(mut self) -> Result<AccessibilityNode, AdapterError> {
         if !self.structurally_complete {
             return Err(AdapterError::new(

@@ -5,10 +5,11 @@ use crate::{
     WindowInfo,
     adapter::{NativeHandle, TreeOptions},
     locator::live_locator::{
-        ObservationRequest, ObservationRoot, ObservedNode, ObservedTree, materialize_ref_entry,
+        ObservationRequest, ObservationRoot, ObservedTree, materialize_ref_entry,
     },
-    refs::ref_full_predicate::{FullPredicate, LivePredicate},
+    refs::ref_full_predicate::FullPredicate,
     refs::ref_identity::element_token,
+    refs::ref_live_predicate::LivePredicate,
     refs::resolve_errors::identity_unknown_error,
 };
 
@@ -230,8 +231,7 @@ fn saved_ref_node(
 fn unique_live_match(entry: &RefEntry, observed: &ObservedTree) -> Result<usize, AdapterError> {
     let predicate = FullPredicate::of_entry(entry);
     let mut found = None;
-    let mut incomplete =
-        !observed.is_complete() || observed.nodes.iter().any(ObservedNode::omits_descendants);
+    let mut incomplete = !observed.is_exhaustive();
     for (index, node) in observed.nodes.iter().enumerate() {
         match predicate.compare(&LivePredicate::observed(&node.evidence)) {
             IdentityMatch::Match if found.is_some() => return Err(ambiguous_live_match(entry)),

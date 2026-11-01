@@ -204,7 +204,7 @@ fn anchor_matches(preliminary: &RefEntry, node: &ObservedNode, proven: bool) -> 
     let has_identity = crate::refs::ref_identity::has_meaningful_identity(preliminary);
     if proven && !has_identity && preliminary.geometry.bounds_hash.is_none() {
         return crate::refs::ref_full_predicate::FullPredicate::of_entry(preliminary).compare(
-            &crate::refs::ref_full_predicate::LivePredicate::observed(&node.evidence),
+            &crate::refs::ref_live_predicate::LivePredicate::observed(&node.evidence),
         ) == IdentityMatch::Match;
     }
     if has_identity {

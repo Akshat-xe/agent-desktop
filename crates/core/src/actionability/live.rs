@@ -10,8 +10,9 @@ use crate::{
     adapter::{LiveElement, NativeHandle, PlatformAdapter},
     locator::live_locator::LocatorRefEvidence,
     refs::RefEntry,
-    refs::ref_full_predicate::{FullPredicate, LivePredicate},
+    refs::ref_full_predicate::FullPredicate,
     refs::ref_identity::{element_token, identity_match},
+    refs::ref_live_predicate::LivePredicate,
 };
 
 /// Groups the read-only coordinates of a live element check: which element,

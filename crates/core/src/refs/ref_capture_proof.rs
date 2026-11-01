@@ -3,11 +3,10 @@ use std::sync::OnceLock;
 
 use crate::{
     ElementIdentifier, IdentityMatch, RefEntry,
-    locator::live_locator::{
-        LocatorEvidence, LocatorField, ObservationSource, ObservedNode, ObservedTree,
-    },
-    refs::ref_full_predicate::{DESCRIPTION, FullPredicate, LivePredicate, NAME, NATIVE_ID},
+    locator::live_locator::{LocatorEvidence, LocatorField, ObservationSource, ObservedTree},
+    refs::ref_full_predicate::{DESCRIPTION, FullPredicate, NAME, NATIVE_ID},
     refs::ref_identity::stable_name,
+    refs::ref_live_predicate::LivePredicate,
     tree::accname::non_blank,
 };
 
@@ -32,9 +31,8 @@ pub(crate) struct CaptureProof<'a> {
 
 impl<'a> CaptureProof<'a> {
     pub(crate) fn new(observed: &'a ObservedTree) -> Self {
-        let whole_window = matches!(observed.source, ObservationSource::Window { .. })
-            && observed.is_complete()
-            && !observed.nodes.iter().any(ObservedNode::omits_descendants);
+        let whole_window =
+            matches!(observed.source, ObservationSource::Window { .. }) && observed.is_exhaustive();
         Self {
             observed,
             whole_window,
@@ -151,7 +149,7 @@ fn keys_of<'a>(evidence: &'a LocatorEvidence, fields: u8) -> Vec<LiveKey<'a>> {
 fn unread_bits(evidence: &LocatorEvidence) -> u8 {
     let live = LivePredicate::observed(evidence);
     let mut bits = 0;
-    match live.role() {
+    match &live.role {
         LocatorField::Known(role) => {
             if live.stable_name(role).is_unknown() {
                 bits |= NAME;
@@ -160,10 +158,10 @@ fn unread_bits(evidence: &LocatorEvidence) -> u8 {
         LocatorField::Unknown => bits |= ROLE,
         LocatorField::Absent => {}
     }
-    if live.description().is_unknown() {
+    if live.description.is_unknown() {
         bits |= DESCRIPTION;
     }
-    if !live.native_ids_complete() {
+    if !live.native_ids_complete {
         bits |= NATIVE_ID;
     }
     bits

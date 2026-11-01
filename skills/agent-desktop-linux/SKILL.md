@@ -210,9 +210,17 @@ cursor; on Wayland none is drawn.
   an X11 session. Headless scoped `press` requires live target focus on either
   display server. Focusing a window on another workspace can switch the user's
   current desktop.
-- Linux exact FFI refs carrying bounds or a bounds hash require window-relative
-  geometry, even when the ref also carries a name or identifier. Geometry-free
-  identity refs are supported.
+- The exact FFI ref calls (`ad_resolve_element_exact` and
+  `ad_execute_ref_action_exact_with_policy`) fail with `AMBIGUOUS_TARGET` on every
+  platform; their bounds rule applies first: bounds must be window-relative.
+- A ref re-identifies a unique element, not a widget instance. A toolkit that
+  destroys and recreates its rows (GTK4, Qt6) resolves a ref with a unique name
+  onto the replacement, so the action lands on the new element. Identical
+  controls are refused as `AMBIGUOUS_TARGET` instead.
+- A toolkit that keeps a removed widget listed (GTK4 unparented, Qt6
+  `setParent(None)`) lets a ref resolve onto a control the user can no longer
+  see. GTK4 then answers `ok` with `delivered_unverified` and no effect. No
+  identity rule reaches this; check the application's own effect.
 
 ## References
 

@@ -4,7 +4,7 @@ navTitle: Skeleton and drill-down
 description: Read a dense app in two passes. Take a shallow skeleton, drill into one region by ref, re-drill after a change, and scope searches the same way.
 ---
 
-A dense app, such as an Electron client or an IDE, can expose thousands of accessibility nodes. A full snapshot of it is slow, costs many tokens, and can run out of budget before it finishes. A skeleton snapshot reads only the top levels. You then drill into the one region you need with `snapshot --root`, so the cost follows the region you act on instead of the whole window.
+A dense app, such as an Electron client or an IDE, can expose thousands of accessibility nodes. A full snapshot of it is slow, costs many tokens, and can run out of budget before it finishes. A skeleton snapshot reads only the top levels. You then drill into the one region you need with `snapshot --root`, so the refs you read and act on cover that region instead of the whole window. Only macOS makes the drill read less of the window. Off macOS a drill re-identifies its root over a complete read of the window, as [Drill into a region](#drill-into-a-region) explains.
 
 ## The loop
 

@@ -146,11 +146,11 @@ pub(crate) fn identity_matches(
 /// Whether one element's stable text carves a live identity that can refute
 /// or corroborate the stored one.
 ///
-/// Public because the Windows resolver composes it with `identity_match` to
-/// keep its AutomationId-first corroboration rule: an id that still resolves
+/// Public because the Linux resolver composes it with `identity_match` to keep
+/// its identifier-first corroboration rule: an identifier that still resolves
 /// onto a candidate whose stable text drifted must be refuted, the A7-3
 /// wrong-target shape. macOS consumes only `identity_match`, which already
-/// routes id-less entries here; Windows runs the corroboration tier itself.
+/// routes id-less entries here; Linux runs the corroboration tier itself.
 pub fn stable_text_match(
     entry: &RefEntry,
     actual_name: &LocatorField<String>,
