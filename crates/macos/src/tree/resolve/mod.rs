@@ -71,14 +71,8 @@ fn resolve_once(entry: &RefEntry, deadline: Instant) -> Result<NativeHandle, Ada
     let started = Instant::now();
     crate::tree::locator_deadline::remaining(deadline)?;
     let mut read_context = ResolveReadContext::new(deadline);
-    match super::resolve::retained_resolve::resolve_saved_token(entry, deadline) {
-        Ok(Some(handle)) => {
-            return finish_resolution(Ok(handle), &mut read_context, started, "remote_token", true);
-        }
-        Ok(None) => {}
-        Err(error) => {
-            return finish_resolution(Err(error), &mut read_context, started, "remote_token", true);
-        }
+    if let Some(result) = token_resolution(entry, deadline, &mut read_context, started) {
+        return result;
     }
     if can_use_path_fast_path(entry) {
         let roots = match candidate_roots(entry, &mut read_context) {
@@ -150,6 +144,9 @@ fn resolve_locator_anchor_once(
     let started = Instant::now();
     crate::tree::locator_deadline::remaining(deadline)?;
     let mut read_context = ResolveReadContext::new(deadline);
+    if let Some(result) = token_resolution(entry, deadline, &mut read_context, started) {
+        return result;
+    }
     if !can_use_locator_anchor_path(entry) {
         return finish_resolution(
             Err(AdapterError::element_not_found("locator anchor")),
@@ -179,6 +176,35 @@ fn resolve_locator_anchor_once(
         "locator_anchor_path",
         true,
     )
+}
+
+/// The token answer a resolution pass shares: `Some` when the saved ref carries
+/// a retained object, whether it resolved or was refused, and `None` when the
+/// entry has no token and the path and search passes must decide.
+#[cfg(target_os = "macos")]
+fn token_resolution(
+    entry: &RefEntry,
+    deadline: Instant,
+    context: &mut ResolveReadContext,
+    started: Instant,
+) -> Option<Result<NativeHandle, AdapterError>> {
+    match super::resolve::retained_resolve::resolve_saved_token(entry, deadline) {
+        Ok(Some(handle)) => Some(finish_resolution(
+            Ok(handle),
+            context,
+            started,
+            "remote_token",
+            true,
+        )),
+        Ok(None) => None,
+        Err(error) => Some(finish_resolution(
+            Err(error),
+            context,
+            started,
+            "remote_token",
+            true,
+        )),
+    }
 }
 
 #[cfg(target_os = "macos")]

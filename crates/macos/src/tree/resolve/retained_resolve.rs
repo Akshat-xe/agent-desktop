@@ -14,7 +14,6 @@ pub(in crate::tree) enum RetainedMismatch {
     Pid,
     Role,
     NativeId,
-    Window,
 }
 
 impl RetainedMismatch {
@@ -24,7 +23,6 @@ impl RetainedMismatch {
             Self::Pid => "pid",
             Self::Role => "role",
             Self::NativeId => "native_identifier",
-            Self::Window => "window",
         }
     }
 }
@@ -91,41 +89,7 @@ fn verify_token_element(
     if let Some(mismatch) = token_mismatch(entry, &facts) {
         return Err(stale_token_error(entry, mismatch));
     }
-    verify_owning_window(entry, element, deadline)
-}
-
-#[cfg(target_os = "macos")]
-fn verify_owning_window(
-    entry: &RefEntry,
-    element: &AXElement,
-    deadline: std::time::Instant,
-) -> Result<(), AdapterError> {
-    let window_rooted = matches!(
-        entry.source.source_surface,
-        agent_desktop_core::SnapshotSurface::Window | agent_desktop_core::SnapshotSurface::Focused
-    );
-    let Some(recorded) = entry
-        .source
-        .source_window_id
-        .as_deref()
-        .and_then(crate::system::window::window_resolve::parse_window_number)
-        .filter(|_| window_rooted)
-    else {
-        return Ok(());
-    };
-    let window = crate::tree::surface_read::element(element, "AXWindow", deadline)
-        .map_err(|error| destroyed_as_stale(entry, error))?;
-    let number = match window {
-        Some(window) => {
-            crate::system::window::window_resolve::ax_window_id_with_deadline(&window, deadline)?
-        }
-        None => None,
-    };
-    if number == Some(recorded) {
-        Ok(())
-    } else {
-        Err(stale_token_error(entry, RetainedMismatch::Window))
-    }
+    Ok(())
 }
 
 #[cfg(target_os = "macos")]
