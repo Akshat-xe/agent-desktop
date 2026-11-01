@@ -8,6 +8,8 @@ use agent_desktop_core::{
 };
 use std::sync::atomic::{AtomicU32, Ordering};
 
+const TOKEN: &str = "axtok1:00";
+
 struct EnvelopeAdapter {
     live: LiveElement,
     hit: HitTestResult,
@@ -149,7 +151,7 @@ fn live_button(enabled: bool, bounds: Rect) -> LiveElement {
         identity: LiveIdentity {
             name: LocatorField::Known("Run".into()),
             description: LocatorField::Absent,
-            identifiers: IdentifierEvidence::absent(),
+            identifiers: IdentifierEvidence::absent().with_retained_object(TOKEN.into()),
         },
         state: ElementState {
             role: "button".into(),
@@ -178,6 +180,7 @@ fn entry_for(live: &LiveElement) -> RefEntry {
             process_instance: Some("test-instance".into()),
         },
         identity: RefEntryIdentity {
+            retained_object: Some(TOKEN.into()),
             role: live.state.role.clone(),
             name: Some("Run".into()),
             ..Default::default()
