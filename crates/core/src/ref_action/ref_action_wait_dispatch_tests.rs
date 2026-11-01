@@ -7,6 +7,7 @@ struct DispatchReadAdapter {
     window_reads: AtomicU32,
     dispatches: AtomicU32,
     twin: bool,
+    disabled_after_a_read: bool,
 }
 
 impl DispatchReadAdapter {
@@ -15,6 +16,7 @@ impl DispatchReadAdapter {
             window_reads: AtomicU32::new(0),
             dispatches: AtomicU32::new(0),
             twin,
+            disabled_after_a_read: false,
         }
     }
 }
@@ -65,7 +67,21 @@ impl ObservationOps for DispatchReadAdapter {
         Ok(crate::adapter::saved_ref_window_pool())
     }
 
-    crate::adapter::complete_live_observation!("button", "Run", [capability::CLICK]);
+    crate::adapter::complete_live_observation!(
+        "button",
+        "Run",
+        [capability::CLICK],
+        adapter => crate::ElementState {
+            role: "button".into(),
+            states: Vec::new(),
+            value: None,
+            enabled: Some(
+                !(adapter.disabled_after_a_read && adapter.window_reads.load(Ordering::SeqCst) > 0),
+            ),
+            hidden: Some(false),
+            offscreen: Some(false),
+        }
+    );
 }
 
 impl ActionOps for DispatchReadAdapter {
@@ -119,4 +135,21 @@ fn a_cut_short_count_under_the_lease_waits_again_within_the_budget() {
 
     assert_eq!(adapter.window_reads.load(Ordering::SeqCst), 2);
     assert_eq!(adapter.dispatches.load(Ordering::SeqCst), 1);
+}
+
+#[test]
+fn a_budget_spent_after_a_refusal_reports_that_refusal_as_its_cause() {
+    let mut adapter = DispatchReadAdapter::new(false);
+    adapter.disabled_after_a_read = true;
+
+    let error = click(&adapter, 600).unwrap_err();
+
+    assert_eq!(error.code, ErrorCode::Timeout);
+    let details = error.details.expect("timeout details");
+    assert_eq!(details["cause"]["code"], "TIMEOUT");
+    assert_eq!(
+        details["cause"]["details"]["kind"],
+        "resolution_identity_unknown"
+    );
+    assert_eq!(adapter.dispatches.load(Ordering::SeqCst), 0);
 }

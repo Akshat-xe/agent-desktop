@@ -164,7 +164,7 @@ fn confirm_landed(
 /// the process and its generation on that answer. Only an entry that records no
 /// window id falls back to enumerating the process's windows, where the
 /// generation alone still says which one it was.
-fn recorded_window(
+pub(crate) fn recorded_window(
     adapter: &dyn PlatformAdapter,
     entry: &RefEntry,
     deadline: Deadline,

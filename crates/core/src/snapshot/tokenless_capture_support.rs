@@ -88,9 +88,21 @@ impl ObservationOps for CaptureAdapter {
                 };
                 crate::adapter::observed_tree(&root, tree)
             }
-            ObservationRoot::Element { .. } => {
+            ObservationRoot::Element { entry, .. } => {
                 self.subtrees.fetch_add(1, Ordering::SeqCst);
-                crate::adapter::saved_ref_element_tree(root)
+                let tree = self.tree.lock().expect("the fixture tree locks").clone();
+                match entry
+                    .identity
+                    .retained_object
+                    .as_deref()
+                    .and_then(|token| find_token_subtree(tree, token))
+                {
+                    Some(subtree) => crate::adapter::observed_tree(
+                        &root,
+                        cut(subtree, 0, request.max_logical_depth),
+                    ),
+                    None => crate::adapter::saved_ref_element_tree(root),
+                }
             }
         }
     }
@@ -147,6 +159,16 @@ pub(super) fn window(children: Vec<AccessibilityNode>) -> AccessibilityNode {
     let mut root = node("window", "Fixture");
     root.children = children;
     root
+}
+
+/// The subtree whose root carries `token`, as an element read of it returns.
+fn find_token_subtree(node: AccessibilityNode, token: &str) -> Option<AccessibilityNode> {
+    if node.identity.retained_object.as_deref() == Some(token) {
+        return Some(node);
+    }
+    node.children
+        .into_iter()
+        .find_map(|child| find_token_subtree(child, token))
 }
 
 /// The window as a walk limited to `max_logical_depth` returns it: a container

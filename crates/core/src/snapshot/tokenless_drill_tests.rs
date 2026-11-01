@@ -133,3 +133,56 @@ fn a_token_rooted_drill_proves_its_tokenless_descendants() {
     );
     resolve(&adapter, button).expect("the drilled ref resolves");
 }
+
+#[test]
+fn a_token_rooted_drill_of_tokened_refs_reads_only_its_subtree() {
+    let _guard = HomeGuard::new();
+    let mut tokened = node("button", "Save");
+    tokened.identity.retained_object = Some("axtok1:save".into());
+    let mut sidebar = node("group", "Sidebar");
+    sidebar.identity.retained_object = Some(TOKEN.into());
+    sidebar.children = vec![group(vec![tokened])];
+    let adapter = CaptureAdapter::new(window(vec![group(vec![group(vec![sidebar])])]));
+    let captured = snapshot(&adapter);
+    let (anchor_ref, _) = named(&captured.refmap, "Sidebar");
+    let snapshot_id = save(&captured.refmap);
+    let windows_before = adapter.captures();
+
+    let drilled = run_from_ref(&adapter, &drill_opts(), &anchor_ref, Some(&snapshot_id))
+        .expect("a drill whose refs all carry tokens reads its subtree");
+
+    assert_eq!(adapter.captures(), windows_before, "no whole-window read");
+    assert_eq!(adapter.subtrees.load(Ordering::SeqCst), 1);
+    let (_, button) = named(&drilled.refmap, "Save");
+    assert_eq!(
+        button.identity.retained_object.as_deref(),
+        Some("axtok1:save")
+    );
+}
+
+#[test]
+fn a_token_rooted_drill_whose_window_read_is_cut_short_replaces_nothing() {
+    let _guard = HomeGuard::new();
+    let adapter = CaptureAdapter::new(token_anchored_window());
+    adapter.fault_whole_read(|_, mut tree| {
+        let mut unread = node("scrollarea", "Unread");
+        unread.children_count = Some(3);
+        unread.subtree_truncated = true;
+        tree.children.push(unread);
+        Ok(tree)
+    });
+    let captured = snapshot(&adapter);
+    let (anchor_ref, _) = named(&captured.refmap, "Sidebar");
+    let snapshot_id = save(&captured.refmap);
+
+    let Err(error) = run_from_ref(&adapter, &drill_opts(), &anchor_ref, Some(&snapshot_id)) else {
+        panic!("a drill is all or nothing");
+    };
+
+    assert_eq!(error.code(), "TIMEOUT");
+    let stored = crate::refs::refs_store::RefStore::new()
+        .expect("the snapshot store opens")
+        .load_snapshot(&snapshot_id)
+        .expect("the snapshot loads");
+    assert_eq!(stored.len(), captured.refmap.len(), "no ref was replaced");
+}

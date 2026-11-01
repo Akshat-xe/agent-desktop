@@ -79,9 +79,11 @@ fn execute_with_deadline(
 > {
     let polls = request.timeout_ms.is_some_and(|timeout_ms| timeout_ms > 0);
     let mut saw_ambiguity = false;
+    let mut refusal: Option<AdapterError> = None;
     loop {
         let mut state = if polls {
-            execute_poll_loop(context, &request, deadline)?
+            execute_poll_loop(context, &request, deadline)
+                .map_err(|error| with_refusal(error, refusal.as_ref()))?
         } else {
             RefActionPollState::default()
         };
@@ -99,7 +101,8 @@ fn execute_with_deadline(
             .acquire_interaction_lease(deadline)
             .map_err(|error| state.attach_error_metrics(error))?;
         if deadline.is_expired() {
-            return Err(state.attach_error_metrics(deadline.timeout_error()));
+            let error = state.attach_error_metrics(deadline.timeout_error());
+            return Err(with_refusal(error, refusal.as_ref()));
         }
         if polls {
             request.timeout_ms = Some(deadline.remaining_ms());
@@ -122,6 +125,7 @@ fn execute_with_deadline(
                     return Err(error);
                 }
                 saw_ambiguity |= error.code == crate::ErrorCode::AmbiguousTarget;
+                refusal = Some(error);
                 crate::wait::deadline::sleep(
                     crate::refs::ref_resolve_deadline::POLL_INTERVAL.min(deadline.remaining()),
                 );
@@ -137,6 +141,31 @@ fn resolves_again(error: &AdapterError, deadline: Deadline) -> bool {
     error.disposition == crate::DeliverySemantics::not_delivered()
         && error.is_retryable_resolution_failure()
         && !deadline.is_expired()
+}
+
+/// Carries the dispatch-time refusal that sent the action back to the wait as
+/// `details.cause`, so a budget that runs out there still reports why the ref
+/// was not acted on.
+fn with_refusal(mut error: AdapterError, refusal: Option<&AdapterError>) -> AdapterError {
+    let Some(refusal) = refusal else {
+        return error;
+    };
+    let cause = serde_json::json!({
+        "code": refusal.code.as_str(),
+        "message": refusal.message,
+        "details": refusal.details,
+    });
+    let mut details = error
+        .details
+        .take()
+        .unwrap_or_else(|| serde_json::json!({}));
+    match details.as_object_mut() {
+        Some(object) => {
+            object.insert("cause".into(), cause);
+        }
+        None => details = serde_json::json!({ "error_details": details, "cause": cause }),
+    }
+    error.with_details(details)
 }
 
 pub(crate) fn operation_deadline(request: &ActionRequest) -> Result<Deadline, AdapterError> {

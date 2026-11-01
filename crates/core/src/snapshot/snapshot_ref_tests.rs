@@ -103,6 +103,12 @@ impl ObservationOps for StubAdapter {
         if let Some(error) = &self.subtree_error {
             return Err(error.clone());
         }
+        if matches!(
+            root,
+            crate::locator::live_locator::ObservationRoot::Element { .. }
+        ) {
+            return crate::adapter::observed_tree(&root, self.subtree.clone());
+        }
         let mut drilled = self.subtree.clone();
         drilled.identity.retained_object = Some(self.token.clone());
         let mut window = node("window");
@@ -119,6 +125,14 @@ impl ObservationOps for StubAdapter {
             assert_eq!(filter.app.as_ref(), Some(expected));
         }
         Ok(self.windows.clone())
+    }
+
+    fn resolve_element_strict(
+        &self,
+        _entry: &crate::refs::RefEntry,
+        _deadline: crate::Deadline,
+    ) -> Result<NativeHandle, AdapterError> {
+        Ok(NativeHandle::null())
     }
 }
 

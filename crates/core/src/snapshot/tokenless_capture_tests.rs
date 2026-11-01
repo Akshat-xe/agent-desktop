@@ -166,3 +166,35 @@ fn a_shallow_capture_of_tokened_refs_takes_one_walk() {
     assert_eq!(adapter.strict.load(Ordering::SeqCst), 1);
     assert!(adapter.anchored().is_empty());
 }
+
+#[test]
+fn a_deep_capture_cut_short_is_flagged_as_unproven() {
+    let _guard = HomeGuard::new();
+    let mut unread = node("scrollarea", "Feed");
+    unread.children_count = Some(3);
+    unread.subtree_truncated = true;
+    let adapter = CaptureAdapter::new(window(vec![node("button", "Run"), unread]));
+    let deep = crate::adapter::TreeOptions {
+        max_depth: crate::refs::resolve_saved_ref::WHOLE_WINDOW_DEPTH,
+        ..Default::default()
+    };
+
+    let captured = crate::snapshot::build(
+        &adapter,
+        &deep,
+        Some("Fixture"),
+        None,
+        Deadline::standard().expect("a standard deadline"),
+    )
+    .expect("the window snapshots");
+
+    assert_eq!(
+        adapter.captures(),
+        1,
+        "a deep capture is its own whole read"
+    );
+    assert_eq!(
+        captured.identity_unproven.as_deref(),
+        Some("the window read was cut short")
+    );
+}

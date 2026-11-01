@@ -4,10 +4,11 @@ use crate::refs::ref_identity::is_element_token;
 use std::collections::HashSet;
 
 /// Plans the boundary containers that anchor a skeleton, deepest first. A
-/// boundary becomes an anchor only when it can hold a ref, carries identity
-/// evidence and `offered` accepts it; otherwise the uncovered boundary passes to
-/// the parent, so the nearest accepted ancestor anchors it instead. Returns
-/// whether a boundary below `node` is still uncovered.
+/// boundary is covered by a ref-able node, or becomes an anchor when it can
+/// hold a ref and carries identity evidence, only when `offered` accepts that
+/// node; otherwise the uncovered boundary passes to the parent, so the nearest
+/// accepted ancestor anchors it instead. Returns whether a boundary below
+/// `node` is still uncovered.
 pub(crate) fn plan_skeleton_anchors(
     node: &AccessibilityNode,
     path: &mut Vec<usize>,
@@ -23,7 +24,7 @@ pub(crate) fn plan_skeleton_anchors(
     if !uncovered_boundary {
         return false;
     }
-    if can_receive_observed_ref(node) && is_ref_able(node) {
+    if can_receive_observed_ref(node) && is_ref_able(node) && offered(node, path.as_slice()) {
         return false;
     }
     if !path.is_empty()

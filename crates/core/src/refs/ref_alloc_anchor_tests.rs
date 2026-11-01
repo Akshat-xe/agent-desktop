@@ -111,3 +111,23 @@ fn a_unique_ancestor_anchors_a_boundary_whose_twin_is_not_offered() {
     assert_eq!(anchor.identity.name.as_deref(), Some("Panel"));
     assert!(anchor.identity.unique_at_capture);
 }
+
+/// A ref-able twin at a boundary is refused when drilled, so it covers nothing:
+/// the boundary falls to the nearest ancestor the capture proves.
+#[test]
+fn a_twin_ref_able_boundary_leaves_its_anchor_to_a_proven_ancestor() {
+    let mut panel = node("group", Some("Panel"));
+    panel.children = vec![
+        boundary("button", Some("More")),
+        boundary("button", Some("More")),
+    ];
+    let mut root = node("window", Some("w"));
+    root.children = vec![panel];
+
+    let refmap = allocation(root);
+    let anchor = (1..=refmap.len())
+        .filter_map(|index| refmap.get(&format!("@e{index}")))
+        .find(|entry| entry.identity.name.as_deref() == Some("Panel"))
+        .expect("the proven ancestor anchors the boundary");
+    assert!(anchor.identity.unique_at_capture);
+}

@@ -51,12 +51,12 @@ pub(crate) fn capture_window(
 ) -> Result<WindowCapture, AppError> {
     let observed = observe_window(adapter, opts, window, deadline)?;
     let depth = ObservationRequest::snapshot_logical_depth(opts);
-    if depth >= crate::refs::resolve_saved_ref::WHOLE_WINDOW_DEPTH || !needs_whole_window(&observed)
-    {
+    let unread = needs_whole_window(&observed);
+    if depth >= crate::refs::resolve_saved_ref::WHOLE_WINDOW_DEPTH || !unread {
         return Ok(WindowCapture {
             observed,
             presentation_depth: None,
-            identity_unproven: None,
+            identity_unproven: unread.then(|| "the window read was cut short".to_owned()),
         });
     }
     let unproven = match crate::refs::resolve_saved_ref::observe_whole_window(
