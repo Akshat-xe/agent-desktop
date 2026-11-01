@@ -1,6 +1,7 @@
 use super::*;
 use crate::tree::element::UIAElement;
 use crate::tree::fixture::{HostedFixture, ensure_test_apartment};
+use crate::tree::resolve::resolve_search::descent::descend_path;
 use crate::tree::walk::walker_fake::{deadline, ref_entry, scan_subtree};
 use agent_desktop_core::{
     ErrorCode, IdentifierEvidence, LocatorEvidence, LocatorField, LocatorRefEvidence,
@@ -90,7 +91,31 @@ fn an_exact_anchor_path_resolves_on_the_unchanged_fixture() {
     let entry = blank_entry_with_path(&fixture, Vec::new());
     let handle = resolve_locator_anchor(&entry, deadline())
         .expect("the exact anchor path resolves the secure element");
-    assert!(handle.downcast_ref::<UIAElement>().is_some());
+    assert_verified_stamp(&handle, entry.process.pid.get(), &verified_token(&entry));
+}
+
+/// Every handle the anchor hands back carries the ref's verified process
+/// identity, so the shared live read can corroborate that the provider
+/// answering is still the generation resolution verified.
+///
+/// Without the stamp the corroboration is skipped for every resolved handle,
+/// and A14-9's finding - a dead provider's reads succeeding empty on some
+/// builds - lands as an answer rather than a `STALE_REF`. The live-read tests
+/// build their own stamp, so nothing there notices a resolver that stops
+/// producing one; this is the assertion that sees it.
+fn assert_verified_stamp(handle: &NativeHandle, pid: u32, token: &str) {
+    let resolved = handle
+        .downcast_ref::<UIAElement>()
+        .expect("the resolved handle carries a UI Automation element");
+    assert_eq!(
+        resolved.verified_process(),
+        Some((pid, token)),
+        "the anchor must stamp the ref's verified process identity onto the handle it returns"
+    );
+}
+
+fn verified_token(entry: &RefEntry) -> String {
+    entry.process.process_instance.clone().unwrap_or_default()
 }
 
 /// A path that points at a sibling beyond the target settles stale in a
@@ -133,17 +158,15 @@ fn a_role_refuted_landing_settles_stale() {
     let source =
         crate::tree::walk::walker_source::UiaTreeSource::for_root(&root).expect("a source");
     let prepared = source.prepare_root(&root).expect("a prepared root");
-    let landing = crate::tree::resolve::resolve_search::descent::descend_path(
+    let landed = descend_path(
         &source,
         &prepared,
         &entry.scope.path,
         &crate::tree::walk::walker::WalkBudget::new(10, deadline),
         &ANCHOR_DESCENT,
     )
-    .expect("the stored path descends");
-    let landed = landing.element.expect(
-        "the stored path must land on a live element for the role guard to be what refuses it",
-    );
+    .expect("the stored path descends")
+    .expect("the stored path must land on a live element for the role guard to be what refuses it");
     let (_, evidence, _) = source.evidence(&landed);
     assert!(
         evidence

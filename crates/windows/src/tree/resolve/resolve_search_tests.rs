@@ -1,7 +1,11 @@
 use super::*;
+use crate::tree::element::UIAElement;
 use crate::tree::fixture::ensure_test_apartment;
+use crate::tree::walk::walker::WalkBudget;
+use crate::tree::walk::walker_source::UiaTreeSource;
 use agent_desktop_core::{
-    ElementIdentifier, IdentifierEvidence, IdentifierKind, LocatorField, NodeDescriptor,
+    AdapterError, ElementIdentifier, IdentifierEvidence, IdentifierKind, LocatorField,
+    NodeDescriptor,
 };
 
 fn entry(
@@ -85,44 +89,6 @@ fn a_ref_with_no_drill_down_root_is_window_rooted_whatever_its_path_flag() {
 }
 
 #[test]
-fn a_window_rooted_non_empty_path_with_identity_qualifies_for_the_fast_path() {
-    let mut absolute = entry(None, Some(1), Some("name"), Some("id"));
-    absolute.scope.path.push(2);
-    assert!(can_use_path_fast_path(&absolute));
-}
-
-#[test]
-fn a_relative_drill_down_path_skips_the_fast_path() {
-    let mut relative = entry(None, Some(1), None, Some("id"));
-    relative.scope.root_ref = Some("root".to_string());
-    relative.scope.path_is_absolute = false;
-    assert!(!can_use_path_fast_path(&relative));
-}
-
-#[test]
-fn an_empty_path_skips_the_fast_path() {
-    assert!(!can_use_path_fast_path(&entry(None, Some(1), None, None)));
-}
-
-#[test]
-fn a_ref_with_no_id_text_or_hash_skips_the_fast_path() {
-    assert!(!can_use_path_fast_path(&entry(None, None, None, None)));
-}
-
-/// `can_use_path_fast_path` must apply the same positive-area rule
-/// `provisional_geometry_candidate` promotes on, not a bare
-/// `bounds_hash.is_some()`: a zero-extent stored rectangle still hashes
-/// (`Rect::bounds_hash` only rejects an invalid rectangle), so an id-less,
-/// text-less entry backed by one is not eligible for the geometry tier and
-/// must not qualify for the fast path either.
-#[test]
-fn a_zero_extent_bounds_hash_does_not_qualify_for_the_fast_path() {
-    let mut zero_extent = entry(Some(rect(0.0, 0.0)), Some(1), None, None);
-    zero_extent.scope.path.push(0);
-    assert!(!can_use_path_fast_path(&zero_extent));
-}
-
-#[test]
 fn promotion_requires_a_positive_area_stored_bounds() {
     let positive = entry(Some(rect(40.0, 20.0)), Some(1), None, None);
     assert!(provisional_geometry_candidate(&positive));
@@ -191,17 +157,6 @@ fn a_nameless_positive_area_ref_is_locatable_by_the_geometry_tier() {
     assert!(provisional_geometry_candidate(&geometry_only));
     assert!(!entry_is_unverifiable(&geometry_only));
     assert!(entry_is_locatable(&geometry_only));
-}
-
-#[test]
-fn should_stop_collecting_fires_only_past_one_match_with_no_stored_hash() {
-    let no_hash = entry(None, None, None, None);
-    assert!(!should_stop_collecting(0, &no_hash));
-    assert!(!should_stop_collecting(1, &no_hash));
-    assert!(should_stop_collecting(2, &no_hash));
-
-    let with_hash = entry(None, Some(0x1234), None, None);
-    assert!(!should_stop_collecting(2, &with_hash));
 }
 
 /// The geometry tier's promotion decision, taken against a live control rather

@@ -4,15 +4,6 @@ use agent_desktop_core::{
 };
 use serde_json::json;
 
-use crate::tree::element::UIAElement;
-
-/// A matched live element plus the tie-break hash read off its evidence.
-#[derive(Clone)]
-pub(crate) struct Candidate {
-    pub(crate) element: UIAElement,
-    pub(crate) bounds_hash: Option<u64>,
-}
-
 /// The three-state outcome the composed rule demands: a candidate either
 /// matched, was refuted, or **could not be read** - and an unreadable
 /// candidate makes the attempt incomplete-and-retryable rather than silently
@@ -85,43 +76,6 @@ pub(crate) fn bounds_hash_of(evidence: &LocatorEvidence) -> Option<u64> {
     }
 }
 
-/// What the 2+-candidate branch decided.
-pub(crate) enum Selection {
-    /// Exactly one candidate matched the stored bounds hash; its index in the
-    /// searched candidate list.
-    Resolved(usize),
-    /// No stored hash, no candidate matched it, or more than one did.
-    Ambiguous,
-}
-
-/// Breaks a tie among several evidence-equal candidates by bounds hash.
-///
-/// Pure over the hashes alone, not the elements, so the decision is testable
-/// without a live COM element in scope. The bounds hash never refutes an
-/// exact match; it only ever picks among several - a stored ref with no hash
-/// (bounds failed at capture, or hidden by the requester) cannot be
-/// disambiguated this way, so it stays ambiguous rather than guessing.
-pub(crate) fn select_by_bounds_hash(
-    candidate_hashes: &[Option<u64>],
-    expected_hash: Option<u64>,
-) -> Selection {
-    let Some(expected_hash) = expected_hash else {
-        return Selection::Ambiguous;
-    };
-    let mut sole = None;
-    let mut matches = 0;
-    for (index, hash) in candidate_hashes.iter().enumerate() {
-        if *hash == Some(expected_hash) {
-            matches += 1;
-            sole = Some(index);
-        }
-    }
-    match (matches, sole) {
-        (1, Some(index)) => Selection::Resolved(index),
-        _ => Selection::Ambiguous,
-    }
-}
-
 pub(crate) fn stale_ref_error(_entry: &RefEntry) -> AdapterError {
     let error = AdapterError::stale_ref_because("Stored ref does not match any live element");
     let default_retryable = error.permits_retry_by_default();
@@ -148,32 +102,6 @@ pub(crate) fn owning_process_exited_error(_entry: &RefEntry) -> AdapterError {
         "complete": true,
         "retryable": false,
     }))
-}
-
-/// The settled `AMBIGUOUS_TARGET`, stamped on both retry axes like every
-/// other resolver verdict.
-///
-/// `complete` is true because every path that reaches here has a conclusive
-/// answer: `classify_search` withholds the verdict as `Incomplete` whenever an
-/// unread region could still change it, and the one case it lets through with
-/// an unread region (`should_stop_collecting`: two or more matches and no
-/// stored bounds hash to separate them) cannot be resolved by any further
-/// candidate, only made more ambiguous.
-///
-/// `retryable` is false because nothing about a re-attempt differs: the stored
-/// evidence is fixed, and the search that produced several equally-matching
-/// candidates is deterministic over the same tree. The stamp keeps that
-/// verdict out of core's poll loop, which retries a resolution failure only
-/// when it is explicitly retryable.
-pub(crate) fn ambiguous_target_error(_entry: &RefEntry, count: usize) -> AdapterError {
-    AdapterError::ambiguous_target("Multiple live elements match the stored identity")
-        .with_suggestion("Take a fresh snapshot and use its new ref")
-        .with_details(json!({
-            "kind": "resolve_ambiguous",
-            "candidate_count": count,
-            "complete": true,
-            "retryable": false,
-        }))
 }
 
 #[cfg(test)]

@@ -1,12 +1,11 @@
-//! The locator-anchor resolver: selected-match hydration's path-only
-//! variant of `resolve_element_strict`.
+//! The locator-anchor resolver: the path-only resolver core's selected-match
+//! hydration and stored-ref resolution both land on.
 //!
 //! Core's `live_locator::hydrate` re-observes the matched subtree from the
 //! return handle and enforces evidence completeness itself; Windows only has to
 //! land the anchor. The anchor's path is exact from the just-walked tree, so
-//! there is **no broad-search fallback** - and its classification is the
-//! inverse of the strict search's: every step is descent along a stored path
-//! that churn makes permanently wrong, so a path step that lands nowhere, a
+//! there is **no broad-search fallback**: every step is descent along a stored
+//! path that churn makes permanently wrong, so a path step that lands nowhere, a
 //! role-refuted candidate, or a vanished node **settles the attempt
 //! immediately** (a completed-search `STALE_REF`, one attempt, the deadline
 //! intact for core's fresh re-observation). Only the unresponsive/transport
@@ -24,7 +23,7 @@ use agent_desktop_core::{AdapterError, Deadline, NativeHandle, RefEntry};
 #[cfg(target_os = "windows")]
 use super::resolve_match::CandidateOutcome;
 use super::resolve_match::stale_ref_error;
-use super::resolve_search::descent::{DescentPolicy, DescentVerdict, ExpiryPolicy};
+use super::resolve_search::descent::{DescentPolicy, DescentVerdict};
 #[cfg(target_os = "windows")]
 use super::resolve_search::{
     entry_is_locatable, geometry_matches, identity_unknown_error, provisional_geometry_candidate,
@@ -61,13 +60,11 @@ pub(crate) fn resolve_locator_anchor(
 /// The pure entry gate runs first, before any of `resolve_window_root`,
 /// `UiaTreeSource::for_root` or `prepare_root` - three cross-process calls a
 /// verdict `entry_is_locatable` can already settle from the stored ref alone
-/// should never pay for. `resolve.rs`'s `resolve_attempt` runs its own
-/// equivalent gate (`entry_is_unverifiable`) in the same first position.
+/// should never pay for.
 ///
-/// The anchor reuses `entry_is_locatable` directly rather than the fast
-/// path's `can_use_path_fast_path`: an empty path is a valid anchor - the
-/// root element itself can be the stored target - so the anchor omits the
-/// fast path's non-empty-path conjunct.
+/// An empty path is a valid anchor - the root element itself can be the stored
+/// target - so the gate is `entry_is_locatable`, which carries no
+/// non-empty-path conjunct.
 #[cfg(target_os = "windows")]
 fn resolve_locator_anchor_once(
     entry: &RefEntry,
@@ -89,7 +86,7 @@ fn resolve_locator_anchor_once(
         &budget,
         &ANCHOR_DESCENT,
     )?;
-    let Some(candidate) = landing.element else {
+    let Some(candidate) = landing else {
         return Err(stale_ref_error(entry));
     };
     let (_, evidence, _) = source.evidence(&candidate);
@@ -195,7 +192,6 @@ const ANCHOR_CONTEXT: &str = "walk a locator anchor's path";
 /// to trigger.
 pub(crate) const ANCHOR_DESCENT: DescentPolicy = DescentPolicy {
     classify: anchor_descent_verdict,
-    on_expiry: ExpiryPolicy::Surface,
     descend_context: ANCHOR_CONTEXT,
     sibling_context: ANCHOR_CONTEXT,
 };
