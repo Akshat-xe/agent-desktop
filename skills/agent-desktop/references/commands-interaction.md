@@ -43,8 +43,8 @@ Exit codes: `0` success, `1` structured error, `2` argument error. The `error` o
 |------|---------|----------|
 | `PERM_DENIED` | A required OS permission is missing | Read the platform skill |
 | `ELEMENT_NOT_FOUND` | Ref cannot be resolved in the live UI | Snapshot again |
-| `STALE_REF` | Ref no longer matches the live UI | Snapshot again, use the new ref |
-| `AMBIGUOUS_TARGET` | Several live elements match the ref's identity, or it was not proven unique at capture | Act on a control unique in the window; identical twins need `--headed mouse-click --xy` (see `commands-observation.md`) |
+| `STALE_REF` | No live element still matches the ref's recorded identity | Snapshot again, use the new ref |
+| `AMBIGUOUS_TARGET` | The ref never had unique identity evidence, or several live elements match it | If the look-alikes differ in name, identifier or description, use `find --name` and the new ref. If they are identical, use `--headed mouse-click --xy` with bounds from `snapshot --include-bounds` (headed: it takes the foreground, so only when the run allows headed input; there is no headless way to pick one twin) |
 | `SNAPSHOT_NOT_FOUND` | Snapshot id missing or expired | Snapshot again |
 | `APP_NOT_FOUND` | App not running | `launch` it |
 | `WINDOW_NOT_FOUND` | No matching window | Check the name, use `list-windows` |
@@ -67,6 +67,7 @@ Before a ref action dispatches, core checks the target under one bounded budget.
 - Transient checks (`visible`, `stable`, `enabled`, `receives_events`) are polled about every 100 ms until they pass. On expiry the result is `TIMEOUT` or `ACTION_FAILED`.
 - A disabled target waits out the whole budget and ends `TIMEOUT` with `kind: actionability_timeout`; its `last_report` carries the failed `enabled` check. A target that is also off screen is not scrolled while it stays disabled, so the result does not depend on where the page was scrolled.
 - A ref that matches nothing on a complete live read waits the whole budget and ends `STALE_REF` (`AMBIGUOUS_TARGET` if several match), not `TIMEOUT`. A `hover` or `drag` wait that ends on such a settled ref names that code too.
+- A ref that recorded no identifier, name or description that was unique at snapshot time is refused before the action runs: `AMBIGUOUS_TARGET` with `details.kind: "identity_not_unique"`. Waiting cannot change it. If the look-alikes differ in name, identifier or description, use `find --name` and the new ref. If they are identical, use `--headed mouse-click --xy` with bounds from `snapshot --include-bounds` (headed: it takes the foreground, so only when the run allows headed input; there is no headless way to pick one twin); a ref from `find --first`, `--last` or `--nth` is refused the same way.
 - Terminal checks (`supported_action`, `policy`, `editable`) cannot be healed by waiting. They fail at once with `ACTION_NOT_SUPPORTED` or `POLICY_DENIED`.
 - `hover` and each ref endpoint of `drag` use a pointer resolver: live visibility and bounds, one scroll-into-view try, a second equal-bounds sample, then `receives_events`. They do not need an element action.
 - `receives_events` runs only when the action reaches the target by pointer: a headed action, `hover`, `drag`, or a click with no semantic delivery. A headless click that dispatches by a semantic action skips it.
@@ -187,7 +188,7 @@ agent-desktop --headed mouse-move --xy 100,200
 
 | Goal | Use | Fall back to |
 |------|-----|--------------|
-| Click a button | `click @ref` | `--headed mouse-click --xy X,Y` |
+| Click a button | `click @ref` | `--headed mouse-click --xy X,Y` (headed: it takes the foreground, so only when the run allows headed input; there is no headless way to pick one twin) |
 | Fill a text field | `set-value @ref "text"` | `clear` then `type` |
 | Set a checkbox | `check` / `uncheck` | `toggle` when state is unknown |
 | Pick a dropdown option | `select @ref "Option"` | open the menu, then `snapshot --surface menu` |

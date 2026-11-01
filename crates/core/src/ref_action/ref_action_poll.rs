@@ -10,7 +10,7 @@ use crate::{
     ref_action::ref_action_wait_evidence::{failed_check, should_scroll_after_preflight},
     ref_action::ref_action_wait_support::{trace_resolve_error, trace_resolve_ok},
     ref_action::{ResolvedRefAction, into_adapter_error, preflight_resolved},
-    refs::ref_resolve_deadline::{POLL_INTERVAL, land_within_deadline},
+    refs::ref_resolve_deadline::{POLL_INTERVAL, resolve_within_deadline},
     refs::resolve_attempt_outcome::ResolveAttemptOutcome,
 };
 
@@ -22,9 +22,7 @@ const STABILITY_POLL_INTERVAL: Duration = Duration::from_millis(16);
 /// cross-process lock and holding it for the whole wait budget would serialize
 /// every agent-desktop process on the machine. Anything resolved here was
 /// therefore observed without exclusivity, so dispatch re-resolves under the
-/// lease, and that resolve is the correctness boundary. This loop only lands
-/// the ref provisionally, which skips the whole-window count in the common
-/// case, so an action pays for one whole-window read rather than two.
+/// lease. The second resolve is the correctness boundary, not redundant work.
 pub(crate) fn execute_poll_loop(
     context: RefActionWaitContext<'_>,
     request: &ActionRequest,
@@ -40,7 +38,13 @@ pub(crate) fn execute_poll_loop(
     };
     loop {
         state.resolve_attempts = state.resolve_attempts.saturating_add(1);
-        match land_within_deadline(context.adapter, context.entry, deadline) {
+        match resolve_within_deadline(
+            context.adapter,
+            context.entry,
+            deadline,
+            context.ref_id,
+            context.context,
+        ) {
             ResolveAttemptOutcome::DeadlinePassed => return Err(timeout(&state, deadline)),
             ResolveAttemptOutcome::Failed(error) => {
                 handle_resolve_failure(

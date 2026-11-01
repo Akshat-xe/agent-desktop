@@ -56,7 +56,6 @@ impl ObservationOps for RetryAdapter {
     }
 
     crate::adapter::complete_live_observation!("button", "Run", [capability::CLICK]);
-    crate::adapter::saved_ref_scope!("button", Some("Run"));
 }
 
 impl ActionOps for RetryAdapter {
@@ -87,7 +86,7 @@ impl ObservationOps for AmbiguousThenOkAdapter {
         _deadline: crate::Deadline,
     ) -> Result<NativeHandle, AdapterError> {
         self.resolve_calls.fetch_add(1, Ordering::SeqCst);
-        if self.resolve_calls.load(Ordering::SeqCst) <= 2 {
+        if self.resolve_calls.load(Ordering::SeqCst) == 1 {
             return Err(AdapterError::ambiguous_target("2 candidates")
                 .with_details(serde_json::json!({ "retryable": true })));
         }
@@ -95,7 +94,6 @@ impl ObservationOps for AmbiguousThenOkAdapter {
     }
 
     crate::adapter::complete_live_observation!("button", "Run", [capability::CLICK]);
-    crate::adapter::saved_ref_scope!("button", Some("Run"));
 }
 
 impl ActionOps for AmbiguousThenOkAdapter {
@@ -122,42 +120,14 @@ fn entry() -> RefEntry {
         width: 10.0,
         height: 10.0,
     };
-    RefEntry {
-        process: crate::RefProcess {
-            pid: crate::ProcessId::new(1),
-            process_instance: Some("test-instance".into()),
-        },
-        identity: crate::RefEntryIdentity {
-            retained_object: None,
-            role: "button".into(),
-            name: Some("Run".into()),
-            value: None,
-            description: None,
-            native_id: None,
-            unique_at_capture: true,
-        },
-        geometry: crate::RefGeometry {
-            bounds_space: None,
-            bounds: Some(bounds),
-            bounds_hash: bounds.bounds_hash(),
-        },
-        capabilities: crate::RefCapabilities {
-            states: vec![],
-            available_actions: vec![capability::CLICK.into()],
-        },
-        source: crate::RefSource {
-            source_app: Some("Fixture".into()),
-            source_window_id: Some("w-1".into()),
-            source_window_title: Some("Fixture".into()),
-            source_window_bounds_hash: None,
-            source_surface: crate::snapshot::snapshot_surface::SnapshotSurface::Window,
-        },
-        scope: crate::RefScope {
-            root_ref: None,
-            path_is_absolute: false,
-            path: smallvec::SmallVec::new(),
-        },
-    }
+    let mut entry = crate::adapter::minimal_ref_entry("button", Some("Run"));
+    entry.geometry.bounds = Some(bounds);
+    entry.geometry.bounds_hash = bounds.bounds_hash();
+    entry.capabilities.available_actions = vec![capability::CLICK.into()];
+    entry.source.source_app = Some("Fixture".into());
+    entry.source.source_window_id = Some("w-1".into());
+    entry.source.source_window_title = Some("Fixture".into());
+    entry
 }
 
 fn request_with_timeout(timeout_ms: u64) -> ActionRequest {
@@ -248,7 +218,6 @@ impl ObservationOps for DisabledPolicyBlockedAdapter {
             available_actions: vec![capability::CLICK.into()],
         })
     }
-    crate::adapter::saved_ref_scope!("button", Some("Run"));
 }
 
 impl ActionOps for DisabledPolicyBlockedAdapter {}
@@ -311,7 +280,6 @@ impl ObservationOps for SettledStaleAdapter {
     }
 
     crate::adapter::complete_live_observation!("button", "Run", [capability::CLICK]);
-    crate::adapter::saved_ref_scope!("button", Some("Run"));
 }
 
 impl ActionOps for SettledStaleAdapter {
@@ -357,11 +325,7 @@ fn complete_no_candidate_returns_stale_ref_without_exhausting_budget() {
     let details = err.details.expect("settled details");
     assert_eq!(details["kind"], "resolve_no_candidate");
     assert_eq!(details["complete"], true);
-    assert_eq!(
-        adapter.resolve_calls.load(Ordering::SeqCst),
-        2,
-        "one provisional landing and one full resolution, then no retry"
-    );
+    assert_eq!(adapter.resolve_calls.load(Ordering::SeqCst), 1);
 }
 
 #[path = "ref_action_wait_lease_tests.rs"]

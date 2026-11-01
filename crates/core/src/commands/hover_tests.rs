@@ -83,7 +83,7 @@ impl ObservationOps for HoverCaptureAdapter {
 
     fn confirm_pointer_receiver(
         &self,
-        _handle: &NativeHandle,
+        _entry: &RefEntry,
         _point: crate::Point,
         _deadline: crate::Deadline,
     ) -> Result<(), AdapterError> {
@@ -98,7 +98,6 @@ impl ObservationOps for HoverCaptureAdapter {
         }
         Ok(())
     }
-    crate::adapter::saved_ref_scope!("button", Some("Target"));
 }
 
 impl ActionOps for HoverCaptureAdapter {}
@@ -138,41 +137,15 @@ impl SystemOps for HoverCaptureAdapter {
 fn ref_snapshot(pid: u32) -> String {
     let store = RefStore::new().unwrap();
     let mut refmap = RefMap::new();
-    refmap.allocate(RefEntry {
-        process: crate::RefProcess {
-            pid: crate::ProcessId::new(pid),
-            process_instance: Some("test-instance".into()),
-        },
-        identity: crate::RefEntryIdentity {
-            retained_object: None,
-            role: "button".into(),
-            name: Some("Target".into()),
-            value: None,
-            description: None,
-            native_id: None,
-            unique_at_capture: true,
-        },
-        geometry: crate::RefGeometry {
-            bounds_space: None,
-            bounds: None,
-            bounds_hash: None,
-        },
-        capabilities: crate::RefCapabilities {
-            states: vec![],
-            available_actions: vec![capability::CLICK.into()],
-        },
-        source: crate::RefSource {
-            source_app: Some(format!("App {pid}")),
-            source_window_id: Some(format!("w-{pid}")),
-            source_window_title: Some(format!("Window {pid}")),
-            source_window_bounds_hash: None,
-            source_surface: crate::adapter::SnapshotSurface::Window,
-        },
-        scope: crate::RefScope {
-            root_ref: None,
-            path_is_absolute: false,
-            path: smallvec::SmallVec::new(),
-        },
+    refmap.allocate({
+        let mut entry = crate::adapter::minimal_ref_entry("button", Some("Target"));
+        entry.process.pid = crate::ProcessId::new(pid);
+        entry.capabilities.available_actions = vec![capability::CLICK.into()];
+        entry.source.source_app = Some(format!("App {pid}"));
+        entry.source.source_window_id = Some(format!("w-{pid}"));
+        entry.source.source_window_title = Some(format!("Window {pid}"));
+        entry.source.source_surface = crate::adapter::SnapshotSurface::Window;
+        entry
     });
     store.save_new_snapshot(&refmap).unwrap()
 }
@@ -309,7 +282,6 @@ impl ObservationOps for StaleThenOkAdapter {
     ) -> Result<HitTestResult, AdapterError> {
         Ok(HitTestResult::ReachesTarget)
     }
-    crate::adapter::saved_ref_scope!("button", Some("Target"));
 }
 
 impl ActionOps for StaleThenOkAdapter {}

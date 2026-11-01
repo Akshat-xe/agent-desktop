@@ -357,3 +357,12 @@ fn exact_ref_entry_refuses_the_version_that_predates_the_geometry_frame() {
     assert_eq!(error.code, ErrorCode::InvalidArgs);
     assert!(error.message.contains("version or size"));
 }
+
+#[path = "resolve_entry_tests.rs"]
+mod entry_tests;
+
+#[path = "resolve_refusal_tests.rs"]
+mod refusal_tests;
+
+#[path = "resolve_effect_tests.rs"]
+mod effect_tests;

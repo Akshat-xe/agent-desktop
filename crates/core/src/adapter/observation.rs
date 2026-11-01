@@ -276,16 +276,14 @@ pub trait ObservationOps: Send + Sync {
 
     /// Strict receiver proof for a physical pointer move that has no element
     /// action to carry it. An adapter that can prove who receives the pointer
-    /// refuses with a `not_delivered` error when the target does not. `handle`
-    /// is the element the caller already resolved under the interaction lease,
-    /// so the adapter never re-identifies the ref by a rule of its own.
+    /// refuses with a `not_delivered` error when the target does not.
     fn confirm_pointer_receiver(
         &self,
-        handle: &NativeHandle,
+        entry: &RefEntry,
         point: crate::Point,
         deadline: Deadline,
     ) -> Result<(), AdapterError> {
-        let _ = (handle, point, deadline);
+        let _ = (entry, point, deadline);
         Ok(())
     }
 }
