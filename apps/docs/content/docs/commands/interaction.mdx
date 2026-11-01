@@ -14,7 +14,7 @@ Every successful ref action returns an action report in `data`. This is a `click
 
 ```json
 {
-  "version": "2.5",
+  "version": "2.6",
   "ok": true,
   "command": "click",
   "data": {
@@ -93,8 +93,8 @@ A failed check list appears in `error.details.checks`, each with a `status` of `
   <tbody>
     <tr><td><code>INVALID_ARGS</code></td><td>A bare or malformed ref, or an argument the command rejects.</td></tr>
     <tr><td><code>SNAPSHOT_NOT_FOUND</code></td><td>The snapshot that owns the ref is missing or pruned.</td></tr>
-    <tr><td><code>STALE_REF</code></td><td>No live element matches the ref's saved identity, or the ref was saved before identity bases existed.</td></tr>
-    <tr><td><code>AMBIGUOUS_TARGET</code></td><td>Several live elements match, or the saved ref recorded no unique identity. A ref action never guesses.</td></tr>
+    <tr><td><code>STALE_REF</code></td><td>No live element matches the ref's saved identity.</td></tr>
+    <tr><td><code>AMBIGUOUS_TARGET</code></td><td>Several live elements match. A ref action never guesses.</td></tr>
     <tr><td><code>ACTION_NOT_SUPPORTED</code></td><td>The element does not expose the action.</td></tr>
     <tr><td><code>POLICY_DENIED</code></td><td>A physical or focus-taking path was needed and headless policy refused it.</td></tr>
     <tr><td><code>TIMEOUT</code>, <code>details.kind: actionability_timeout</code></td><td>The target never became actionable within <code>--timeout-ms</code>. <code>details.last_report</code> names the failing check.</td></tr>

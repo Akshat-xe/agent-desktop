@@ -55,11 +55,6 @@ fn a_dom_id_ref_keeps_the_web_context_with_or_without_a_stored_path() {
 fn rows_that_share_a_native_id_resolve_to_the_one_whose_text_matches() {
     let mut fake = rows();
     let mut beta = fake.entry_of("/beta", true);
-    assert_eq!(
-        beta.identity.native_id.as_ref().map(|id| id.value.as_str()),
-        Some("app.list.row")
-    );
-    beta.identity.basis = Some(agent_desktop_core::IdentityBasis::Name);
     beta.scope.path.clear();
     let found = resolve(&mut fake, &beta, deadline()).expect("resolves");
     assert_eq!(found.path(), "/beta");
@@ -76,7 +71,6 @@ fn rows_with_equal_text_and_equal_size_stay_ambiguous() {
         .properties
         .name = Field::Present("alpha".to_owned());
     let mut alpha = fake.entry_of("/alpha", true);
-    alpha.identity.basis = Some(agent_desktop_core::IdentityBasis::Name);
     alpha.scope.path.clear();
     let error = resolve(&mut fake, &alpha, deadline()).expect_err("ambiguous");
     assert_eq!(error.code, ErrorCode::AmbiguousTarget);
@@ -95,29 +89,31 @@ fn remote_panel() -> Fake {
     fake
 }
 
+/// Identity is the element's role and stable fields, so the changed name is
+/// what refuses the replacement; another owner at the same path alone does not.
 #[test]
-fn a_retained_ref_refuses_the_same_path_and_rectangle_on_another_owner() {
+fn a_retained_ref_refuses_a_differently_named_replacement_on_another_owner() {
     let mut fake = Fake::new();
     fake.add(
         FRAME_PATH,
         "/field",
-        node(crate::tree::vocabulary::role_numbers::ENTRY, "", 100, 24),
+        node(
+            crate::tree::vocabulary::role_numbers::ENTRY,
+            "Field",
+            100,
+            24,
+        ),
     );
     let mut entry = fake.entry_of("/field", true);
-    let original = resolve(&mut fake, &entry, deadline()).expect("original field");
-    entry.identity.retained_object = fake
-        .evidence(&original)
-        .unwrap()
-        .identifiers
-        .retained_object()
-        .map(str::to_owned);
-    assert!(entry.identity.retained_object.is_some());
+    entry.identity.retained_object = Some(":1.2/field".to_owned());
     assert_eq!(
         resolve(&mut fake, &entry, deadline()).unwrap().bus_name(),
         BUS
     );
     fake.pids.insert(":1.99".to_owned(), 99);
-    fake.nodes.get_mut("/field").unwrap().bus = ":1.99".to_owned();
+    let other = fake.nodes.get_mut("/field").unwrap();
+    other.bus = ":1.99".to_owned();
+    other.read.node.properties.name = Field::Present("Other".to_owned());
     let error = resolve(&mut fake, &entry, deadline()).expect_err("replacement owner");
     assert_eq!(error.code, ErrorCode::StaleRef);
 }
@@ -148,8 +144,7 @@ fn a_disappearing_renderer_is_not_reported_as_the_live_frame_owner_leaving() {
                 "/target",
                 node(PUSH_BUTTON, "Target", 50, 20),
             );
-            let mut entry = fake.entry_of("/target", true);
-            entry.identity.basis = Some(agent_desktop_core::IdentityBasis::Positional);
+            let entry = fake.entry_of("/target", true);
             let errors = if during_descent {
                 &mut fake.faults.level_errors
             } else {
@@ -178,8 +173,7 @@ fn a_disappearing_renderer_is_not_reported_as_the_live_frame_owner_leaving() {
 #[test]
 fn a_frame_owner_lost_during_renderer_failure_keeps_the_frame_gate_cause() {
     let mut fake = remote_panel();
-    let mut entry = fake.entry_of("/remote", true);
-    entry.identity.basis = Some(agent_desktop_core::IdentityBasis::Positional);
+    let entry = fake.entry_of("/remote", true);
     fake.faults.evidence_errors.insert(
         "/remote".to_owned(),
         AdapterError::new(ErrorCode::AppNotFound, "renderer left"),
@@ -219,15 +213,12 @@ fn window_with_background_tab() -> Fake {
 }
 
 #[test]
-fn the_window_frame_is_withheld_while_a_background_tab_document_lists_no_children() {
+fn the_window_frame_resolves_though_a_background_tab_document_lists_no_children() {
     let mut fake = window_with_background_tab();
     let entry = fake.entry_of(FRAME_PATH, true);
     assert!(entry.scope.path.is_empty());
-    let error = resolve(&mut fake, &entry, deadline()).expect_err("a region is unread");
-    assert_eq!(error.code, ErrorCode::StaleRef);
-    assert!(error.is_explicitly_retryable());
-    assert!(is_incomplete(&error));
-    assert_eq!(error.details.as_ref().expect("details")["complete"], false);
+    let found = resolve(&mut fake, &entry, deadline()).expect("the frame resolves");
+    assert_eq!(found.path(), FRAME_PATH);
     assert_eq!(fake.reads.searches, 1);
 }
 

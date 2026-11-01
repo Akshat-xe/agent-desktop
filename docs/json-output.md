@@ -4,7 +4,7 @@ Every command returns structured JSON:
 
 ```json
 {
-  "version": "2.5",
+  "version": "2.6",
   "ok": true,
   "command": "click",
   "data": {
@@ -18,7 +18,7 @@ Errors include machine-readable codes and recovery hints:
 
 ```json
 {
-  "version": "2.5",
+  "version": "2.6",
   "ok": false,
   "command": "click",
   "error": {
@@ -110,6 +110,15 @@ Each of these commands now returns the adapter's own report inside `data`:
 - The Rust `ActionResult` and `OperationReport` readers reject a payload without an explicit `disposition`; a missing disposition no longer reads back as delivered-unverified.
 - The C ABI is unchanged. Status-only functions such as `ad_close_app` and `ad_drag` still cannot expose the disposition, steps or target of a successful call.
 
+## Version 2.6 migration
+
+Version 2.6 changes which refs resolve on Windows and Linux, and on macOS for an element that yields no address. Such a ref resolves only when one complete read of its window proved it unique when it was captured and exactly one live element matches its role and stable fields now. The rest of the payload is unchanged.
+
+- A ref to one of two identical controls, which earlier resolved by position or geometry, now fails `AMBIGUOUS_TARGET` with `details.kind: "identity_not_unique"` before anything is read. So does a ref captured from a window that could not be read whole within the snapshot timeout.
+- A refmap written before 2.6 records no capture proof, so all of its refs on these platforms fail the same way. Take a new snapshot.
+- An identical twin that appears after capture fails `AMBIGUOUS_TARGET` with `details.kind: "saved_ref_ambiguous"`.
+- All of these carry `details.retryable: false` and a `not_delivered` disposition. `disposition.retry` stays `safe` because nothing was sent, but repeating the same ref returns the same refusal.
+
 ## Headed action verification
 
 - Headed ref interactions activate the exact source app/window before final pointer hit testing. Read-only readiness polling must not prevent a background target from reaching that focus phase; final hit testing remains mandatory before delivery.
@@ -126,6 +135,21 @@ Earlier output synthesized a display name, falling back to `value` or
 `description`, then a `(unnamed <role>)` placeholder, so consumers that treated
 `name` as always present must tolerate its absence and apply their own fallback
 to `role` or `value`.
+
+## Ref re-identification details
+
+Every ref is re-identified from its stored entry or refused, and `details.kind` names which. The core resolver refuses a saved ref with one of these four kinds:
+
+| `details.kind` | Code | Meaning |
+|------|------|---------|
+| `retained_object_stale` | `STALE_REF` | macOS: the element's recorded address is dead, or its process, role or recorded identifier no longer matches. `details.reason` is `dead`, `pid`, `role` or `native_identifier`. No search runs, so the ref cannot land on a look-alike. Take a fresh snapshot. |
+| `saved_ref_absent` | `STALE_REF` | No live element matches the stored role and stable fields over complete evidence, so the element is gone. Take a fresh snapshot. |
+| `saved_ref_ambiguous` | `AMBIGUOUS_TARGET` | An element identical to the captured one appeared, so two or more live elements match the stored role and stable fields. A fresh snapshot refuses both as twins; act on a control that is unique in the window. |
+| `identity_not_unique` | `AMBIGUOUS_TARGET` | The ref was not proven the only element matching its role and stable fields when it was captured, so nothing is searched. Either an identical twin existed, or the window could not be read whole within the snapshot timeout (retake the snapshot with a larger `--timeout-ms`). It is reached on Windows, on Linux, and on macOS when the element yields no address. A twin is refused by every snapshot; only an explicit coordinate click (`--headed mouse-click --xy`) can pick one, it takes the foreground, and it is unavailable on a Linux Wayland session. |
+
+The fifth outcome is `resolution_identity_unknown`, which carries `TIMEOUT`: a live field could not be read, so the identity count stayed unproven. It is retryable. Linux menu and tray refs report the same kind as `STALE_REF`.
+
+After the core resolver chooses the element, the platform adapter lands it, and a landing failure keeps the adapter's own `details.kind` (for example `resolve_no_candidate` on Linux and Windows, or `resolution_complete_absence` on macOS). The platform skills list those kinds. `saved_ref_absent`, `saved_ref_ambiguous` and `identity_not_unique` carry `details.retryable: false`, because waiting cannot change the answer. Every one of these is `not_delivered`.
 
 ## Error codes
 
@@ -147,16 +171,6 @@ to `role` or `value`.
 | `WINDOW_NOT_FOUND` | The requested window does not exist, including a `screenshot --window-id` that matches no window; the disposition is `not_delivered` |
 | `NOTIFICATION_NOT_FOUND` | The notification ID was not found |
 | `INTERNAL` | Unexpected error or caught panic |
-
-## Ref identity errors
-
-Every ref records the evidence that singled it out from look-alikes when the snapshot was taken: a native identifier, a name, a description, or none of them. A ref with such evidence resolves only when a complete live search of its source scope finds exactly one element that still carries the recorded role and evidence. Bounds never pick a candidate for these refs.
-
-- `STALE_REF`: no live element matches, or the ref comes from a snapshot written before identity bases were recorded. That snapshot cannot be repaired, so retake it instead of retrying the ref.
-- `AMBIGUOUS_TARGET` with `details.kind: "identity_not_unique"`: the ref recorded no identifier, name or description that was unique at snapshot time, so it cannot single out one element in any later search. `details.role` names the saved role, and the suggestion names the recovery. If the elements differ in identifier, name or description, `find --name` gives a ref that resolves. If they are identical, a ref from `find --value`, `--first`, `--last` or `--nth` is refused the same way; read bounds with `snapshot --include-bounds` and use `--headed mouse-click --xy X,Y` (headed: it takes the foreground, so only when the run allows headed input; there is no headless way to pick one twin).
-- `AMBIGUOUS_TARGET` with `details.candidate_count`: a complete search found several live elements carrying the recorded identity. On macOS the details also name the role, name, description, source app and source window, and list up to ten candidates.
-
-A search cut short by a budget or an unreadable subtree never resolves, and the resolver retries within the command's budget. The error that ends the retries depends on the platform. macOS reports `APP_UNRESPONSIVE` with `details.kind: "resolution_traversal_incomplete"` for a cut traversal, and `TIMEOUT` with `resolution_identity_unknown` for an unreadable candidate. Windows reports `TIMEOUT` with `resolution_identity_unknown`. Linux maps `resolution_identity_unknown` to `STALE_REF`, or to `APP_UNRESPONSIVE` when the process is stopped. A ref action that never gets a complete search ends `TIMEOUT`.
 
 ## Exit codes
 

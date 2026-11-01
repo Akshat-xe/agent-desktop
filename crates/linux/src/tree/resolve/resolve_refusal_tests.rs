@@ -203,15 +203,14 @@ fn window_field(x: i32, y: i32, width: i32, height: i32) -> crate::tree::Observe
 
 #[test]
 fn a_known_absent_rectangle_separates_twins_but_an_unread_rectangle_does_not() {
-    for unread in [false, true] {
+    for (unread, keep_rectangle) in [(false, true), (true, true), (false, false), (true, false)] {
         let mut fake = Fake::new();
-        fake.add(
-            FRAME_PATH,
-            "/visible",
-            node(crate::tree::vocabulary::role_numbers::PANEL, "", 378, 46),
-        );
-        let entry = fake.entry_of("/visible", true);
-        let mut hidden = node(crate::tree::vocabulary::role_numbers::PANEL, "", 1, 1);
+        fake.add(FRAME_PATH, "/visible", node(PUSH_BUTTON, "Name", 378, 46));
+        let mut entry = fake.entry_of("/visible", true);
+        if !keep_rectangle {
+            entry.geometry.bounds = None;
+        }
+        let mut hidden = node(PUSH_BUTTON, "Name", 1, 1);
         hidden.node.extents = if unread {
             Field::Failed("unread rectangle".into())
         } else {
@@ -316,13 +315,24 @@ fn a_retained_object_ref_is_found_without_following_its_stored_path() {
     assert_eq!(fake.reads.searches, 1);
 }
 
+/// Identity is the element's role and stable fields, so the replacement is
+/// refused for its different name; a new object at the old rectangle alone is
+/// not.
 #[test]
-fn a_retained_object_ref_refuses_a_replacement_at_the_old_rectangle() {
+fn a_retained_object_ref_refuses_a_differently_named_replacement_at_the_old_rectangle() {
     let mut fake = Fake::new();
-    fake.add(FRAME_PATH, "/first", window_field(0, 38, 420, 34));
+    let mut first = window_field(0, 38, 420, 34);
+    first.node.properties.name = Field::Present("First".to_owned());
+    fake.add(FRAME_PATH, "/first", first);
     fake.add(FRAME_PATH, "/second", window_field(0, 80, 420, 34));
     let mut entry = fake.entry_of("/first", true);
     entry.identity.retained_object = Some(":1.2/first".to_owned());
+    assert_eq!(
+        resolve(&mut fake, &entry, deadline())
+            .expect("the recorded object resolves")
+            .path(),
+        "/first"
+    );
 
     let children = &mut fake.nodes.get_mut(FRAME_PATH).expect("frame").children;
     children.remove(0);

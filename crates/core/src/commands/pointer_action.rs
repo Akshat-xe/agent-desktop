@@ -8,9 +8,16 @@ use crate::{
 };
 use serde_json::{Value, json};
 
-mod entry_point_resolve;
 use crate::actionability::pointer_timeout::point_actionability_timeout;
-use entry_point_resolve::EntryPointResolve;
+
+struct EntryPointResolve<'a> {
+    ref_id: &'a str,
+    entry: &'a RefEntry,
+    stability: Option<Option<u64>>,
+    lease: Option<&'a crate::InteractionLease>,
+    allow_scroll: bool,
+    verify_receives_events: bool,
+}
 
 pub(crate) struct PointResolveAttempt<'a> {
     pub args: crate::commands::point_resolve::PointResolveArgs<'a>,
@@ -29,11 +36,19 @@ fn resolve_point_from_entry(
         entry,
         stability,
         lease,
+        allow_scroll,
         verify_receives_events,
     } = request;
-    let mut handle = resolve_handle_within_deadline(adapter, entry, deadline, ref_id, context)
-        .inspect_err(|err| {
-            crate::ref_action::ref_action_wait_support::trace_resolve_error(context, ref_id, err);
+    let mut handle =
+        resolve_handle_within_deadline(adapter, entry, deadline, lease).inspect_err(|err| {
+            let _ = context.trace_lazy("ref.resolve.error", || {
+                json!({
+                    "ref": ref_id,
+                    "code": err.code.as_str(),
+                    "message": err.message.clone(),
+                    "details": err.details.clone()
+                })
+            });
         })?;
     context.trace_lazy("ref.resolve.ok", || json!({ "ref": ref_id }))?;
     let crate::PointerObservation {
@@ -47,7 +62,7 @@ fn resolve_point_from_entry(
             )
             .into());
         }
-        let Some(lease) = lease else {
+        let Some(lease) = lease.filter(|_| allow_scroll) else {
             let mut details = json!({ "check": "visible", "requires_scroll": true });
             if let Some(hash) = bounds.and_then(|rect| rect.bounds_hash())
                 && let Some(object) = details.as_object_mut()
@@ -62,7 +77,7 @@ fn resolve_point_from_entry(
             .into());
         };
         adapter.scroll_into_view(&handle, lease)?;
-        handle = resolve_handle_within_deadline(adapter, entry, deadline, ref_id, context)?;
+        handle = resolve_handle_within_deadline(adapter, entry, deadline, Some(lease))?;
         let observation = adapter.observe_pointer(&handle, deadline)?;
         bounds = observation.bounds;
         states = observation.states;
@@ -118,6 +133,7 @@ fn resolve_point_from_entry(
         focused: false,
         source_entry: Some(entry.clone()),
         bounds_hash: Some(observed_bounds_hash),
+        handle: Some(handle),
     })
 }
 
@@ -175,6 +191,7 @@ pub(crate) fn wait_for_point_with_deadline<'a>(
                 entry: &entry,
                 stability,
                 lease: None,
+                allow_scroll: false,
                 verify_receives_events: false,
             },
             deadline,
@@ -256,7 +273,8 @@ pub(crate) fn resolve_point_under_lease<'a>(
             ref_id,
             entry: &entry,
             stability,
-            lease: allow_scroll.then_some(lease),
+            lease: Some(lease),
+            allow_scroll,
             verify_receives_events: true,
         },
         deadline,
@@ -297,27 +315,22 @@ fn scroll_point_target(
 ) -> Result<(), AppError> {
     let lease = adapter.acquire_interaction_lease(deadline)?;
     focus_point_under_lease(args, &lease, adapter, context)?;
-    let handle = resolve_handle_within_deadline(
-        adapter,
-        entry,
-        deadline,
-        args.ref_id.unwrap_or_default(),
-        context,
-    )?;
+    let handle = resolve_handle_within_deadline(adapter, entry, deadline, Some(&lease))?;
     adapter.scroll_into_view(&handle, &lease)?;
     Ok(())
 }
 
 fn point_requires_scroll(err: &AppError) -> bool {
-    let AppError::Adapter(error) = err else {
-        return false;
-    };
-    error
-        .details
-        .as_ref()
-        .and_then(|details| details.get("requires_scroll"))
+    point_detail(err, "requires_scroll")
         .and_then(Value::as_bool)
         .unwrap_or(false)
+}
+
+fn point_detail<'a>(err: &'a AppError, key: &str) -> Option<&'a Value> {
+    let AppError::Adapter(error) = err else {
+        return None;
+    };
+    error.details.as_ref()?.get(key)
 }
 
 fn point_error_report(error: &AppError) -> Value {
@@ -342,13 +355,7 @@ pub(crate) fn ensure_point_deadline(
 }
 
 fn point_observed_bounds_hash(err: &AppError) -> Option<u64> {
-    let AppError::Adapter(err) = err else {
-        return None;
-    };
-    err.details
-        .as_ref()
-        .and_then(|details| details.get("observed_bounds_hash"))
-        .and_then(Value::as_u64)
+    point_detail(err, "observed_bounds_hash").and_then(Value::as_u64)
 }
 
 fn is_retryable_point_error(err: &AppError) -> bool {
