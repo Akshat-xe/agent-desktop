@@ -289,7 +289,7 @@ fn preserve_verified_identity(preliminary: &RefEntry, node: &ObservedNode, entry
 
 /// The positional anchor handed to the platform resolver: the locator observed this
 /// node in the same call, so it is found by its observed fields and path.
-fn observed_anchor(preliminary: &RefEntry) -> RefEntry {
+pub fn observed_anchor(preliminary: &RefEntry) -> RefEntry {
     let mut anchor = preliminary.clone();
     anchor.identity.basis = Some(crate::IdentityBasis::Positional);
     anchor

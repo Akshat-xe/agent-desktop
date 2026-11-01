@@ -117,10 +117,17 @@ unsafe fn find_in_window(
         return AdResult::ErrInvalidArgs;
     };
     let process = agent_desktop_core::ProcessIdentity::new(entry.process.pid, process_instance);
-    match adapter
-        .inner
-        .resolve_element_strict(&entry, request.deadline)
-    {
+    let resolved = if request.selection == LocatorSelection::Strict {
+        adapter
+            .inner
+            .resolve_element_strict(&entry, request.deadline)
+    } else {
+        adapter.inner.resolve_locator_anchor(
+            &agent_desktop_core::observed_anchor(&entry),
+            request.deadline,
+        )
+    };
+    match resolved {
         Ok(handle) => {
             match crate::actions::native_handle::into_ffi_handle(adapter_id, handle, process) {
                 Ok(token) => {

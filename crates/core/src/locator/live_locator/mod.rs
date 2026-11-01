@@ -50,6 +50,7 @@ mod validate;
 pub use cardinality::{classify_query_result, require_unique};
 pub use evaluate::evaluate_locator_tree;
 pub use evidence_requirements::EvidenceRequirements;
+pub use hydrate::observed_anchor;
 pub use identifier_evidence::IdentifierEvidence;
 pub use locator_activation_stats::LocatorActivationStats;
 pub use locator_cardinality::LocatorCardinality;
