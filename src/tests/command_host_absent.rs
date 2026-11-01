@@ -135,3 +135,39 @@ fn a_marked_copy_running_version_exits_successfully() {
     assert_eq!(status.signal(), None, "marked version copy was killed");
     let _ = std::fs::remove_dir_all(&tmpdir);
 }
+
+#[test]
+#[ignore = "helper process spawned by a_marked_process_that_is_not_agent_desktop_survives_a_call"]
+fn marked_process_helper_sleeps() {
+    std::thread::sleep(Duration::from_secs(10));
+}
+
+#[test]
+fn a_marked_process_that_is_not_agent_desktop_survives_a_call() {
+    let _lock = HOST_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let tmpdir = private_dir("foreign");
+    let mut foreign = KilledOnDrop(
+        Command::new(std::env::current_exe().expect("test binary path"))
+            .args([
+                "--ignored",
+                "--exact",
+                "marked_process_helper_sleeps",
+                "--nocapture",
+            ])
+            .env(MARKER, "1")
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("helper starts"),
+    );
+    std::thread::sleep(Duration::from_millis(500));
+
+    run(&["version"], &tmpdir);
+
+    assert!(
+        exit_within(&mut foreign, Duration::from_secs(1)).is_none(),
+        "a marked process that is not agent-desktop was stopped"
+    );
+    let _ = std::fs::remove_dir_all(&tmpdir);
+}

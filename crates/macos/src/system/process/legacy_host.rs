@@ -4,9 +4,22 @@ use std::mem::{MaybeUninit, size_of};
 
 const HOST_MARKER: &[u8] = b"AGENT_DESKTOP_INTERNAL_COMMAND_HOST=1";
 const PROC_UID_ONLY: u32 = 4;
+const CS_OPS_IDENTITY: u32 = 11;
+const IDENTITY_BUFFER_LEN: usize = 512;
+const BLOB_HEADER_LEN: usize = 8;
 
-/// Sends SIGKILL to this user's processes whose environment carries the old command host marker.
-/// A process whose owner, start time or environment cannot be read is left alone.
+unsafe extern "C" {
+    fn csops(
+        pid: libc::pid_t,
+        ops: u32,
+        useraddr: *mut libc::c_void,
+        usersize: usize,
+    ) -> libc::c_int;
+}
+
+/// Sends SIGKILL to this user's agent-desktop processes whose environment carries the old command
+/// host marker. A process whose owner, start time, environment or code-signing identifier cannot be
+/// read, or whose identifier is not agent-desktop's, is left alone.
 pub fn stop_legacy_command_hosts() {
     let uid = unsafe { libc::geteuid() };
     let own_pid = std::process::id() as libc::pid_t;
@@ -20,6 +33,9 @@ pub fn stop_legacy_command_hosts() {
         let Some(started_at) = process_start_time(pid, uid) else {
             continue;
         };
+        if !is_agent_desktop(pid) {
+            continue;
+        }
         if has_marker(pid, &mut buffer) && process_start_time(pid, uid) == Some(started_at) {
             unsafe { libc::kill(pid, libc::SIGKILL) };
         }
@@ -61,6 +77,25 @@ pub(crate) fn environment_has_marker(procargs: &[u8]) -> bool {
         rest = &rest[end + 1..];
     }
     false
+}
+
+/// Whether a `CS_OPS_IDENTITY` blob names an agent-desktop build: an 8-byte big-endian magic and
+/// length header followed by the NUL-terminated identifier.
+fn blob_names_agent_desktop(blob: &[u8]) -> bool {
+    let Some(identifier) = blob.get(BLOB_HEADER_LEN..) else {
+        return false;
+    };
+    let Some(end) = identifier.iter().position(|byte| *byte == 0) else {
+        return false;
+    };
+    let identifier = &identifier[..end];
+    identifier == b"agent-desktop" || identifier.starts_with(b"agent_desktop-")
+}
+
+fn is_agent_desktop(pid: libc::pid_t) -> bool {
+    let mut blob = [0u8; IDENTITY_BUFFER_LEN];
+    let read = unsafe { csops(pid, CS_OPS_IDENTITY, blob.as_mut_ptr().cast(), blob.len()) };
+    read == 0 && blob_names_agent_desktop(&blob)
 }
 
 fn user_processes(uid: libc::uid_t) -> Vec<libc::pid_t> {
