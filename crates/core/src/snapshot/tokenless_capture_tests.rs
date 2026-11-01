@@ -54,6 +54,10 @@ fn a_whole_window_read_cut_short_keeps_the_complete_shallow_tree() {
     let captured = snapshot(&adapter);
     assert_eq!(adapter.captures(), 2);
     assert!(captured.complete, "the shallow walk finished");
+    assert_eq!(
+        captured.identity_unproven.as_deref(),
+        Some("the whole-window read was cut short")
+    );
     let tree = serde_json::to_string(&captured.tree).expect("the tree serializes");
     assert!(
         !tree.contains("Unread"),
@@ -73,6 +77,10 @@ fn a_failed_whole_window_read_keeps_the_shallow_tree() {
 
     let captured = snapshot(&adapter);
     assert!(captured.complete, "the shallow walk finished");
+    assert_eq!(
+        captured.identity_unproven.as_deref(),
+        Some("a node below the shallow depth faulted")
+    );
     assert!(entries(&captured.refmap).is_empty());
 }
 
@@ -94,11 +102,26 @@ fn the_whole_window_read_carries_the_forced_renderer_hint() {
         Deadline::standard().expect("a standard deadline"),
     )
     .expect("the window snapshots");
-    let (_, anchor) = named(&captured.refmap, "Sidebar");
+    assert!(captured.identity_unproven.is_none());
+    let (anchor_ref, anchor) = named(&captured.refmap, "Sidebar");
     assert!(
         anchor.identity.unique_at_capture,
         "the forced read is adopted and proves the anchor"
     );
+    assert!(anchor.source.renderer_accessibility_forced);
+    resolve(&adapter, anchor).expect("resolution reads the window the way the capture did");
+
+    let snapshot_id = save(&captured.refmap);
+    let drilled = crate::snapshot::snapshot_ref::run_from_ref(
+        &adapter,
+        &drill_opts(),
+        &anchor_ref,
+        Some(&snapshot_id),
+    )
+    .expect("a drill reads the window the way the capture did");
+    let (_, button) = named(&drilled.refmap, "Save");
+    assert!(button.source.renderer_accessibility_forced);
+    resolve(&adapter, button).expect("a drilled ref reads the window the way the capture did");
 }
 
 #[test]

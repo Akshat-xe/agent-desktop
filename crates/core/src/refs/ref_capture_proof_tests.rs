@@ -38,6 +38,7 @@ fn config<'a>(capture: &'a CaptureProof<'a>) -> RefAllocConfig<'a> {
             include_bounds: false,
             interactive_only: false,
             compact: false,
+            force_renderer_accessibility: false,
         },
         source: RefAllocSource {
             pid: crate::ProcessId::new(1),
@@ -143,6 +144,7 @@ fn twin_carrying_the_identifier_secondhand() -> (AccessibilityNode, ObservedTree
         ObservationSource::Window {
             window: fixture_window(),
             surface: crate::SnapshotSurface::Window,
+            renderer_accessibility_forced: false,
         },
         LocatorStats::default(),
         true,
@@ -229,6 +231,7 @@ fn twin_buttons_sharing_a_secondary_identifier() -> ObservedTree {
         ObservationSource::Window {
             window: fixture_window(),
             surface: crate::SnapshotSurface::Window,
+            renderer_accessibility_forced: false,
         },
         LocatorStats::default(),
         true,

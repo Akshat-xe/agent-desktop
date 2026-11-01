@@ -170,6 +170,7 @@ fn config_without_uniqueness() -> RefAllocConfig<'static> {
             include_bounds: false,
             interactive_only: false,
             compact: false,
+            force_renderer_accessibility: false,
         },
         source: RefAllocSource {
             pid: crate::ProcessId::new(1),

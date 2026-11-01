@@ -166,6 +166,7 @@ pub(crate) fn minimal_ref_entry(role: &str, name: Option<&str>) -> crate::RefEnt
             source_window_title: None,
             source_window_bounds_hash: None,
             source_surface: crate::SnapshotSurface::Window,
+            renderer_accessibility_forced: false,
         },
         scope: crate::RefScope {
             root_ref: None,

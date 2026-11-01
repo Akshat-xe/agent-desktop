@@ -243,8 +243,8 @@ fn a_headed_interval_resolves_the_field_once_then_posts_each_keystroke_to_it() {
     );
     assert_eq!(
         burst.retry.calls(),
-        single.retry.calls() + 1,
-        "only the first keystroke runs the full ref action; the burst resolves once more"
+        single.retry.calls(),
+        "only the first keystroke resolves; the burst keeps the element it landed on"
     );
     assert_eq!(
         *burst.expected_processes.lock().unwrap(),

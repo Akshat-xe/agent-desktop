@@ -31,6 +31,7 @@ fn minimal_entry(role: &str) -> RefEntry {
             source_window_title: None,
             source_window_bounds_hash: Some(0xA11C_E551),
             source_surface: SnapshotSurface::Window,
+            renderer_accessibility_forced: false,
         },
         scope: crate::RefScope {
             root_ref: None,
@@ -208,6 +209,7 @@ fn ref_entry_full_roundtrip_preserves_all_fields() {
             source_window_title: Some("Compose".into()),
             source_window_bounds_hash: None,
             source_surface: SnapshotSurface::Sheet,
+            renderer_accessibility_forced: false,
         },
         scope: crate::RefScope {
             root_ref: Some("@e5".into()),

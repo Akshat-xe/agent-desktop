@@ -69,7 +69,7 @@ impl SystemOps for ReplacedField {
     crate::adapter::exact_window_focus!();
 }
 
-fn field_snapshot() -> String {
+pub(super) fn field_snapshot() -> String {
     let bounds = Rect {
         x: 1.0,
         y: 1.0,

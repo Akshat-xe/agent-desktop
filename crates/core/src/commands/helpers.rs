@@ -88,6 +88,28 @@ pub(crate) fn execute_ref_action_with_context(
     request: ActionRequest,
     context: &CommandContext,
 ) -> Result<Value, AppError> {
+    execute_ref_action_dispatching(
+        args,
+        adapter,
+        request,
+        context,
+        crate::ref_action::ref_action_single::dispatch_resolved,
+    )
+}
+
+/// Runs a ref action through `dispatch`, for a caller that keeps what the
+/// dispatch lands on.
+pub(crate) fn execute_ref_action_dispatching(
+    args: RefArgs,
+    adapter: &dyn PlatformAdapter,
+    request: ActionRequest,
+    context: &CommandContext,
+    dispatch: impl Fn(
+        crate::ref_action::ref_action_context::RefActionContext<'_>,
+        ActionRequest,
+        &crate::InteractionLease,
+    ) -> Result<crate::ActionResult, AppError>,
+) -> Result<Value, AppError> {
     let request = request.with_timeout_ms(args.timeout_ms);
     validate_post_action_wait(context)?;
     if request.policy.is_headed() && request.action.headed_requirement().requires_cursor() {
@@ -103,7 +125,7 @@ pub(crate) fn execute_ref_action_with_context(
                 context,
             },
             request,
-            crate::ref_action::dispatch_resolved,
+            dispatch,
         )
         .map_err(AppError::Adapter)?;
     let value = serde_json::to_value(result).map_err(|error| {
@@ -272,7 +294,7 @@ pub(crate) fn execute_ref_action_result_with_context(
             context,
         },
         request,
-        crate::ref_action::dispatch_resolved,
+        crate::ref_action::ref_action_single::dispatch_resolved,
     )
     .map_err(AppError::Adapter)?;
     Ok((entry, result))

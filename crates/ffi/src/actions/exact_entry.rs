@@ -240,6 +240,7 @@ unsafe fn decode_core_ref_entry(
             source_window_title,
             source_window_bounds_hash,
             source_surface,
+            renderer_accessibility_forced: false,
         },
         scope: RefScope {
             root_ref,

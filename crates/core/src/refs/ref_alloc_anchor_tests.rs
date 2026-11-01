@@ -33,6 +33,7 @@ fn capture_config<'a>(capture: &'a CaptureProof<'a>) -> RefAllocConfig<'a> {
             include_bounds: true,
             interactive_only: false,
             compact: false,
+            force_renderer_accessibility: false,
         },
         source: source(7),
         scope: crate::refs::ref_alloc_scope::RefAllocScope {
@@ -90,4 +91,23 @@ fn a_bounds_only_boundary_is_a_drill_target_only_when_proven() {
         0,
         "two identical boundaries cannot be told apart"
     );
+}
+
+/// A twin the capture cannot tell apart is never offered, so the boundary it
+/// would have covered falls to the nearest ancestor the capture does prove.
+#[test]
+fn a_unique_ancestor_anchors_a_boundary_whose_twin_is_not_offered() {
+    let mut panel = node("group", Some("Panel"));
+    panel.children = vec![
+        boundary("group", Some("Sidebar")),
+        boundary("group", Some("Sidebar")),
+    ];
+    let mut root = node("window", Some("w"));
+    root.children = vec![panel];
+
+    let refmap = allocation(root);
+    assert_eq!(refmap.len(), 1, "only the ancestor is a drill target");
+    let anchor = refmap.get("@e1").expect("the ancestor holds the first ref");
+    assert_eq!(anchor.identity.name.as_deref(), Some("Panel"));
+    assert!(anchor.identity.unique_at_capture);
 }

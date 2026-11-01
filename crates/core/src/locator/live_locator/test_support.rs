@@ -71,6 +71,7 @@ pub(crate) fn tree(
         source: ObservationSource::Window {
             window: window(),
             surface: crate::SnapshotSurface::Window,
+            renderer_accessibility_forced: false,
         },
         stats: LocatorStats::default(),
         structurally_complete,

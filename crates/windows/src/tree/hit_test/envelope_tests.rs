@@ -200,6 +200,7 @@ fn entry_for(live: &LiveElement) -> RefEntry {
             source_window_title: Some("Fixture".into()),
             source_window_bounds_hash: None,
             source_surface: SnapshotSurface::Window,
+            renderer_accessibility_forced: false,
         },
         scope: RefScope {
             root_ref: None,

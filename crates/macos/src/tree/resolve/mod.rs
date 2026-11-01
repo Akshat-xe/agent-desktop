@@ -1,5 +1,5 @@
 #[cfg(target_os = "macos")]
-use agent_desktop_core::refs::ref_identity::{element_token, has_meaningful_identity};
+use agent_desktop_core::refs::ref_identity::element_token;
 use agent_desktop_core::{AdapterError, ErrorCode, NativeHandle, RefEntry, SnapshotSurface};
 use std::time::{Duration, Instant};
 
@@ -115,7 +115,7 @@ fn resolve_locator_anchor_once(
             );
         }
     };
-    let result = find_entry_by_path(&roots.roots, entry, roots.scope_verified, &mut read_context);
+    let result = find_entry_by_path(&roots, entry, &mut read_context);
     finish_resolution(
         result,
         &mut read_context,
@@ -246,6 +246,8 @@ fn is_retryable_resolution_error(error: &AdapterError) -> bool {
     error.is_transient_incomplete_read()
 }
 
+/// A tokenless anchor lands by position, so the gate asks only that its path be
+/// anchored to a recorded window or surface; core confirms identity after landing.
 #[cfg(target_os = "macos")]
 fn can_use_locator_anchor_path(entry: &RefEntry) -> bool {
     let source_scoped = if entry.source.source_surface == SnapshotSurface::Window {
@@ -253,13 +255,10 @@ fn can_use_locator_anchor_path(entry: &RefEntry) -> bool {
     } else {
         true
     };
-    source_scoped
-        && (entry.scope.root_ref.is_none() || entry.scope.path_is_absolute)
-        && (entry.geometry.bounds_hash.is_some() || has_meaningful_identity(entry))
+    source_scoped && (entry.scope.root_ref.is_none() || entry.scope.path_is_absolute)
 }
 
 pub(crate) mod resolve_ax_read;
-pub(super) mod resolve_bounds;
 pub(super) mod resolve_classify;
 pub(super) mod resolve_errors;
 pub(super) mod resolve_read_context;

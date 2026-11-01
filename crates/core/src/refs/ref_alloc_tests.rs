@@ -270,7 +270,7 @@ fn allocate_refs_skips_web_container_noise() {
         options: crate::refs::ref_alloc_options::RefAllocOptions {
             include_bounds: true,
             interactive_only: true,
-            compact: false,
+            ..Default::default()
         },
         source: source(7),
         scope: crate::refs::ref_alloc_scope::RefAllocScope {
@@ -303,7 +303,7 @@ fn allocate_refs_records_structural_paths() {
         options: crate::refs::ref_alloc_options::RefAllocOptions {
             include_bounds: true,
             interactive_only: false,
-            compact: false,
+            ..Default::default()
         },
         source: crate::refs::ref_alloc_source::RefAllocSource {
             pid: crate::ProcessId::new(7),
@@ -346,7 +346,7 @@ fn allocate_refs_keeps_bounds_hash_when_snapshot_hides_bounds() {
         options: crate::refs::ref_alloc_options::RefAllocOptions {
             include_bounds: false,
             interactive_only: false,
-            compact: false,
+            ..Default::default()
         },
         source: crate::refs::ref_alloc_source::RefAllocSource {
             pid: crate::ProcessId::new(7),

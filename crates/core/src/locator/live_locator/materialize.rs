@@ -116,6 +116,7 @@ pub(crate) fn ref_entry(
             source_window_title: None,
             source_window_bounds_hash: None,
             source_surface: SnapshotSurface::Window,
+            renderer_accessibility_forced: false,
         },
         scope: crate::RefScope {
             root_ref: None,
@@ -129,7 +130,11 @@ pub(crate) fn ref_entry(
 
 fn apply_source(entry: &mut RefEntry, source: &ObservationSource, node_path: &RefPath) {
     match source {
-        ObservationSource::Window { window, surface } => {
+        ObservationSource::Window {
+            window,
+            surface,
+            renderer_accessibility_forced,
+        } => {
             entry.process.pid = window.pid;
             entry.source.source_app = Some(window.app.clone());
             entry.source.source_window_id = Some(window.id.clone());
@@ -137,6 +142,7 @@ fn apply_source(entry: &mut RefEntry, source: &ObservationSource, node_path: &Re
             entry.source.source_window_bounds_hash =
                 window.bounds.as_ref().and_then(crate::Rect::bounds_hash);
             entry.source.source_surface = *surface;
+            entry.source.renderer_accessibility_forced = *renderer_accessibility_forced;
             entry.process.process_instance = window.process_instance.clone();
         }
         ObservationSource::Element {

@@ -182,6 +182,15 @@ pub(super) fn anchored_window() -> AccessibilityNode {
     window(vec![group(vec![group(vec![sidebar])])])
 }
 
+/// `anchored_window` whose anchor re-identifies itself by an element token, so
+/// the button below it is the one tokenless ref a drill from it must prove.
+pub(super) fn token_anchored_window() -> AccessibilityNode {
+    let mut sidebar = node("group", "Sidebar");
+    sidebar.identity.retained_object = Some(TOKEN.into());
+    sidebar.children = vec![group(vec![node("button", "Save")])];
+    window(vec![group(vec![group(vec![sidebar])])])
+}
+
 /// `anchored_window` with a twin of the anchor hidden below the skeleton depth,
 /// beside a second anchor that stays unique.
 pub(super) fn twinned_window() -> AccessibilityNode {

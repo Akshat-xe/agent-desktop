@@ -112,3 +112,24 @@ fn a_drill_under_a_moved_root_records_the_live_path() {
         "the drill never removes its own root"
     );
 }
+
+#[test]
+fn a_token_rooted_drill_proves_its_tokenless_descendants() {
+    let _guard = HomeGuard::new();
+    let adapter = CaptureAdapter::new(token_anchored_window());
+
+    let captured = snapshot(&adapter);
+    let (anchor_ref, anchor) = named(&captured.refmap, "Sidebar");
+    assert_eq!(anchor.identity.retained_object.as_deref(), Some(TOKEN));
+    let snapshot_id = save(&captured.refmap);
+
+    let drilled = run_from_ref(&adapter, &drill_opts(), &anchor_ref, Some(&snapshot_id))
+        .expect("a token-rooted drill is located in the whole-window read");
+
+    let (_, button) = named(&drilled.refmap, "Save");
+    assert!(
+        button.identity.unique_at_capture,
+        "the button below a token root is counted against the whole window"
+    );
+    resolve(&adapter, button).expect("the drilled ref resolves");
+}

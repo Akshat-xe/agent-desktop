@@ -77,45 +77,66 @@ fn execute_with_deadline(
     ),
     AdapterError,
 > {
-    let state = if request.timeout_ms.is_some_and(|timeout_ms| timeout_ms > 0) {
-        execute_poll_loop(context, &request, deadline)?
-    } else {
-        RefActionPollState::default()
-    };
-    let pre = crate::ref_action::capture_pre_artifact(
-        context.context,
-        context.adapter,
-        context.entry,
-        deadline,
-    );
-    let cursor = crate::cursor_overlay::hold_cursor(context.context, deadline);
-    crate::ref_action::presentation::before_lease(context, &request, deadline, cursor.is_ok());
-    let lease = context
-        .adapter
-        .acquire_interaction_lease(deadline)
-        .map_err(|error| state.attach_error_metrics(error))?;
-    if deadline.is_expired() {
-        return Err(state.attach_error_metrics(deadline.timeout_error()));
-    }
-    if request.timeout_ms.is_some_and(|timeout_ms| timeout_ms > 0) {
-        request.timeout_ms = Some(deadline.remaining_ms());
-    }
-    let lease_started = std::time::Instant::now();
-    let mut result = match execute_single_shot(context, request, deadline, &lease, dispatch) {
-        Ok(result) => result,
-        Err(error) => {
-            drop(lease);
-            crate::ref_action::finish_artifacts(RefActionContext::new(context, deadline), &pre);
-            return Err(error);
+    let polls = request.timeout_ms.is_some_and(|timeout_ms| timeout_ms > 0);
+    let mut saw_ambiguity = false;
+    loop {
+        let mut state = if polls {
+            execute_poll_loop(context, &request, deadline)?
+        } else {
+            RefActionPollState::default()
+        };
+        state.saw_ambiguity |= saw_ambiguity;
+        let pre = crate::ref_action::capture_pre_artifact(
+            context.context,
+            context.adapter,
+            context.entry,
+            deadline,
+        );
+        let cursor = crate::cursor_overlay::hold_cursor(context.context, deadline);
+        crate::ref_action::presentation::before_lease(context, &request, deadline, cursor.is_ok());
+        let lease = context
+            .adapter
+            .acquire_interaction_lease(deadline)
+            .map_err(|error| state.attach_error_metrics(error))?;
+        if deadline.is_expired() {
+            return Err(state.attach_error_metrics(deadline.timeout_error()));
         }
-    };
-    state.attach_transient_ambiguity(&mut result);
-    state.attach_wait_metrics(
-        &mut result,
-        &lease,
-        u64::try_from(lease_started.elapsed().as_millis()).unwrap_or(u64::MAX),
-    );
-    Ok((result, lease, pre, deadline, lease_started))
+        if polls {
+            request.timeout_ms = Some(deadline.remaining_ms());
+        }
+        let lease_started = std::time::Instant::now();
+        match execute_single_shot(context, request.clone(), deadline, &lease, &dispatch) {
+            Ok(mut result) => {
+                state.attach_transient_ambiguity(&mut result);
+                state.attach_wait_metrics(
+                    &mut result,
+                    &lease,
+                    u64::try_from(lease_started.elapsed().as_millis()).unwrap_or(u64::MAX),
+                );
+                return Ok((result, lease, pre, deadline, lease_started));
+            }
+            Err(error) => {
+                drop(lease);
+                crate::ref_action::finish_artifacts(RefActionContext::new(context, deadline), &pre);
+                if !(polls && resolves_again(&error, deadline)) {
+                    return Err(error);
+                }
+                saw_ambiguity |= error.code == crate::ErrorCode::AmbiguousTarget;
+                crate::wait::deadline::sleep(
+                    crate::refs::ref_resolve_deadline::POLL_INTERVAL.min(deadline.remaining()),
+                );
+            }
+        }
+    }
+}
+
+/// Whether a dispatch-time refusal goes back to the wait: the full resolution
+/// under the lease failed in a way that may clear, nothing was sent, and the
+/// caller's budget is not spent.
+fn resolves_again(error: &AdapterError, deadline: Deadline) -> bool {
+    error.disposition == crate::DeliverySemantics::not_delivered()
+        && error.is_retryable_resolution_failure()
+        && !deadline.is_expired()
 }
 
 pub(crate) fn operation_deadline(request: &ActionRequest) -> Result<Deadline, AdapterError> {

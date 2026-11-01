@@ -49,9 +49,10 @@ pub fn resolve_saved_ref(
 /// Lands a tokenless saved ref at its recorded path and confirms the landed
 /// element against the full predicate, skipping the whole-window count.
 ///
-/// The count is what proves the ref still unique, so only a wait that runs a
-/// full [`resolve_saved_ref`] under the interaction lease before acting may use
-/// this handle. A landing that fails or does not confirm falls back to the full
+/// The count is what proves the ref still unique, so this handle may only feed
+/// a wait that runs a full [`resolve_saved_ref`] under the interaction lease
+/// before acting, or a presentation that never acts, such as placing the cursor
+/// overlay. A landing that fails or does not confirm falls back to the full
 /// resolution, so a moved, missing or twinned element gets the same verdict
 /// either way and only the common case is cheaper.
 pub(crate) fn land_saved_ref(
@@ -98,6 +99,7 @@ pub(crate) fn observe_saved_ref(
     let window = recorded_window(adapter, entry, deadline)?;
     let base = TreeOptions {
         surface: entry.source.source_surface,
+        force_renderer_accessibility: entry.source.renderer_accessibility_forced,
         ..TreeOptions::default()
     };
     let observed = observe_whole_window(adapter, &base, &window, deadline, lease)?;
@@ -238,13 +240,21 @@ pub(crate) fn observe_whole_window(
     }
     .with_ref_identity_bounds();
     let request = ObservationRequest::snapshot(&options, deadline).validate()?;
-    crate::tree::renderer_accessibility::observe_tree(
+    let mut observed = crate::tree::renderer_accessibility::observe_tree(
         adapter,
         ObservationRoot::Window(window),
         &request,
         lease,
     )
-    .map_err(adapter_error)
+    .map_err(adapter_error)?;
+    if let crate::locator::live_locator::ObservationSource::Window {
+        renderer_accessibility_forced,
+        ..
+    } = &mut observed.source
+    {
+        *renderer_accessibility_forced = options.force_renderer_accessibility;
+    }
+    Ok(observed)
 }
 
 fn saved_ref_node(

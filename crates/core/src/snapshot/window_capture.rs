@@ -10,6 +10,9 @@ use crate::{
 pub(crate) struct WindowCapture {
     pub(crate) observed: ObservedTree,
     presentation_depth: Option<u8>,
+    /// Why the whole-window read that would prove this capture's tokenless
+    /// refs failed or came back cut short, so those refs stay unproven.
+    pub(crate) identity_unproven: Option<String>,
 }
 
 impl WindowCapture {
@@ -19,6 +22,7 @@ impl WindowCapture {
         let Self {
             mut observed,
             presentation_depth,
+            ..
         } = self;
         let (tree, complete, nodes_observed) = match presentation_depth {
             Some(depth) => observed.project_window(depth)?,
@@ -52,20 +56,27 @@ pub(crate) fn capture_window(
         return Ok(WindowCapture {
             observed,
             presentation_depth: None,
+            identity_unproven: None,
         });
     }
-    match crate::refs::resolve_saved_ref::observe_whole_window(
+    let unproven = match crate::refs::resolve_saved_ref::observe_whole_window(
         adapter, opts, window, deadline, None,
     ) {
-        Ok(whole) if whole.is_exhaustive() => Ok(WindowCapture {
-            observed: whole,
-            presentation_depth: Some(depth),
-        }),
-        _ => Ok(WindowCapture {
-            observed,
-            presentation_depth: None,
-        }),
-    }
+        Ok(whole) if whole.is_exhaustive() => {
+            return Ok(WindowCapture {
+                observed: whole,
+                presentation_depth: Some(depth),
+                identity_unproven: None,
+            });
+        }
+        Ok(_) => "the whole-window read was cut short".to_owned(),
+        Err(error) => error.message,
+    };
+    Ok(WindowCapture {
+        observed,
+        presentation_depth: None,
+        identity_unproven: Some(unproven),
+    })
 }
 
 fn observe_window(
