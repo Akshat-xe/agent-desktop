@@ -297,38 +297,38 @@ fn an_inert_look_alike_of_the_same_role_and_name_is_counted_by_the_survey() {
     );
 }
 
-/// A survey rooted at one row proves uniqueness only inside that row, while a saved ref
-/// is resolved against the whole window, so every entry keeps no proof.
+/// A survey rooted at a scoped element proves uniqueness inside that root, which is where its
+/// refs resolve. An element root without a scope root proves nothing.
 #[test]
-fn a_survey_rooted_at_an_element_cannot_prove_window_wide_uniqueness() {
-    let delete = evidence("button", Some("Delete"));
+fn an_element_rooted_survey_proves_uniqueness_only_under_a_scope_root() {
     let rows = vec![
         node(0, evidence("group", Some("Row Alpha")), vec![1], &[]),
-        node(1, delete, vec![], &[0]),
+        node(1, evidence("button", Some("Delete")), vec![], &[0]),
     ];
-    assert_eq!(
-        materialized_bases(rows.clone(), true),
-        [Some(IdentityBasis::Name)],
-        "a window-wide survey may prove the name unique"
-    );
-
-    let mut scoped = tree(rows, vec![0], true);
-    let root_entry =
-        super::materialize::ref_entry(&scoped.nodes[0], &scoped.source, &LocatorQuery::default());
-    scoped.source = ObservationSource::Element {
-        entry: Box::new(root_entry),
-        root_ref: Some("@e4".into()),
+    let bases = |root_ref: Option<&str>| {
+        let mut scoped = tree(rows.clone(), vec![0], true);
+        let root_entry = super::materialize::ref_entry(
+            &scoped.nodes[0],
+            &scoped.source,
+            &LocatorQuery::default(),
+        );
+        scoped.source = ObservationSource::Element {
+            entry: Box::new(root_entry),
+            root_ref: root_ref.map(str::to_owned),
+        };
+        let resolution =
+            evaluate_locator_tree(scoped, &LocatorQuery::default(), &request()).unwrap();
+        let refmap = resolution.refmap.unwrap();
+        (1..=refmap.len())
+            .map(|index| {
+                refmap
+                    .get(&format!("@e{index}"))
+                    .and_then(|entry| entry.identity.basis)
+            })
+            .collect::<Vec<_>>()
     };
-    let resolution = evaluate_locator_tree(scoped, &LocatorQuery::default(), &request()).unwrap();
-    let refmap = resolution.refmap.unwrap();
-    let bases = (1..=refmap.len())
-        .map(|index| {
-            refmap
-                .get(&format!("@e{index}"))
-                .and_then(|entry| entry.identity.basis)
-        })
-        .collect::<Vec<_>>();
-    assert_eq!(bases, [Some(IdentityBasis::Ambiguous)]);
+    assert_eq!(bases(Some("@e4")), [Some(IdentityBasis::Name)]);
+    assert_eq!(bases(None), [Some(IdentityBasis::Ambiguous)]);
 }
 
 /// A node whose role could not be read may be a look-alike of any role, so it withdraws

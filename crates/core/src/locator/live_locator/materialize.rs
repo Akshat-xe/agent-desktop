@@ -9,10 +9,15 @@ use crate::{
 };
 
 /// Counts look-alikes among every role-readable observed element, addressable or not,
-/// so each match learns which of its fields is unique. A partial survey proves nothing.
+/// so each match learns which of its fields is unique. A partial survey proves nothing, and
+/// an element-rooted survey proves uniqueness only inside a root that scoped refs resolve under.
 pub(crate) fn survey_counts(tree: &ObservedTree, query: &LocatorQuery) -> IdentityBasisCounts {
     let mut counts = IdentityBasisCounts::new();
-    if !tree.structurally_complete || !matches!(tree.source, ObservationSource::Window { .. }) {
+    let scoped = match &tree.source {
+        ObservationSource::Window { .. } => true,
+        ObservationSource::Element { root_ref, .. } => root_ref.is_some(),
+    };
+    if !tree.structurally_complete || !scoped {
         counts.mark_incomplete();
     }
     for node in &tree.nodes {

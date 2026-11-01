@@ -1,7 +1,8 @@
 use super::{ObservationRequest, ObservationRoot, ObservedNode, ObservedTree};
 use crate::{
     AdapterError, Deadline, IdentityBasis, IdentityMatch, NativeHandle, PlatformAdapter, RefEntry,
-    refs::identity_basis_gate::requires_live_uniqueness, refs::ref_identity::identity_match,
+    refs::identity_basis_gate::requires_live_uniqueness,
+    refs::ref_identity::{identity_match, retained_object_match},
 };
 
 pub(crate) fn resolve_in_root(
@@ -75,6 +76,7 @@ fn select<'a>(
         if !positional_matches(entry, node) {
             return Err(stale());
         }
+        retained_object_verdict(entry, node)?;
         return Ok(node);
     }
     let mut selected = None;
@@ -107,7 +109,17 @@ fn select<'a>(
     if unknown {
         return Err(incomplete());
     }
-    selected.ok_or_else(stale)
+    let selected = selected.ok_or_else(stale)?;
+    retained_object_verdict(entry, selected)?;
+    Ok(selected)
+}
+
+fn retained_object_verdict(entry: &RefEntry, node: &ObservedNode) -> Result<(), AdapterError> {
+    match retained_object_match(entry, &node.evidence.identifiers) {
+        IdentityMatch::Match => Ok(()),
+        IdentityMatch::NoMatch => Err(stale()),
+        IdentityMatch::Unknown => Err(incomplete()),
+    }
 }
 
 fn resolve_anchor(
@@ -164,6 +176,7 @@ fn resolve_anchor(
     } else if !positional_matches(entry, live) {
         return Err(stale());
     }
+    retained_object_verdict(entry, live)?;
     Ok(handle)
 }
 

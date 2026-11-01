@@ -19,6 +19,7 @@ const NON_COMMAND_MODULES: &[&str] = &[
     "pointer_action",
     "query",
     "find_live_test_support",
+    "find_live_root_test_support",
     "surface_scope",
     "type_text_interval",
     "type_text_interval_verify",

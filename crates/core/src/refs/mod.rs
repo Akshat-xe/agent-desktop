@@ -12,6 +12,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 pub type RefPath = SmallVec<[usize; 8]>;
 pub(crate) mod ref_resolve;
+mod ref_root_chain;
 
 pub(crate) const MAX_REFMAP_BYTES: u64 = 1_048_576;
 static SNAPSHOT_COUNTER: AtomicU64 = AtomicU64::new(0);

@@ -50,6 +50,10 @@ impl crate::ObservationOps for HydrationAdapter {
                 tree.nodes[index].evidence.identifiers =
                     IdentifierEvidence::typed(original.identity.native_ids.clone(), Some(0), true);
             }
+            if let Some(token) = original.identity.retained_object.clone() {
+                let identifiers = std::mem::take(&mut tree.nodes[index].evidence.identifiers);
+                tree.nodes[index].evidence.identifiers = identifiers.with_retained_object(token);
+            }
             tree.nodes[index].evidence.ref_evidence.window_bounds = original
                 .presentation
                 .ref_bounds
@@ -241,4 +245,93 @@ fn positional_scoped_ref_keeps_its_relative_path_and_recorded_bounds() {
         select(&tree, &entry, &root).unwrap_err().code,
         crate::ErrorCode::StaleRef
     );
+}
+
+fn retained_field(
+    token: Option<&str>,
+) -> (RefEntry, crate::locator::live_locator::LocatorEvidence) {
+    let mut entry = crate::adapter::minimal_ref_entry("textfield", None);
+    entry.scope.path = smallvec::smallvec![1];
+    entry.identity.retained_object = Some(":1.2/first".into());
+    let bounds = crate::Rect {
+        x: 1.0,
+        y: 1.0,
+        width: 20.0,
+        height: 20.0,
+    };
+    entry.geometry.bounds_hash = bounds.bounds_hash();
+    let mut live = evidence("textfield", None);
+    live.ref_evidence.bounds = LocatorField::Known(bounds);
+    if let Some(token) = token {
+        live.identifiers = IdentifierEvidence::absent().with_retained_object(token.into());
+    }
+    (entry, live)
+}
+
+#[test]
+fn positional_selection_refuses_a_replacement_with_another_retained_token() {
+    let root = crate::adapter::minimal_ref_entry("group", Some("Root"));
+    for (token, expected) in [
+        (Some(":1.2/first"), None),
+        (Some(":1.2/replacement"), Some(crate::ErrorCode::StaleRef)),
+        (None, Some(crate::ErrorCode::Timeout)),
+    ] {
+        let (entry, live) = retained_field(token);
+        let tree = tree(vec![node(0, live, vec![], &[1])], vec![0], true);
+        assert_eq!(select(&tree, &entry, &root).err().map(|e| e.code), expected);
+    }
+}
+
+#[test]
+fn identity_basis_selection_checks_the_retained_object_of_the_counted_match() {
+    let root = crate::adapter::minimal_ref_entry("group", Some("Root"));
+    let (mut entry, mut live) = retained_field(Some(":1.2/first"));
+    entry.identity.name = Some("Save".into());
+    entry.identity.basis = Some(IdentityBasis::Name);
+    live.name = LocatorField::Known("Save".into());
+    let mut replaced = live.clone();
+    replaced.identifiers = IdentifierEvidence::absent().with_retained_object(":1.2/other".into());
+    let mut tree = tree(vec![node(0, live.clone(), vec![], &[1])], vec![0], true);
+    assert_eq!(select(&tree, &entry, &root).unwrap().path.as_slice(), [1]);
+    tree.nodes[0].evidence = replaced.clone();
+    assert_eq!(
+        select(&tree, &entry, &root).unwrap_err().code,
+        crate::ErrorCode::StaleRef
+    );
+    tree.nodes.push(node(1, replaced, vec![], &[2]));
+    tree.roots.push(1);
+    assert_eq!(
+        select(&tree, &entry, &root).unwrap_err().code,
+        crate::ErrorCode::AmbiguousTarget
+    );
+}
+
+#[test]
+fn hydration_refuses_a_landing_with_another_retained_token() {
+    let root = crate::adapter::minimal_ref_entry("group", Some("Root"));
+    let mut entry = crate::adapter::minimal_ref_entry("button", None);
+    entry.scope.path = smallvec::smallvec![0];
+    entry.identity.retained_object = Some(":1.2/first".into());
+    let bounds = crate::Rect {
+        x: 1.0,
+        y: 1.0,
+        width: 20.0,
+        height: 20.0,
+    };
+    entry.geometry.bounds_hash = bounds.bounds_hash();
+    entry.geometry.bounds_space = Some(crate::BoundsSpace::Window);
+    let mut surveyed = crate::adapter::minimal_accessibility_node("button", "");
+    surveyed.presentation.ref_bounds = Some(bounds);
+    surveyed.identity.retained_object = Some(":1.2/first".into());
+    let mut hydrated = surveyed.clone();
+    hydrated.identity.retained_object = Some(":1.2/replacement".into());
+    let mut adapter = HydrationAdapter { surveyed, hydrated };
+    let handle = NativeHandle::new(Vec::<usize>::new());
+    let deadline = Deadline::standard().unwrap();
+    let error = resolve_in_root(&adapter, &entry, &root, &handle, deadline)
+        .err()
+        .unwrap();
+    assert_eq!(error.code, crate::ErrorCode::StaleRef);
+    adapter.hydrated = adapter.surveyed.clone();
+    assert!(resolve_in_root(&adapter, &entry, &root, &handle, deadline).is_ok());
 }

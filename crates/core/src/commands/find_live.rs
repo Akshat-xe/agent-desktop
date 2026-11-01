@@ -69,6 +69,9 @@ pub(super) fn execute(
     };
     require_complete(&resolution)?;
     let ref_count = resolution.refmap.as_ref().map(RefMap::len);
+    if let (Some(refmap), Some(root_ref)) = (resolution.refmap.as_mut(), args.root.as_deref()) {
+        adopt_root(refmap, root_ref, context)?;
+    }
     let snapshot_id = match resolution.refmap.take() {
         Some(refmap) => Some(persist_refmap(context, &refmap)?),
         None => None,
@@ -85,6 +88,16 @@ pub(super) fn execute(
     }
     emit_resolution(context, &resolution, snapshot_id.as_deref(), ref_count)?;
     format_response(args, query, resolution, snapshot_id.as_deref())
+}
+
+fn adopt_root(
+    refmap: &mut RefMap,
+    root_ref: &str,
+    context: &CommandContext,
+) -> Result<(), AppError> {
+    let (snapshot_id, local_root_ref) = crate::refs::ref_token::resolve_ref_target(root_ref)?;
+    let source = RefStore::for_session(context.session_id())?.load_snapshot(&snapshot_id)?;
+    refmap.adopt_root_chain(&source, &local_root_ref)
 }
 
 fn resolve_request(args: &FindArgs, deadline: crate::Deadline) -> LocatorResolveRequest {

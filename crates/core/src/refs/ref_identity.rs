@@ -102,6 +102,20 @@ pub fn identity_match(
     }
 }
 
+/// Whether a live element is the retained object the entry recorded. An entry without one
+/// matches; a live element that published no token is `Unknown`, and another token is `NoMatch`.
+pub fn retained_object_match(entry: &RefEntry, actual: &IdentifierEvidence) -> IdentityMatch {
+    match (
+        entry.identity.retained_object.as_deref(),
+        actual.retained_object(),
+    ) {
+        (None, _) => IdentityMatch::Match,
+        (Some(expected), Some(actual)) if expected == actual => IdentityMatch::Match,
+        (Some(_), Some(_)) => IdentityMatch::NoMatch,
+        (Some(_), None) => IdentityMatch::Unknown,
+    }
+}
+
 fn recorded_identifier_match(
     entry: &RefEntry,
     actual: &IdentifierEvidence,
