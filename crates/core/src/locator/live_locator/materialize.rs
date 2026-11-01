@@ -11,6 +11,7 @@ pub(crate) fn materialize_refmap(
     query: &LocatorQuery,
     selected: Option<&[usize]>,
 ) -> Result<(RefMap, bool), crate::AdapterError> {
+    let unique = crate::refs::ref_alloc_unique::unique_capture_nodes(tree);
     let source = &tree.source;
     let nodes = &mut tree.nodes;
     let mut refmap = RefMap::new();
@@ -25,7 +26,8 @@ pub(crate) fn materialize_refmap(
         if !addressable {
             continue;
         }
-        let entry = ref_entry(node, source, query);
+        let mut entry = ref_entry(node, source, query);
+        entry.identity.unique_at_capture = unique.contains(&index);
         let ref_id = refmap.try_allocate(entry).map_err(|error| {
             crate::AdapterError::new(crate::ErrorCode::InvalidArgs, error.to_string())
         })?;

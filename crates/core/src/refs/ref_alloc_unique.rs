@@ -2,7 +2,9 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{
     ElementIdentifier, IdentityMatch,
-    locator::live_locator::{LocatorEvidence, LocatorField, ObservedNode, ObservedTree},
+    locator::live_locator::{
+        LocatorEvidence, LocatorField, ObservationSource, ObservedNode, ObservedTree,
+    },
     refs::ref_full_predicate::{DESCRIPTION, FullPredicate, LivePredicate, NAME, NATIVE_ID},
     refs::ref_identity::stable_name,
     tree::accname::non_blank,
@@ -33,24 +35,53 @@ pub(crate) fn unique_capture_paths_under(
     root: u32,
     prefix: &[usize],
 ) -> HashSet<Vec<usize>> {
-    if !observed.is_complete() || observed.nodes.iter().any(ObservedNode::omits_descendants) {
+    if !proves_uniqueness(observed) {
         return HashSet::new();
     }
     let mut candidates = Vec::new();
     let mut path = prefix.to_vec();
     collect_candidates(observed, root, &mut path, &mut candidates);
-    if candidates.is_empty() {
+    found_once(observed, candidates)
+}
+
+/// The node indices a complete whole-window observation found exactly once,
+/// for refs materialized straight from that observation, such as `find` matches.
+/// An element-rooted observation proves nothing about the rest of the window.
+pub(crate) fn unique_capture_nodes(observed: &ObservedTree) -> HashSet<usize> {
+    let whole_window = matches!(observed.source, ObservationSource::Window { .. });
+    if !whole_window || !proves_uniqueness(observed) {
         return HashSet::new();
     }
+    let candidates = observed
+        .nodes
+        .iter()
+        .enumerate()
+        .filter(|(_, node)| node.evidence.role.known().is_some())
+        .map(|(index, node)| (index, FullPredicate::of_evidence(&node.evidence)))
+        .collect();
+    found_once(observed, candidates)
+}
+
+fn proves_uniqueness(observed: &ObservedTree) -> bool {
+    observed.is_complete() && !observed.nodes.iter().any(ObservedNode::omits_descendants)
+}
+
+fn found_once<K: Eq + std::hash::Hash>(
+    observed: &ObservedTree,
+    candidates: Vec<(K, FullPredicate<'_>)>,
+) -> HashSet<K> {
     let mut needed = 0_u8;
     for (_, predicate) in &candidates {
         needed |= 1 << predicate.mask();
+    }
+    if needed == 0 {
+        return HashSet::new();
     }
     let census = Census::new(observed, needed);
     candidates
         .into_iter()
         .filter(|(_, predicate)| census.found_once(predicate))
-        .map(|(path, _)| path)
+        .map(|(key, _)| key)
         .collect()
 }
 

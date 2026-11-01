@@ -172,3 +172,20 @@ fn an_identifier_a_twin_carries_secondhand_is_not_unique() {
 
     assert_eq!(flags(root, &observed), [false, true]);
 }
+
+#[test]
+fn find_marks_only_a_whole_window_match_found_once() {
+    let observed = observed_from(window(vec![
+        named("button", "Send"),
+        named("button", "Send"),
+        named("button", "Cancel"),
+    ]));
+    let unique = super::unique_capture_nodes(&observed);
+    let named_unique: Vec<_> = unique
+        .iter()
+        .map(|index| &observed.nodes[*index].evidence)
+        .filter(|evidence| evidence.role.known().map(String::as_str) == Some("button"))
+        .filter_map(|evidence| evidence.name.meaningful_string())
+        .collect();
+    assert_eq!(named_unique, ["Cancel"]);
+}
