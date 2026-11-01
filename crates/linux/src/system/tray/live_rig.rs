@@ -104,6 +104,7 @@ impl Rig {
 
     pub(super) fn entry_for(&self, target: &TrayTarget, role: &str, name: &str) -> RefEntry {
         let mut entry = ref_entry(role);
+        entry.identity.basis = Some(agent_desktop_core::IdentityBasis::NativeId);
         entry.identity.name = Some(name.to_owned());
         entry.identity.native_id = Some(agent_desktop_core::ElementIdentifier {
             kind: agent_desktop_core::IdentifierKind::RuntimeId,
@@ -126,7 +127,11 @@ impl Rig {
             ..item.target.clone()
         };
         let name = labels.last().cloned().unwrap_or_default();
-        self.entry_for(&target, "menuitem", &name)
+        let layout = item.layout.as_ref().expect("the item has a layout");
+        let role = super::menu_nodes::role_of(
+            super::menu_resolve::find(layout, &target).expect("the entry is in the layout"),
+        );
+        self.entry_for(&target, role, &name)
     }
 
     pub(super) fn resolve(

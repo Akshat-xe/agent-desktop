@@ -361,3 +361,23 @@ fn tray_live_passive_parent_refuses_item_and_menu_delivery_after_preflight() {
     }
     println!("independent SNI receiver log: {:?}", rig.log());
 }
+
+#[test]
+#[ignore = "needs a private session bus; run through scripts/private-session.sh"]
+fn tray_live_a_retitled_item_is_a_stale_ref() {
+    let rig = rig_with_two_items("retitle");
+    let view = rig.view();
+    let dropbox = item(&view, "Dropbox");
+    rig.resolve(&rig.item_entry(dropbox))
+        .expect("the recorded title resolves");
+    let renamed = rig.entry_for(&dropbox.target, "menubutton", "Delete");
+    let error = rig
+        .resolve(&renamed)
+        .err()
+        .expect("a title the item no longer has");
+    assert_eq!(error.code, ErrorCode::StaleRef);
+    let mut legacy = rig.item_entry(dropbox);
+    legacy.identity.basis = None;
+    let error = rig.resolve(&legacy).err().expect("a legacy entry");
+    assert_eq!(error.code, ErrorCode::StaleRef);
+}
