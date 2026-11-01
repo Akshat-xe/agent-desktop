@@ -45,6 +45,14 @@ impl ObservedTree {
         self.structurally_complete
     }
 
+    /// Whether any node's children were left unread at a depth boundary. A full uniqueness count
+    /// over such a tree proves nothing about the omitted descendants.
+    pub(crate) fn omits_descendants(&self) -> bool {
+        self.nodes
+            .iter()
+            .any(|node| node.children.is_empty() && node.children_count.is_some_and(|c| c > 0))
+    }
+
     pub fn into_accessibility_tree(mut self) -> Result<AccessibilityNode, AdapterError> {
         if !self.structurally_complete {
             return Err(AdapterError::new(

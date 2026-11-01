@@ -17,7 +17,7 @@ pub(crate) fn survey_counts(tree: &ObservedTree, query: &LocatorQuery) -> Identi
         ObservationSource::Window { .. } => true,
         ObservationSource::Element { root_ref, .. } => root_ref.is_some(),
     };
-    if !tree.structurally_complete || !scoped {
+    if !tree.structurally_complete || tree.omits_descendants() || !scoped {
         counts.mark_incomplete();
     }
     for node in &tree.nodes {

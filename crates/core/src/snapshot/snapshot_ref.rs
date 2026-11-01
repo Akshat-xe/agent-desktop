@@ -54,14 +54,15 @@ pub fn run_from_ref_with_context(
 
     let deadline = crate::Deadline::after(timeout_ms)?;
     let window = resolve_result_window(&entry, adapter, deadline)?;
-    let handle = crate::refs::ref_resolve::resolve_drill_root(adapter, &entry, &refmap, deadline)?;
+    let (handle, current_root) =
+        crate::refs::ref_resolve::resolve_drill_root(adapter, &entry, &refmap, deadline)?;
 
     let observation_options = opts.with_ref_identity_bounds();
     let raw_tree = crate::tree::renderer_accessibility::observe_tree(
         adapter,
         ObservationRoot::Element {
             handle: &handle,
-            entry: &entry,
+            entry: &current_root,
             root_ref: Some(&local_root_ref),
         },
         &ObservationRequest::snapshot(&observation_options, deadline).validate()?,
@@ -72,7 +73,7 @@ pub fn run_from_ref_with_context(
     let source_app = entry.source.source_app.as_deref();
     let source_window_id = entry.source.source_window_id.as_deref();
     let source_window_title = entry.source.source_window_title.as_deref();
-    let path_prefix = entry.scope.path.clone();
+    let path_prefix = current_root.scope.path.clone();
     let config = RefAllocConfig {
         options: RefAllocOptions {
             include_bounds: opts.include_bounds,

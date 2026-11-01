@@ -89,12 +89,10 @@ fn hydration_keeps_the_recorded_identifier_when_the_live_preferred_identifier_ch
     let mut hydrated = surveyed.clone();
     hydrated.identity.native_ids.truncate(1);
     let mut adapter = HydrationAdapter { surveyed, hydrated };
-    let handle = NativeHandle::new(Vec::<usize>::new());
     let error = resolve_in_root(
         &adapter,
         &entry,
-        &root,
-        &handle,
+        &ScopeRoot::new(&root, NativeHandle::new(Vec::<usize>::new())),
         Deadline::standard().unwrap(),
     )
     .err()
@@ -105,8 +103,7 @@ fn hydration_keeps_the_recorded_identifier_when_the_live_preferred_identifier_ch
         resolve_in_root(
             &adapter,
             &entry,
-            &root,
-            &handle,
+            &ScopeRoot::new(&root, NativeHandle::new(Vec::<usize>::new())),
             Deadline::standard().unwrap()
         )
         .is_ok()
@@ -131,12 +128,10 @@ fn positional_hydration_rechecks_window_bounds_after_the_anchor_lands() {
     let mut hydrated = surveyed.clone();
     hydrated.presentation.ref_bounds = Some(crate::Rect { x: 50.0, ..bounds });
     let mut adapter = HydrationAdapter { surveyed, hydrated };
-    let handle = NativeHandle::new(Vec::<usize>::new());
     let error = resolve_in_root(
         &adapter,
         &entry,
-        &root,
-        &handle,
+        &ScopeRoot::new(&root, NativeHandle::new(Vec::<usize>::new())),
         Deadline::standard().unwrap(),
     )
     .err()
@@ -147,8 +142,7 @@ fn positional_hydration_rechecks_window_bounds_after_the_anchor_lands() {
         resolve_in_root(
             &adapter,
             &entry,
-            &root,
-            &handle,
+            &ScopeRoot::new(&root, NativeHandle::new(Vec::<usize>::new())),
             Deadline::standard().unwrap()
         )
         .is_ok()
@@ -326,12 +320,24 @@ fn hydration_refuses_a_landing_with_another_retained_token() {
     let mut hydrated = surveyed.clone();
     hydrated.identity.retained_object = Some(":1.2/replacement".into());
     let mut adapter = HydrationAdapter { surveyed, hydrated };
-    let handle = NativeHandle::new(Vec::<usize>::new());
     let deadline = Deadline::standard().unwrap();
-    let error = resolve_in_root(&adapter, &entry, &root, &handle, deadline)
-        .err()
-        .unwrap();
+    let error = resolve_in_root(
+        &adapter,
+        &entry,
+        &ScopeRoot::new(&root, NativeHandle::new(Vec::<usize>::new())),
+        deadline,
+    )
+    .err()
+    .unwrap();
     assert_eq!(error.code, crate::ErrorCode::StaleRef);
     adapter.hydrated = adapter.surveyed.clone();
-    assert!(resolve_in_root(&adapter, &entry, &root, &handle, deadline).is_ok());
+    assert!(
+        resolve_in_root(
+            &adapter,
+            &entry,
+            &ScopeRoot::new(&root, NativeHandle::new(Vec::<usize>::new())),
+            deadline
+        )
+        .is_ok()
+    );
 }
