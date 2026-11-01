@@ -191,9 +191,10 @@ fn resolve_window_surface(
         SnapshotSurface::Focused => {
             let element = crate::tree::surfaces::focused_surface_for_pid(pid, deadline)?
                 .ok_or_else(|| AdapterError::element_not_found("No focused surface found"))?;
-            crate::system::window::window_ax_state::verify_focused_window(
-                window, &element, deadline,
+            let owner_number = crate::system::window::window_ax_state::focused_owner_window_number(
+                &element, deadline,
             )?;
+            admit_focused_owner(&window.id, owner_number)?;
             element
         }
         SnapshotSurface::Menu => crate::tree::surfaces::menu_element_for_pid(pid, deadline)?
@@ -204,6 +205,21 @@ fn resolve_window_surface(
     };
     crate::tree::locator_deadline::remaining(deadline)?;
     Ok(element)
+}
+
+/// The decision a focused-surface snapshot makes: the surface the application focused may carry
+/// this snapshot's refs only when the recorded window owns it.
+fn admit_focused_owner(
+    recorded_id: &str,
+    owner_window_number: Option<i64>,
+) -> Result<(), AdapterError> {
+    if crate::system::window::window_ax_state::observes_recorded_window(
+        recorded_id,
+        owner_window_number,
+    ) {
+        return Ok(());
+    }
+    Err(crate::system::window::window_resolve::window_identity_mismatch(recorded_id))
 }
 
 #[cfg(test)]
@@ -316,5 +332,30 @@ mod tests {
 
         assert_eq!(error.code, ErrorCode::StaleRef);
         assert_eq!(error.details.unwrap()["kind"], "locator_root_invalid");
+    }
+
+    #[test]
+    fn a_focused_surface_owned_by_another_window_is_refused_before_it_is_captured() {
+        let error = admit_focused_owner("w-11", Some(12))
+            .expect_err("window w-12 holds focus, so its tree is not window w-11's surface");
+        assert_eq!(error.code, ErrorCode::WindowNotFound);
+        assert!(
+            error.message.contains("w-11"),
+            "the error names the recorded window: {}",
+            error.message
+        );
+    }
+
+    #[test]
+    fn a_focused_surface_of_the_recorded_window_is_captured() {
+        assert!(admit_focused_owner("w-11", Some(11)).is_ok());
+    }
+
+    #[test]
+    fn a_focused_surface_with_no_readable_owner_is_refused() {
+        assert!(
+            admit_focused_owner("w-11", None).is_err(),
+            "an unreadable owner number cannot prove the captured surface belongs to w-11"
+        );
     }
 }

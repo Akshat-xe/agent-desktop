@@ -7,7 +7,9 @@ use crate::tree::test_support::{number, text};
 use crate::tree::walk::walker_fake::{FakeTree, budget, ref_entry, walk};
 use agent_desktop_core::IdentityBasis;
 
-const BUTTON: i32 = 50000;
+const BUTTON: i32 = uiautomation::types::ControlType::Button as i32;
+
+const GROUP: i32 = uiautomation::types::ControlType::Group as i32;
 
 const TARGET_NAME: &str = "Save";
 
@@ -44,6 +46,15 @@ fn named_button(tree: FakeTree, node: i32, name: &str) -> FakeTree {
     )
 }
 
+/// Seeds every ancestor of `target` with a known control type that cannot match the stored role,
+/// because an unseeded node answers every property `Unknown` and would make the region unread for a
+/// reason unrelated to the depth under test.
+fn grouped_spine(tree: FakeTree, target: i32) -> FakeTree {
+    (1..target).fold(tree, |tree, node| {
+        tree.reading(node, &[number(TreeProperty::ControlType, GROUP)])
+    })
+}
+
 /// The stored ref a capture would issue for `node`: its role read off the
 /// fixture rather than assumed, and the one stable name these fixtures record.
 fn name_entry(tree: &FakeTree, node: &i32) -> RefEntry {
@@ -76,12 +87,15 @@ fn walked_scope(tree: &FakeTree, entry: &RefEntry) -> Result<(Vec<i32>, bool), A
 }
 
 /// The traversal, not just the depth helper, must evaluate the node at the snapshot's depth
-/// boundary; stopping one level earlier turns one match into none plus an unread region.
+/// boundary; stopping one level earlier turns one match into none plus an unread region. Every
+/// ancestor publishes a known role that cannot match the stored one, so the depth rule is the only
+/// thing this case can fail on.
 #[test]
 fn the_count_traversal_evaluates_the_node_at_the_snapshot_depth_boundary() {
     let target = i32::from(MAX_RESOLVE_DEPTH) + 1;
     let spine: Vec<i32> = (1..=target).collect();
     let tree = FakeTree::default().with_chain(&spine);
+    let tree = grouped_spine(tree, target);
     let tree = named_button(tree, target, TARGET_NAME);
     let entry = name_entry(&tree, &target);
 

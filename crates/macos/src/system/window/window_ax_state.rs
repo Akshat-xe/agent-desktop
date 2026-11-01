@@ -123,28 +123,21 @@ pub(crate) fn owning_window(
     }
 }
 
-/// Refuses a focused surface the recorded window does not own, since a snapshot pins every ref
-/// it allocates to that one window.
-pub(crate) fn verify_focused_window(
-    window: &WindowInfo,
+/// The window number a focused surface belongs to: the surface itself when it is a window, the
+/// window owning a transient surface, and none when nothing can be attributed.
+pub(crate) fn focused_owner_window_number(
     focused: &crate::tree::AXElement,
     deadline: Instant,
-) -> Result<(), AdapterError> {
-    let number = match owning_window(focused, deadline)? {
-        Some(owner) => {
-            crate::system::window::window_resolve::ax_window_id_with_deadline(&owner, deadline)?
-        }
-        None => None,
+) -> Result<Option<i64>, AdapterError> {
+    let Some(owner) = owning_window(focused, deadline)? else {
+        return Ok(None);
     };
-    if observes_recorded_window(&window.id, number) {
-        return Ok(());
-    }
-    Err(crate::system::window::window_resolve::window_identity_mismatch(&window.id))
+    crate::system::window::window_resolve::ax_window_id_with_deadline(&owner, deadline)
 }
 
 /// Whether a capture may record `recorded_id` for the observed surface: the window number
 /// must match, and a number the bridge could not read leaves the window unproven.
-fn observes_recorded_window(recorded_id: &str, observed_number: Option<i64>) -> bool {
+pub(crate) fn observes_recorded_window(recorded_id: &str, observed_number: Option<i64>) -> bool {
     crate::system::window::window_resolve::parse_window_number(recorded_id)
         .zip(observed_number)
         .is_some_and(|(recorded, observed)| recorded == observed)
