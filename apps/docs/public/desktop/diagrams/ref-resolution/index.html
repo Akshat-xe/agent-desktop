@@ -57,7 +57,7 @@
 <body>
 <svg viewBox="0 0 720 650" role="img" aria-labelledby="t d">
   <title id="t">How a ref resolves, and when it goes stale</title>
-  <desc id="d">From top to bottom: a command uses a ref such as @s…:e6, and the refmap returns its RefEntry, or STALE_REF when the key is missing. If the entry carries a retained object (on macOS, the element's own address), resolve_element_strict turns it back into that exact element: if it is alive and its pid, role, recorded id and window still match, the command acts on it, otherwise STALE_REF. No search runs. If the entry has no retained object, unique_at_capture decides: not unique at capture is AMBIGUOUS_TARGET. If it was unique, full_predicate_match counts the live elements that match the same predicate: exactly one lets the command act, none is STALE_REF, and two or more is AMBIGUOUS_TARGET.</desc>
+  <desc id="d">From top to bottom: a command uses a ref such as @s…:e6, and the refmap returns its RefEntry, or STALE_REF when the key is missing. If the entry carries a retained object (on macOS, the element's own address), resolve_element_strict turns it back into that exact element: if it is alive and its pid, role and recorded id still match, the command acts on it, otherwise STALE_REF. No search runs. If the entry has no retained object, unique_at_capture decides: not unique at capture is AMBIGUOUS_TARGET. If it was unique, FullPredicate counts the live elements that match the same predicate: exactly one lets the command act, none is STALE_REF, and two or more is AMBIGUOUS_TARGET.</desc>
   <defs>
     <marker id="arrow" viewBox="0 0 8 8" refX="6" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto">
       <path d="M1.5 1.5 L5.5 4 L1.5 6.5"/>
@@ -94,7 +94,7 @@
   <rect class="box node" x="355" y="288" width="320" height="56" rx="6"/>
   <svg class="ico" x="371" y="307" width="18" height="18" viewBox="0 0 16 16"><path d="m12.47 13.53.53.53L14.06 13l-.53-.53L9.06 8l4.47-4.47.53-.53L13 1.94l-.53.53L8 6.94 3.53 2.47 3 1.94 1.94 3l.53.53L6.94 8l-4.47 4.47-.53.53L3 14.06l.53-.53L8 9.06z" fill-rule="evenodd" clip-rule="evenodd"/></svg>
   <text class="label" x="399" y="312">STALE_REF</text>
-  <text class="sub" x="399" y="329">dead, or pid, role, id or window differ</text>
+  <text class="sub" x="399" y="329">dead, or pid, role or id differ</text>
   <path class="wire strong" d="M155 254V378"/>
   <text class="tag start" x="165" y="320">no retained object</text>
   <rect class="box node" x="15" y="384" width="280" height="56" rx="6"/>
@@ -111,7 +111,7 @@
   <text class="tag start" x="165" y="462">yes</text>
   <rect class="box node" x="15" y="480" width="280" height="56" rx="6"/>
   <svg class="ico" x="31" y="499" width="18" height="18" viewBox="0 0 16 16"><path d="M8.75 0q.01.69.37 1.06.36.42 1.1.74.73.3 1.6.53c.55.14 1.16.29 1.67.46l.51.17v6.57a5.3 5.3 0 0 1-2.81 4.65l-2.84 1.48-.35.19-.35-.19-2.84-1.48A5.3 5.3 0 0 1 2 9.53V2.96l.51-.17c.5-.17 1.12-.32 1.67-.46q.87-.23 1.6-.53.74-.32 1.1-.74.36-.38.37-1.06zM8 2.06a4.5 4.5 0 0 1-1.61 1.11c-.6.26-1.24.45-1.82.6l-1.07.29v5.47c0 1.4.77 2.67 2.01 3.32L8 14.15l2.49-1.3a3.8 3.8 0 0 0 2.01-3.32V4.06q-.48-.14-1.07-.29a13 13 0 0 1-1.82-.6A4.5 4.5 0 0 1 8 2.06M11.06 7l-3.53 3.53c-.3.3-.77.3-1.06 0L4.94 9 6 7.94l1 1 3-3z"/></svg>
-  <text class="label" x="59" y="504">full_predicate_match</text>
+  <text class="label" x="59" y="504">FullPredicate</text>
   <text class="sub" x="59" y="521">count live matches in the window</text>
   <path class="wire" d="M301 494H321a14 14 0 0 0 14 -14V436a14 14 0 0 1 14 -14H349"/>
   <text class="tag start" x="343" y="458">2+ matches</text>
