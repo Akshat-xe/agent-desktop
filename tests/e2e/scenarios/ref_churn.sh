@@ -9,10 +9,26 @@ require_target_by_id alpha textfield shared-title
 require_target_by_id stable textfield stable-editor
 act_target "$filter" click >/dev/null 2>&1
 "$bin" wait --text "Restore rows" --app "$app" --timeout 5000 >/dev/null 2>&1
-duplicate_identifier_note="known limitation: a removed row's ref can resolve to the surviving row that shares shared-title"
-skipmsg "removed row is refused without delivery: $duplicate_identifier_note"
-skipmsg "batch also refuses the removed row without delivery: $duplicate_identifier_note"
-skipmsg "surviving row kept its value: $duplicate_identifier_note"
+output="$("$bin" set-value "$(target_ref "$alpha")" poisoned 2>/dev/null)"
+ok="$(json_field "$output" ok)"
+code="$(json_field "$output" error.code)"
+delivery="$(json_field "$output" error.disposition.delivery)"
+assert "removed row is refused without delivery" \
+    "$([ "$ok" = "False" ] && [ "$code" = "STALE_REF" ] && [ "$delivery" = "not_delivered" ] && echo 1 || echo 0)" \
+    "ok=$ok code=$code delivery=$delivery"
+batch_payload="$(python3 - "$(target_ref "$alpha")" <<'BATCH_PY'
+import json, sys
+print(json.dumps([{"command": "set-value", "args": {"ref_id": sys.argv[1], "value": "poisoned"}}]))
+BATCH_PY
+)"
+batch_output="$("$bin" batch "$batch_payload" 2>/dev/null)"
+assert "batch also refuses the removed row without delivery" \
+    "$([ "$(json_field "$batch_output" data.results.0.error.code)" = "STALE_REF" ] && [ "$(json_field "$batch_output" data.results.0.error.disposition.delivery)" = "not_delivered" ] && echo 1 || echo 0)" \
+    "code=$(json_field "$batch_output" data.results.0.error.code)"
+beta_seen="$("$bin" wait --text "Beta stored: Beta" --app "$app" --timeout 3000 2>/dev/null)"
+assert "surviving row kept its value" \
+    "$([ "$(json_field "$beta_seen" data.found)" = "True" ] && echo 1 || echo 0)" \
+    "found=$(json_field "$beta_seen" data.found)"
 stable_write="$("$bin" set-value "$(target_ref "$stable")" stable-ok 2>/dev/null)"
 stable_seen="$(wait_target "$stable" value 3000 --value stable-ok 2>/dev/null)"
 assert "unchanged editor remains editable through its ref" \
