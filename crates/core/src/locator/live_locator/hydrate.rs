@@ -203,16 +203,25 @@ fn anchor_has_evidence(entry: &RefEntry) -> bool {
 /// Confirms the hydrated root against every field the anchor observed in this same call. An
 /// anchor with no identity is confirmed by geometry, and an unread field never resolves.
 fn anchor_matches(preliminary: &RefEntry, node: &ObservedNode) -> IdentityMatch {
-    if !anchor_has_evidence(preliminary) {
-        return bounds_anchor_match(preliminary, node);
+    let fields = if anchor_has_evidence(preliminary) {
+        crate::refs::ref_identity_observed::observed_identity_match(
+            preliminary,
+            &node.evidence.name,
+            &node.evidence.value,
+            &node.evidence.description,
+            &node.evidence.identifiers,
+        )
+    } else {
+        bounds_anchor_match(preliminary, node)
+    };
+    match (
+        fields,
+        crate::refs::ref_identity::retained_object_match(preliminary, &node.evidence.identifiers),
+    ) {
+        (IdentityMatch::NoMatch, _) | (_, IdentityMatch::NoMatch) => IdentityMatch::NoMatch,
+        (IdentityMatch::Match, IdentityMatch::Match) => IdentityMatch::Match,
+        _ => IdentityMatch::Unknown,
     }
-    crate::refs::ref_identity_observed::observed_identity_match(
-        preliminary,
-        &node.evidence.name,
-        &node.evidence.value,
-        &node.evidence.description,
-        &node.evidence.identifiers,
-    )
 }
 
 fn bounds_anchor_match(preliminary: &RefEntry, node: &ObservedNode) -> IdentityMatch {
@@ -245,12 +254,11 @@ fn preserve_verified_identity(preliminary: &RefEntry, node: &ObservedNode, entry
                 | crate::IdentityBasis::Description
         )
     );
-    let name_unverified = node.evidence.value.is_unknown()
-        && crate::tree::roles::is_mutable_value_role(&entry.identity.role)
-        && preliminary.identity.basis != Some(crate::IdentityBasis::Name);
-    if name_unverified {
-        entry.identity.name = None;
-    }
+    let name_unverified = crate::refs::ref_identity::withhold_unverified_name(
+        &mut entry.identity,
+        node.evidence.value.is_unknown(),
+        preliminary.identity.basis,
+    );
     entry.identity.basis = match preliminary.identity.basis {
         Some(crate::IdentityBasis::Positional) => Some(
             crate::refs::identity_basis_counts::unproven_basis(&entry.identity),

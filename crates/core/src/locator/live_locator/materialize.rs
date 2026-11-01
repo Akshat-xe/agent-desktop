@@ -54,7 +54,13 @@ pub(crate) fn materialize_refmap(
             continue;
         }
         let mut entry = ref_entry(node, source, query);
-        entry.identity.basis = Some(counts.basis(&entry.identity));
+        let basis = counts.basis(&entry.identity);
+        entry.identity.basis = Some(basis);
+        crate::refs::ref_identity::withhold_unverified_name(
+            &mut entry.identity,
+            node.evidence.value.is_unknown(),
+            Some(basis),
+        );
         let ref_id = refmap.try_allocate(entry).map_err(|error| {
             crate::AdapterError::new(crate::ErrorCode::InvalidArgs, error.to_string())
         })?;

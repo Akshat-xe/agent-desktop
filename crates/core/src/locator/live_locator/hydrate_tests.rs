@@ -288,3 +288,22 @@ fn a_mutable_name_confirmed_by_a_read_value_is_kept() {
     let (button, _) = hydrated_field("button", false);
     assert_eq!(button.identity.name.as_deref(), Some("draft"));
 }
+
+#[test]
+fn a_replacement_holding_the_same_path_but_another_retained_object_is_refuted() {
+    let mut observed = node(0, evidence("button", Some("ok")), vec![], &[]);
+    observed.evidence.identifiers =
+        crate::IdentifierEvidence::absent().with_retained_object("A".into());
+    let tree = tree(vec![observed.clone()], vec![0], true);
+    let entry =
+        super::super::materialize::ref_entry(&observed, &tree.source, &LocatorQuery::default());
+    assert_eq!(anchor_matches(&entry, &observed), IdentityMatch::Match);
+
+    let mut replacement = observed.clone();
+    replacement.evidence.identifiers =
+        crate::IdentifierEvidence::absent().with_retained_object("B".into());
+    assert_eq!(anchor_matches(&entry, &replacement), IdentityMatch::NoMatch);
+
+    replacement.evidence.identifiers = crate::IdentifierEvidence::absent();
+    assert_eq!(anchor_matches(&entry, &replacement), IdentityMatch::Unknown);
+}

@@ -102,6 +102,21 @@ pub fn identity_match(
     }
 }
 
+/// Clears the name of a mutable-value role whose value went unread unless the name itself
+/// was proven unique, since the name may mirror the value. Returns whether it was withheld.
+pub fn withhold_unverified_name(
+    identity: &mut crate::RefEntryIdentity,
+    value_unread: bool,
+    basis: Option<IdentityBasis>,
+) -> bool {
+    let withheld =
+        value_unread && is_mutable_value_role(&identity.role) && basis != Some(IdentityBasis::Name);
+    if withheld {
+        identity.name = None;
+    }
+    withheld
+}
+
 /// Whether a live element is the retained object the entry recorded. An entry without one
 /// matches; a live element that published no token is `Unknown`, and another token is `NoMatch`.
 pub fn retained_object_match(entry: &RefEntry, actual: &IdentifierEvidence) -> IdentityMatch {

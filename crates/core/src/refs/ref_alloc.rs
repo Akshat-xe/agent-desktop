@@ -272,6 +272,7 @@ fn allocate_refs_at_path(
         );
         entry.scope.path_is_absolute = config.scope.root_ref_id.is_some();
         plan.record_basis(&mut entry, config.options.skeleton_depth);
+        withhold_unread_name(&mut entry, &node);
         if !config.options.include_bounds && has_meaningful_identity(&entry) {
             entry.geometry.bounds = None;
         }
@@ -284,6 +285,7 @@ fn allocate_refs_at_path(
         let mut entry = ref_entry_from_node(&node, &config.source, None, path);
         entry.capabilities.available_actions = vec![];
         plan.record_basis(&mut entry, config.options.skeleton_depth);
+        withhold_unread_name(&mut entry, &node);
         if !config.options.include_bounds && has_meaningful_identity(&entry) {
             entry.geometry.bounds = None;
         }
@@ -319,6 +321,15 @@ fn allocate_refs_at_path(
     node.children = children;
 
     Ok(node)
+}
+
+fn withhold_unread_name(entry: &mut RefEntry, node: &AccessibilityNode) {
+    let basis = entry.identity.basis;
+    crate::refs::ref_identity::withhold_unverified_name(
+        &mut entry.identity,
+        node.identity.unread.values,
+        basis,
+    );
 }
 
 fn allocate_observed_ref(

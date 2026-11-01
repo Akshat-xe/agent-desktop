@@ -311,3 +311,16 @@ fn only_a_targets_stable_name_qualifies_for_a_name_basis() {
         assert_eq!(basis_of(&tree, &refmap, &[0]), Some(expected));
     }
 }
+
+#[test]
+fn a_mutable_name_whose_value_was_unread_is_not_saved() {
+    let mut field = identified("textfield", Some("draft"), &[("ax", "field")]);
+    field.value = LocatorField::Unknown;
+    let (tree, refmap) = capture(snapshot(vec![node("window", "Fixture", vec![leaf(field)])]));
+    let saved = refmap
+        .get(tree.children[0].ref_id.as_deref().unwrap())
+        .unwrap();
+
+    assert_eq!(saved.identity.basis, Some(IdentityBasis::NativeId));
+    assert_eq!(saved.identity.name, None);
+}
