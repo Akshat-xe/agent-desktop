@@ -82,6 +82,7 @@ pub use observed_node::ObservedNode;
 pub use observed_subtree::ObservedSubtree;
 pub use observed_tree::ObservedTree;
 pub use ref_evidence_requirements::RefEvidenceRequirements;
+pub use ref_scope::resolve_anchor as resolve_verified_anchor;
 pub use resolve::resolve_query;
 pub use validate::{validate_query, validate_request};
 

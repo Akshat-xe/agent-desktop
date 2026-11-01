@@ -122,8 +122,9 @@ unsafe fn find_in_window(
             .inner
             .resolve_element_strict(&entry, request.deadline)
     } else {
-        adapter.inner.resolve_locator_anchor(
-            &agent_desktop_core::observed_anchor(&entry),
+        agent_desktop_core::resolve_verified_anchor(
+            adapter.inner.as_ref(),
+            &entry,
             request.deadline,
         )
     };
@@ -355,3 +356,7 @@ mod tests {
 #[cfg(test)]
 #[path = "find_abi_tests.rs"]
 mod abi_tests;
+
+#[cfg(test)]
+#[path = "find_landed_tests.rs"]
+mod landed_tests;

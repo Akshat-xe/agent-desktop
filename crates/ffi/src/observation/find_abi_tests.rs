@@ -51,11 +51,22 @@ fn subtree(complete: bool) -> ObservedSubtree {
     subtree_at(complete, LocatorField::Absent)
 }
 
-fn subtree_at(complete: bool, bounds: LocatorField<agent_desktop_core::Rect>) -> ObservedSubtree {
+pub(super) fn subtree_at(
+    complete: bool,
+    bounds: LocatorField<agent_desktop_core::Rect>,
+) -> ObservedSubtree {
+    named_subtree_at("Save", complete, bounds)
+}
+
+pub(super) fn named_subtree_at(
+    name: &str,
+    complete: bool,
+    bounds: LocatorField<agent_desktop_core::Rect>,
+) -> ObservedSubtree {
     ObservedSubtree::new(
         LocatorEvidence {
             role: LocatorField::Known("button".into()),
-            name: LocatorField::Known("Save".into()),
+            name: LocatorField::Known(name.into()),
             description: LocatorField::Absent,
             value: LocatorField::Absent,
             identifiers: IdentifierEvidence::absent(),
@@ -73,7 +84,7 @@ fn subtree_at(complete: bool, bounds: LocatorField<agent_desktop_core::Rect>) ->
     )
 }
 
-fn ffi_window() -> AdExactWindowInfo {
+pub(super) fn ffi_window() -> AdExactWindowInfo {
     AdExactWindowInfo {
         version: crate::types::exact_window_info::AD_EXACT_WINDOW_INFO_VERSION,
         size: crate::types::exact_window_info::AD_EXACT_WINDOW_INFO_SIZE as u32,
@@ -96,7 +107,7 @@ fn ffi_window() -> AdExactWindowInfo {
     }
 }
 
-fn query() -> AdFindQuery {
+pub(super) fn query() -> AdFindQuery {
     let mut query = unsafe { std::mem::zeroed::<AdFindQuery>() };
     query.control.version = crate::types::find_query::AD_FIND_QUERY_VERSION;
     query.control.selection.kind = AdFindSelectionKind::Strict as i32;
@@ -263,113 +274,4 @@ fn strict_find_of_a_unique_text_field_reaches_strict_resolution_by_name() {
 #[test]
 fn strict_find_of_twin_text_fields_stays_ambiguous() {
     assert_eq!(find_address(2), (AdResult::ErrAmbiguousTarget, None));
-}
-
-struct TwinButtons;
-
-impl ActionOps for TwinButtons {}
-impl InputOps for TwinButtons {}
-impl SystemOps for TwinButtons {}
-
-impl ObservationOps for TwinButtons {
-    fn observe_tree(
-        &self,
-        root: ObservationRoot<'_>,
-        _request: &ObservationRequest,
-    ) -> Result<ObservedTree, agent_desktop_core::AdapterError> {
-        let ObservationRoot::Window(window) = root else {
-            return Err(agent_desktop_core::AdapterError::internal(
-                "expected window root",
-            ));
-        };
-        let roots = [10.0, 200.0]
-            .into_iter()
-            .map(|x| {
-                subtree_at(
-                    true,
-                    LocatorField::Known(agent_desktop_core::Rect {
-                        x,
-                        y: 0.0,
-                        width: 30.0,
-                        height: 10.0,
-                    }),
-                )
-            })
-            .collect();
-        ObservedTree::from_roots(
-            roots,
-            ObservationSource::Window {
-                window: window.clone(),
-                surface: agent_desktop_core::SnapshotSurface::Window,
-            },
-            Default::default(),
-            true,
-        )
-    }
-
-    fn resolve_element_strict(
-        &self,
-        _entry: &agent_desktop_core::RefEntry,
-        _deadline: agent_desktop_core::Deadline,
-    ) -> Result<agent_desktop_core::NativeHandle, agent_desktop_core::AdapterError> {
-        Err(agent_desktop_core::AdapterError::ambiguous_target(
-            "identity is not unique",
-        ))
-    }
-
-    fn resolve_locator_anchor(
-        &self,
-        entry: &agent_desktop_core::RefEntry,
-        _deadline: agent_desktop_core::Deadline,
-    ) -> Result<agent_desktop_core::NativeHandle, agent_desktop_core::AdapterError> {
-        let x = entry.geometry.bounds.map_or(-1.0, |bounds| bounds.x);
-        Ok(agent_desktop_core::NativeHandle::new(x))
-    }
-}
-
-fn find_twin(kind: AdFindSelectionKind, nth: u32) -> (AdResult, Option<f64>) {
-    let handle = crate::adapter::register_adapter(AdAdapter {
-        inner: Box::new(TwinButtons),
-        session_id: None,
-        _session_lease: None,
-    })
-    .unwrap();
-    let mut find = query();
-    find.control.selection.kind = kind as i32;
-    find.control.selection.nth = nth;
-    let mut out = AdNativeHandle {
-        ptr: std::ptr::null(),
-    };
-    let result = unsafe { ad_find_exact(handle, &ffi_window(), &find, &mut out) };
-    let x = (result == AdResult::Ok).then(|| {
-        let (native, _) =
-            crate::actions::native_handle::acquire_ffi_handle(handle.addr(), &out).unwrap();
-        *native.downcast_ref::<f64>().unwrap()
-    });
-    unsafe { crate::adapter::ad_adapter_destroy(handle) };
-    (result, x)
-}
-
-#[test]
-fn explicit_selection_among_identical_buttons_returns_the_chosen_element() {
-    assert_eq!(
-        find_twin(AdFindSelectionKind::Nth, 1),
-        (AdResult::Ok, Some(200.0))
-    );
-    assert_eq!(
-        find_twin(AdFindSelectionKind::Nth, 0),
-        (AdResult::Ok, Some(10.0))
-    );
-    assert_eq!(
-        find_twin(AdFindSelectionKind::First, 0),
-        (AdResult::Ok, Some(10.0))
-    );
-    assert_eq!(
-        find_twin(AdFindSelectionKind::Last, 0),
-        (AdResult::Ok, Some(200.0))
-    );
-    assert_eq!(
-        find_twin(AdFindSelectionKind::Strict, 0),
-        (AdResult::ErrAmbiguousTarget, None)
-    );
 }

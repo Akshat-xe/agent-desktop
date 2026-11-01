@@ -164,7 +164,9 @@ fn retained_object_verdict(entry: &RefEntry, node: &ObservedNode) -> Result<(), 
     }
 }
 
-fn resolve_anchor(
+/// Resolves an anchor through the platform and confirms the node it landed on against the entry's
+/// identity and retained object, so a handle is never published for a different element.
+pub fn resolve_anchor(
     adapter: &dyn PlatformAdapter,
     entry: &RefEntry,
     deadline: Deadline,
