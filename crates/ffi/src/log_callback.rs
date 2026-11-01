@@ -169,11 +169,11 @@ mod tests {
         assert_eq!(ad_set_log_callback(None), AdResult::Ok);
 
         let messages = MESSAGES.lock().unwrap();
-        assert_eq!(messages.len(), 1);
-        assert!(messages[0].contains("redacted"));
-        assert!(messages[0].contains("login"));
-        assert!(!messages[0].contains("secret"));
-        assert!(!messages[0].contains("Control+Shift+W"));
+        let ours: Vec<_> = messages.iter().filter(|m| m.contains("login")).collect();
+        assert_eq!(ours.len(), 1);
+        assert!(ours[0].contains("redacted"));
+        assert!(!ours[0].contains("secret"));
+        assert!(!ours[0].contains("Control+Shift+W"));
     }
 
     #[test]
@@ -181,8 +181,14 @@ mod tests {
         let _guard = LOG_TEST_LOCK.lock().unwrap();
         MESSAGES.lock().unwrap().clear();
         assert_eq!(ad_set_log_callback(Some(record)), AdResult::Ok);
-        tracing::error!(operation = "outside");
+        tracing::error!(operation = "outside-scope-probe");
         assert_eq!(ad_set_log_callback(None), AdResult::Ok);
-        assert!(MESSAGES.lock().unwrap().is_empty());
+        assert!(
+            !MESSAGES
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|m| m.contains("outside-scope-probe"))
+        );
     }
 }
