@@ -150,9 +150,9 @@ fn capture(root: AccessibilityNode, name: &str) -> RefEntry {
     let mut refmap = RefMap::new();
     let observed = crate::adapter::observed_tree(&ObservationRoot::Window(&window()), root.clone())
         .expect("the fixture observes");
-    let unique = crate::refs::ref_alloc_unique::unique_capture_paths(&observed);
+    let proof = crate::refs::ref_capture_proof::CaptureProof::new(&observed);
     let config = RefAllocConfig {
-        unique_entries: Some(&unique),
+        capture: Some(&proof),
         ..config_without_uniqueness()
     };
     allocate_refs(root, &mut refmap, &config).unwrap();
@@ -182,7 +182,7 @@ fn config_without_uniqueness() -> RefAllocConfig<'static> {
             root_ref_id: None,
             path_prefix: &[],
         },
-        unique_entries: None,
+        capture: None,
     }
 }
 

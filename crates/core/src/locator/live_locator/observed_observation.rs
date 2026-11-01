@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 use crate::{AdapterError, AppError, refs::RefPath};
 
 use super::ObservedTree;
@@ -8,22 +6,16 @@ use super::ObservedTree;
 ///
 /// A rooted find arrives here with the whole-window read that re-identified its
 /// root plus that root's path, so its matches are drawn from the root's subtree
-/// while the capture census behind their refs still counts every node of the
-/// same observation. Nothing is proven across two reads.
+/// while the capture proof behind their refs runs over every node of the same
+/// observation. Nothing is proven across two reads.
 pub(crate) struct ObservedObservation {
     pub(crate) tree: ObservedTree,
     pub(crate) scope: Option<RefPath>,
-    pub(crate) unique: HashSet<usize>,
 }
 
 impl ObservedObservation {
     pub(crate) fn whole(tree: ObservedTree) -> Self {
-        let unique = crate::refs::ref_alloc_unique::unique_capture_nodes(&tree);
-        Self {
-            tree,
-            scope: None,
-            unique,
-        }
+        Self { tree, scope: None }
     }
 
     pub(crate) fn under(tree: ObservedTree, root: usize) -> Result<Self, AppError> {

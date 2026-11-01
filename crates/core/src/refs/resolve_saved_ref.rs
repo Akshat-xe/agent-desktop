@@ -45,20 +45,24 @@ pub fn resolve_saved_ref(
     Ok(handle)
 }
 
-/// The window a tokenless ref is captured from, one complete observation of it,
-/// and the node in that observation matching the recorded predicate.
+/// The window a saved ref is captured from, one complete observation of it, and
+/// the node in that observation it names.
 pub(crate) type SavedRefMatch = (WindowInfo, ObservedTree, usize);
 
-/// The evidence every tokenless ref is judged by, shared by resolution and by a
-/// drill-down so a capture census and a later resolve measure one observation.
-/// An entry that was not unique at capture has no such evidence to gather.
+/// The evidence every tokenless ref is judged by, shared by resolution, by a
+/// drill-down and by a rooted find, so a capture proof and a later resolve
+/// measure one observation. A ref carrying an element token names its node by
+/// that token; every other ref names it by the predicate it was capture-proven
+/// with, and an entry that was not unique at capture has no such evidence to
+/// gather.
 pub(crate) fn observe_saved_ref(
     adapter: &dyn PlatformAdapter,
     entry: &RefEntry,
     deadline: Deadline,
     lease: Option<&crate::InteractionLease>,
 ) -> Result<SavedRefMatch, AdapterError> {
-    if !entry.identity.unique_at_capture {
+    let token = element_token(entry);
+    if token.is_none() && !entry.identity.unique_at_capture {
         return Err(identity_not_unique(entry));
     }
     let window = recorded_window(adapter, entry, deadline)?;
@@ -69,8 +73,26 @@ pub(crate) fn observe_saved_ref(
         deadline,
         lease,
     )?;
-    let index = unique_live_match(entry, &observed)?;
+    let index = saved_ref_node(entry, token, &observed)?;
     Ok((window, observed, index))
+}
+
+/// Confirms that the element an adapter landed is the one `entry` names, under
+/// the same full predicate a saved ref resolves by. A caller that publishes a
+/// landed handle - the C find entry point hands one to C callers - validates it
+/// here instead of trusting the landing alone.
+pub fn confirm_landed_element(
+    adapter: &dyn PlatformAdapter,
+    entry: &RefEntry,
+    handle: &NativeHandle,
+    deadline: Deadline,
+) -> Result<(), AdapterError> {
+    let root = ObservationRoot::Element {
+        handle,
+        entry,
+        root_ref: None,
+    };
+    confirm_landed(adapter, entry, root, deadline, None)
 }
 
 /// The anchor lands a stored path, which a different element can move into
@@ -166,7 +188,7 @@ fn belongs_to_entry(window: &WindowInfo, entry: &RefEntry) -> bool {
 
 /// The one observation a tokenless ref is judged by, in the settings resolution
 /// uses: the whole window at the deepest limit a walk supports, so a capture
-/// census and a later resolution count the same evidence.
+/// proof and a later resolution count the same evidence.
 pub(crate) fn observe_whole_window(
     adapter: &dyn PlatformAdapter,
     surface: crate::SnapshotSurface,
@@ -188,6 +210,21 @@ pub(crate) fn observe_whole_window(
         lease,
     )
     .map_err(adapter_error)
+}
+
+fn saved_ref_node(
+    entry: &RefEntry,
+    token: Option<&str>,
+    observed: &ObservedTree,
+) -> Result<usize, AdapterError> {
+    if let Some(token) = token {
+        return observed
+            .nodes
+            .iter()
+            .position(|node| node.evidence.identifiers.retained_object() == Some(token))
+            .ok_or_else(|| absent(entry));
+    }
+    unique_live_match(entry, observed)
 }
 
 fn unique_live_match(entry: &RefEntry, observed: &ObservedTree) -> Result<usize, AdapterError> {
@@ -228,7 +265,11 @@ fn positional_anchor(
         &crate::locator::LocatorQuery::default(),
     );
     anchor.identity = crate::RefEntryIdentity {
-        retained_object: None,
+        retained_object: entry
+            .identity
+            .retained_object
+            .clone()
+            .filter(|_| element_token(entry).is_none()),
         unique_at_capture: false,
         ..entry.identity.clone()
     };

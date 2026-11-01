@@ -92,6 +92,41 @@ fn assert_proven_match(response: &serde_json::Value) {
     );
 }
 
+/// A root that re-identifies itself by token says nothing about whether the
+/// elements inside it carry one, so a rooted find reads the whole window and
+/// proves the matches it publishes there. The element-rooted read of the same
+/// subtree carries no such proof, and the ref it returned could never resolve.
+#[test]
+fn a_token_root_find_proves_its_tokenless_matches_over_the_window() {
+    let _guard = HomeGuard::new();
+    let adapter = LiveFindAdapter::with_token_root();
+
+    let mut stored = RefMap::new();
+    stored.allocate(stored_token_root());
+    let snapshot_id = RefStore::new().unwrap().save_new_snapshot(&stored).unwrap();
+    let root_ref = format!("@{snapshot_id}:e1");
+
+    let found = execute(
+        find_args(Some(root_ref), Some("OnlyInWindowTwo"), None),
+        &adapter,
+        &CommandContext::default(),
+    )
+    .expect("a rooted find answers from the read that re-identified its token root");
+    assert_eq!(found["matches"].as_array().map(Vec::len), Some(1));
+    assert_proven_match(&found);
+}
+
+fn stored_token_root() -> crate::refs::RefEntry {
+    let mut entry =
+        crate::adapter::minimal_ref_entry("group", Some(super::test_support::TOKEN_ROOT_NAME));
+    entry.identity.retained_object = Some(super::test_support::TOKEN_ROOT.into());
+    entry.process.pid = crate::ProcessId::new(102);
+    entry.source.source_app = Some("FixtureApp".into());
+    entry.source.source_window_id = Some("w-2".into());
+    entry.source.source_window_title = Some("Second".into());
+    entry
+}
+
 fn stored_button_root() -> crate::refs::RefEntry {
     let mut entry = crate::adapter::minimal_ref_entry("button", Some("OnlyInWindowTwo"));
     entry.process.pid = crate::ProcessId::new(102);

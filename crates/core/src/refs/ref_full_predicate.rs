@@ -22,22 +22,6 @@ pub(crate) struct FullPredicate<'a> {
 }
 
 impl<'a> FullPredicate<'a> {
-    /// The predicate the projection of this evidence records, so a capture
-    /// census counts the fields resolution will later compare.
-    pub(crate) fn of_evidence(evidence: &'a LocatorEvidence) -> Self {
-        Self::of_fields(
-            evidence
-                .role
-                .known()
-                .map(String::as_str)
-                .unwrap_or("unknown"),
-            evidence.name.known().map(String::as_str),
-            evidence.value.known().map(String::as_str),
-            evidence.description.known().map(String::as_str),
-            evidence.identifiers.preferred_identifier(),
-        )
-    }
-
     pub(crate) fn of_entry(entry: &'a RefEntry) -> Self {
         Self::of_fields(
             &entry.identity.role,
@@ -95,8 +79,8 @@ impl<'a> FullPredicate<'a> {
         }
     }
 
-    /// The fields this predicate records, which is the subset capture counts a
-    /// predicate against and the one resolution compares.
+    /// The fields this predicate records, which is the field subset a capture
+    /// proof counts this predicate against.
     pub(crate) fn mask(&self) -> u8 {
         self.mask
     }

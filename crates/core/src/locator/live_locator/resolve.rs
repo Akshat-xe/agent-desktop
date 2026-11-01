@@ -186,11 +186,7 @@ fn resolve_observed_attempt(
     request: &LocatorResolveRequest,
     aggregate: &mut LocatorStats,
 ) -> Result<LocatorResolution, AppError> {
-    let ObservedObservation {
-        mut tree,
-        scope,
-        unique,
-    } = observed;
+    let ObservedObservation { mut tree, scope } = observed;
     tree.stats.reads.counts.observation_attempts =
         tree.stats.reads.counts.observation_attempts.max(1);
     let evaluation_request = LocatorResolveRequest {
@@ -200,16 +196,15 @@ fn resolve_observed_attempt(
         },
         ..*request
     };
-    let mut resolution = super::evaluate::evaluate_locator_tree_in(
+    let (mut resolution, tree) = super::evaluate::evaluate_locator_tree_in(
         tree,
         scope.as_ref(),
         query,
         &evaluation_request,
-        &unique,
     )?;
     if request.materialization == super::LocatorMaterialization::SelectedMatches {
         if let Err(error) =
-            super::hydrate::selected_matches(adapter, query, request, &mut resolution)
+            super::hydrate::selected_matches(adapter, query, request, &mut resolution, &tree)
         {
             aggregate.merge_attempt(&resolution.stats);
             return Err(error);

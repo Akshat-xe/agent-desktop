@@ -102,22 +102,6 @@ fn an_incomplete_open_popup_does_not_prove_the_menu_closed() {
 }
 
 #[test]
-fn a_landed_anchor_without_a_captured_context_resolves_in_the_open_popup() {
-    let entry = crate::tree::live::test_support::ref_entry("menuitem");
-    assert!(entry.identity.retained_object.is_none());
-
-    let target = resolve_contextual(
-        &entry,
-        element("/owner"),
-        vec![(MenuContext::test("/popup", 10), element("/popup"))],
-        |_root, _| Ok(element("/item")),
-    )
-    .expect("the open popup answers for a tokenless anchor");
-
-    assert_eq!(target.path(), "/item");
-}
-
-#[test]
 fn a_successful_menu_resolution_carries_its_owner_window() {
     let context = MenuContext::test("/popup", 10);
     let mut entry = crate::tree::live::test_support::ref_entry("menuitem");

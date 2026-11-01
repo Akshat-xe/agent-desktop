@@ -141,7 +141,7 @@ fn a_shallow_presentation_cuts_at_the_logical_depth_of_the_walks() {
         )],
     )
     .with_wrapper(true);
-    let tree = ObservedTree::from_roots(
+    let mut tree = ObservedTree::from_roots(
         vec![subtree(
             "window",
             "Fixture",
@@ -153,8 +153,7 @@ fn a_shallow_presentation_cuts_at_the_logical_depth_of_the_walks() {
     )
     .unwrap();
 
-    let (shallow, complete, nodes_observed) =
-        tree.clone().into_accessibility_tree_shallow(3).unwrap();
+    let (shallow, complete, nodes_observed) = tree.clone().project_window(3).unwrap();
     assert!(complete);
     assert_eq!(
         nodes_observed, 5,
@@ -167,7 +166,7 @@ fn a_shallow_presentation_cuts_at_the_logical_depth_of_the_walks() {
         "a wrapper costs no logical depth, so the walk reaches past its path depth"
     );
 
-    let (cut, _, _) = tree.into_accessibility_tree_shallow(2).unwrap();
+    let (cut, _, _) = tree.project_window(2).unwrap();
     let content = &cut.children[0].children[0].children[0];
     assert_eq!(content.identity.name.as_deref(), Some("Content"));
     assert_eq!(content.children_count, Some(1), "a cut keeps its count");
@@ -186,9 +185,10 @@ fn a_drilled_subtree_counts_its_depth_from_the_matched_node() {
     ] {
         node = subtree(role, name, vec![node]);
     }
-    let tree = ObservedTree::from_roots(vec![node], source(), Default::default(), true).unwrap();
+    let mut tree =
+        ObservedTree::from_roots(vec![node], source(), Default::default(), true).unwrap();
 
-    let drilled = tree.clone().into_accessibility_subtree(3, 1).unwrap();
+    let drilled = tree.clone().project_subtree(3, 1).unwrap();
     assert_eq!(
         drilled.identity.name.as_deref(),
         Some("C"),
@@ -203,7 +203,7 @@ fn a_drilled_subtree_counts_its_depth_from_the_matched_node() {
         "a limit of one reaches one level below a node at window depth 3"
     );
 
-    let cut = tree.into_accessibility_subtree(3, 0).unwrap();
+    let cut = tree.project_subtree(3, 0).unwrap();
     assert_eq!(cut.children_count, Some(1), "a cut keeps its count");
     assert!(cut.children.is_empty());
 }
@@ -339,7 +339,7 @@ fn snapshot_projection_and_find_share_the_same_observation() {
 fn partial_projection_returns_the_observed_subtree_instead_of_discarding_it() {
     let incomplete =
         ObservedSubtree::new(evidence("button", Some("Save")), Vec::new(), false, None);
-    let tree = ObservedTree::from_roots(
+    let mut tree = ObservedTree::from_roots(
         vec![subtree("window", "Fixture", vec![incomplete])],
         source(),
         Default::default(),
@@ -349,7 +349,7 @@ fn partial_projection_returns_the_observed_subtree_instead_of_discarding_it() {
 
     assert!(tree.clone().into_accessibility_tree().is_err());
 
-    let (projected, complete, _) = tree.into_accessibility_tree_partial().unwrap();
+    let (projected, complete, _) = tree.project_partial().unwrap();
 
     assert!(!complete);
     assert_eq!(projected.role, "window");
@@ -368,7 +368,7 @@ fn partial_projection_returns_the_observed_subtree_instead_of_discarding_it() {
 
 #[test]
 fn partial_projection_reports_completeness_when_the_walk_finished() {
-    let tree = ObservedTree::from_roots(
+    let mut tree = ObservedTree::from_roots(
         vec![subtree(
             "window",
             "Fixture",
@@ -381,7 +381,7 @@ fn partial_projection_reports_completeness_when_the_walk_finished() {
     .unwrap();
 
     let strict = tree.clone().into_accessibility_tree().unwrap();
-    let (projected, complete, nodes_observed) = tree.into_accessibility_tree_partial().unwrap();
+    let (projected, complete, nodes_observed) = tree.project_partial().unwrap();
 
     assert!(complete);
     assert_eq!(nodes_observed, 2);

@@ -13,11 +13,18 @@ pub(crate) struct WindowCapture {
 }
 
 impl WindowCapture {
-    pub(crate) fn into_tree(self) -> Result<(crate::AccessibilityNode, bool, usize), AppError> {
-        match self.presentation_depth {
-            Some(depth) => Ok(self.observed.into_accessibility_tree_shallow(depth)?),
-            None => Ok(self.observed.into_accessibility_tree_partial()?),
-        }
+    pub(crate) fn into_parts(
+        self,
+    ) -> Result<(crate::AccessibilityNode, bool, usize, ObservedTree), AppError> {
+        let Self {
+            mut observed,
+            presentation_depth,
+        } = self;
+        let (tree, complete, nodes_observed) = match presentation_depth {
+            Some(depth) => observed.project_window(depth)?,
+            None => observed.project_partial()?,
+        };
+        Ok((tree, complete, nodes_observed, observed))
     }
 }
 
@@ -82,17 +89,16 @@ fn observe_window(
 }
 
 /// Whether the presentation allocation builds from this observation keeps an
-/// entry that can only re-identify itself through the capture census: a ref or
-/// a skeleton drill anchor whose identity carries no element token. Only the
-/// census proves such an entry unique, and the census needs the whole window,
-/// so a capture that would present one is re-observed. A presentation whose
-/// selected entries all carry a token resolves through the tokens and keeps its
-/// single shallow walk.
+/// entry that can only re-identify itself through the capture proof: a ref or a
+/// skeleton drill anchor whose identity carries no element token. Only a whole
+/// window proves such an entry unique, so a capture that would present one is
+/// re-observed. A presentation whose selected entries all carry a token resolves
+/// through the tokens and keeps its single shallow walk.
 fn needs_whole_window(observed: &ObservedTree) -> bool {
     let cut = !observed.is_complete() || observed.nodes.iter().any(ObservedNode::omits_descendants);
-    cut && observed
-        .clone()
-        .into_accessibility_tree_partial()
+    let mut presented = observed.clone();
+    cut && presented
+        .project_partial()
         .is_ok_and(|(presented, _, _)| crate::refs::ref_alloc::selects_tokenless_entry(&presented))
 }
 

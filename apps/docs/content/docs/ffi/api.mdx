@@ -342,6 +342,7 @@ typedef struct AdFindQuery {
 
 ```c
 // Finds and strictly resolves one element in an exact window; duplicates need a first, last, or nth selection.
+// The handle is published only when the landed element still matches the selected entry's recorded identity.
 AdResult ad_find_exact(const struct AdAdapter *adapter,
                        const struct AdExactWindowInfo *win,
                        const struct AdFindQuery *query,

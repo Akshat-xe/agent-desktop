@@ -1,4 +1,5 @@
 use crate::AccessibilityNode;
+use crate::refs::ref_capture_proof::CaptureProof;
 use crate::refs::ref_identity::has_meaningful_identity;
 use crate::refs::{RefEntry, RefMap};
 use std::collections::HashSet;
@@ -174,13 +175,9 @@ pub fn transform_tree(
 pub(crate) fn allocate_refs<'a>(
     node: AccessibilityNode,
     refmap: &mut RefMap,
-    config: &'a RefAllocConfig<'a>,
+    config: &RefAllocConfig<'a>,
 ) -> Result<AccessibilityNode, crate::AppError> {
-    let plan = AllocationPlan::new(
-        &node,
-        config.scope.root_ref_id.is_some(),
-        config.unique_entries,
-    );
+    let plan = AllocationPlan::new(&node, config.scope.root_ref_id.is_some(), config.capture);
     allocate_refs_at_path(
         node,
         refmap,
@@ -223,18 +220,18 @@ fn selects_tokenless_at(
 }
 
 /// What one allocation decides once for every node it visits: which boundary
-/// nodes anchor a skeleton, and which entries the capture census found exactly
-/// one match for.
+/// nodes anchor a skeleton, and which entries the observation's capture proof
+/// found exactly once.
 struct AllocationPlan<'a> {
     skeleton_anchors: HashSet<Vec<usize>>,
-    unique_entries: Option<&'a HashSet<Vec<usize>>>,
+    capture: Option<&'a CaptureProof<'a>>,
 }
 
 impl<'a> AllocationPlan<'a> {
     fn new(
         node: &AccessibilityNode,
         scoped_to_root: bool,
-        unique_entries: Option<&'a HashSet<Vec<usize>>>,
+        capture: Option<&'a CaptureProof<'a>>,
     ) -> Self {
         let mut skeleton_anchors = HashSet::new();
         if !scoped_to_root {
@@ -242,13 +239,13 @@ impl<'a> AllocationPlan<'a> {
         }
         Self {
             skeleton_anchors,
-            unique_entries,
+            capture,
         }
     }
 
-    fn found_once(&self, path: &[usize]) -> bool {
-        self.unique_entries
-            .is_some_and(|unique| unique.contains(path))
+    fn proven(&self, entry: &RefEntry, path: &[usize]) -> bool {
+        self.capture
+            .is_some_and(|capture| capture.proves(entry, path))
     }
 }
 
@@ -323,7 +320,7 @@ fn allocate_refs_at_path(
             path,
         );
         entry.scope.path_is_absolute = config.scope.root_ref_id.is_some();
-        entry.identity.unique_at_capture = plan.found_once(path);
+        entry.identity.unique_at_capture = plan.proven(&entry, path);
         if !config.options.include_bounds && has_meaningful_identity(&entry) {
             entry.geometry.bounds = None;
         }
@@ -335,7 +332,7 @@ fn allocate_refs_at_path(
     if is_skeleton_anchor {
         let mut entry = ref_entry_from_node(&node, &config.source, None, path);
         entry.capabilities.available_actions = vec![];
-        entry.identity.unique_at_capture = plan.found_once(path);
+        entry.identity.unique_at_capture = plan.proven(&entry, path);
         if !config.options.include_bounds && has_meaningful_identity(&entry) {
             entry.geometry.bounds = None;
         }

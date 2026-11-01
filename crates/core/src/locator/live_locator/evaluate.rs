@@ -11,27 +11,26 @@ use super::{
     validate::{validate_query, validate_request},
 };
 use crate::{AdapterError, locator::LocatorQuery, refs::RefPath};
-use std::collections::{BTreeSet, HashSet};
+use std::collections::BTreeSet;
 
 pub fn evaluate_locator_tree(
     tree: ObservedTree,
     query: &LocatorQuery,
     request: &LocatorResolveRequest,
 ) -> Result<LocatorResolution, AdapterError> {
-    let unique = crate::refs::ref_alloc_unique::unique_capture_nodes(&tree);
-    evaluate_locator_tree_in(tree, None, query, request, &unique)
+    evaluate_locator_tree_in(tree, None, query, request).map(|(resolution, _)| resolution)
 }
 
 /// `evaluate_locator_tree` over one complete observation, with the matches drawn
-/// from the subtree at `scope` alone. `unique` is that same observation's capture
-/// census, so the refs a match records are proven by the read that found it.
+/// from the subtree at `scope` alone. The observation comes back with the
+/// resolution, because a hydrated match is proven against the same read its
+/// query was answered from.
 pub(super) fn evaluate_locator_tree_in(
     mut tree: ObservedTree,
     scope: Option<&RefPath>,
     query: &LocatorQuery,
     request: &LocatorResolveRequest,
-    unique: &HashSet<usize>,
-) -> Result<LocatorResolution, AdapterError> {
+) -> Result<(LocatorResolution, ObservedTree), AdapterError> {
     validate_query(query)?;
     validate_request(request)?;
     let normalized = normalize_query(query);
@@ -89,17 +88,18 @@ pub(super) fn evaluate_locator_tree_in(
         LocatorMaterialization::None => None,
         LocatorMaterialization::SelectedMatches => {
             let (refmap, materialization_complete) =
-                materialize_refmap(&mut tree, unique, &normalized, Some(&selected))?;
+                materialize_refmap(&mut tree, &normalized, Some(&selected))?;
             complete &= materialization_complete;
             Some(refmap)
         }
         LocatorMaterialization::FullRefMap => {
             let (refmap, materialization_complete) =
-                materialize_refmap(&mut tree, unique, &normalized, None)?;
+                materialize_refmap(&mut tree, &normalized, None)?;
             complete &= materialization_complete;
             Some(refmap)
         }
     };
+    let proof = crate::refs::ref_capture_proof::CaptureProof::new(&tree);
     let mut selected_matches = Vec::with_capacity(selected.len());
     for index in selected {
         let data = match_data(&tree, index, &parents)
@@ -109,7 +109,7 @@ pub(super) fn evaluate_locator_tree_in(
             .get(index)
             .ok_or_else(|| AdapterError::internal("selected locator node is out of bounds"))?;
         let mut entry = ref_entry(node, &tree.source, &normalized);
-        entry.identity.unique_at_capture = unique.contains(&index);
+        entry.identity.unique_at_capture = proof.proves_node(&entry, index);
         selected_matches.push(LocatorMatch {
             data,
             document_order: node.document_order,
@@ -151,18 +151,21 @@ pub(super) fn evaluate_locator_tree_in(
                 )
             })
     };
-    Ok(LocatorResolution {
-        matches: selected_matches,
-        refmap,
-        stats,
-        meta: LocatorResolutionMeta {
-            total_matches,
-            complete,
-            selection_complete,
-            truncated,
-            roles_present,
+    Ok((
+        LocatorResolution {
+            matches: selected_matches,
+            refmap,
+            stats,
+            meta: LocatorResolutionMeta {
+                total_matches,
+                complete,
+                selection_complete,
+                truncated,
+                roles_present,
+            },
         },
-    })
+        tree,
+    ))
 }
 
 fn evaluate_node(

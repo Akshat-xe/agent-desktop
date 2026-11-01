@@ -40,8 +40,8 @@ pub fn build(
     let (window, capture) = first_surface_owner(windows, |window| {
         window_capture::capture_window(adapter, opts, window, deadline)
     })?;
-    let unique = crate::refs::ref_alloc_unique::unique_capture_paths(&capture.observed);
-    let (raw_tree, complete, nodes_observed) = capture.into_tree()?;
+    let (raw_tree, complete, nodes_observed, observed) = capture.into_parts()?;
+    let capture_proof = crate::refs::ref_capture_proof::CaptureProof::new(&observed);
 
     let mut refmap = RefMap::new();
     let config = RefAllocConfig {
@@ -63,7 +63,7 @@ pub fn build(
             root_ref_id: None,
             path_prefix: &[],
         },
-        unique_entries: Some(&unique),
+        capture: Some(&capture_proof),
     };
     let mut tree = ref_alloc::allocate_refs(raw_tree, &mut refmap, &config)?;
 

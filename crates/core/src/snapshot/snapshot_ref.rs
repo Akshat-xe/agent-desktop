@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 use crate::{
     AccessibilityNode, AppError, WindowInfo,
     adapter::{PlatformAdapter, TreeOptions, WindowFilter},
@@ -15,15 +13,14 @@ use crate::{
 
 /// What one drill-down presents: the window it reports, the subtree that
 /// replaces the stored refs, the path coordinates its refs are recorded in, and
-/// the capture census of the observation that subtree came from. A token
-/// re-identifies itself, so its observation is the subtree alone and carries no
-/// census.
+/// the whole-window observation that proves them. A token re-identifies itself,
+/// so its observation is the subtree alone and carries no proof.
 struct DrillCapture {
     window: WindowInfo,
     tree: AccessibilityNode,
     nodes_observed: usize,
     path_prefix: crate::refs::RefPath,
-    unique: Option<HashSet<Vec<usize>>>,
+    observed: Option<crate::locator::live_locator::ObservedTree>,
 }
 
 #[cfg(test)]
@@ -79,8 +76,11 @@ pub fn run_from_ref_with_context(
         tree: raw_tree,
         nodes_observed,
         path_prefix,
-        unique,
+        observed,
     } = capture;
+    let capture_proof = observed
+        .as_ref()
+        .map(crate::refs::ref_capture_proof::CaptureProof::new);
 
     let source_app = entry.source.source_app.as_deref();
     let source_window_id = entry.source.source_window_id.as_deref();
@@ -104,7 +104,7 @@ pub fn run_from_ref_with_context(
             root_ref_id: Some(&local_root_ref),
             path_prefix: path_prefix.as_slice(),
         },
-        unique_entries: unique.as_ref(),
+        capture: capture_proof.as_ref(),
     };
 
     let (mut tree, refmap) = store.update_existing_snapshot(
@@ -154,7 +154,7 @@ fn drill_capture(
     if crate::refs::ref_identity::element_token(entry).is_some() {
         return token_capture(adapter, opts, entry, local_root_ref, deadline);
     }
-    let (window, observed, index) =
+    let (window, mut observed, index) =
         crate::refs::resolve_saved_ref::observe_saved_ref(adapter, entry, deadline, None)?;
     let path_prefix = observed
         .nodes
@@ -165,22 +165,14 @@ fn drill_capture(
                 "saved ref match is missing from the observation",
             ))
         })?;
-    let matched = u32::try_from(index).map_err(|_| {
-        AppError::Adapter(crate::AdapterError::internal(
-            "saved ref match is beyond the observation index space",
-        ))
-    })?;
-    let unique =
-        crate::refs::ref_alloc_unique::unique_capture_paths_under(&observed, matched, &path_prefix);
     let nodes_observed = observed.nodes.len();
-    let tree = observed
-        .into_accessibility_subtree(index, ObservationRequest::snapshot_logical_depth(opts))?;
+    let tree = observed.project_subtree(index, ObservationRequest::snapshot_logical_depth(opts))?;
     Ok(DrillCapture {
         window,
         tree,
         nodes_observed,
         path_prefix,
-        unique: Some(unique),
+        observed: Some(observed),
     })
 }
 
@@ -211,7 +203,7 @@ fn token_capture(
         tree,
         nodes_observed,
         path_prefix: entry.scope.path.clone(),
-        unique: None,
+        observed: None,
     })
 }
 

@@ -357,14 +357,17 @@ pub(crate) fn home_override_active() -> bool {
     HOME_OVERRIDE.with(|cell| cell.borrow().is_some())
 }
 
+#[cfg(test)]
+#[path = "ref_capture_proof_tests.rs"]
+mod capture_proof_tests;
 pub mod ref_alloc;
 pub(crate) mod ref_alloc_config;
 pub(crate) mod ref_alloc_options;
 pub(crate) mod ref_alloc_scope;
 pub(crate) mod ref_alloc_source;
-pub(crate) mod ref_alloc_unique;
 pub(crate) mod ref_allocation;
 pub(crate) mod ref_capabilities;
+pub(crate) mod ref_capture_proof;
 pub(crate) mod ref_entry;
 pub(crate) mod ref_entry_identity;
 pub(crate) mod ref_full_predicate;

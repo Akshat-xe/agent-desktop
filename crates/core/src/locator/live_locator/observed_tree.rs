@@ -77,6 +77,15 @@ impl ObservedTree {
     pub fn into_accessibility_tree_partial(
         mut self,
     ) -> Result<(AccessibilityNode, bool, usize), AdapterError> {
+        self.project_partial()
+    }
+
+    /// `into_accessibility_tree_partial` for a caller that still needs the
+    /// observation it projected, such as the capture proof behind every ref the
+    /// presentation allocates.
+    pub(crate) fn project_partial(
+        &mut self,
+    ) -> Result<(AccessibilityNode, bool, usize), AdapterError> {
         if self.roots.len() != 1 {
             return Err(AdapterError::internal(
                 "accessibility projection requires exactly one root",
@@ -91,10 +100,10 @@ impl ObservedTree {
     /// Projects the window cut at `max_logical_depth` the way a walk applies
     /// its own limit: a container whose children would sit below the limit
     /// keeps none, carries their count and stays complete, so it still anchors
-    /// a skeleton. Every presented node is the node this observation holds, so
-    /// a capture census taken over the whole observation describes it exactly.
-    pub(crate) fn into_accessibility_tree_shallow(
-        mut self,
+    /// a skeleton. Every presented node is the node this observation holds, so a
+    /// capture proof taken over the whole observation describes it exactly.
+    pub(crate) fn project_window(
+        &mut self,
         max_logical_depth: u8,
     ) -> Result<(AccessibilityNode, bool, usize), AdapterError> {
         if self.roots.len() != 1 {
@@ -114,8 +123,8 @@ impl ObservedTree {
     /// The matched node is the subtree's depth zero, as it is for a walk that
     /// starts at an element, so the requested limit counts from there rather
     /// than from the window the node happened to sit deep inside.
-    pub(crate) fn into_accessibility_subtree(
-        mut self,
+    pub(crate) fn project_subtree(
+        &mut self,
         index: usize,
         max_logical_depth: u8,
     ) -> Result<AccessibilityNode, AdapterError> {
@@ -221,6 +230,9 @@ impl ObservedTree {
         Ok(projected)
     }
 
+    /// The identity evidence is cloned rather than moved, so a capture proof that
+    /// runs after the presentation was cut still reads the observation it proves
+    /// each published entry against.
     fn projected_node(
         &mut self,
         index: usize,
@@ -232,7 +244,8 @@ impl ObservedTree {
         let role = node
             .evidence
             .role
-            .take_known()
+            .known()
+            .cloned()
             .unwrap_or_else(|| "unknown".into());
         let child_indices = std::mem::take(&mut node.children);
         let projected = AccessibilityNode {
@@ -244,21 +257,9 @@ impl ObservedTree {
                     .identifiers
                     .retained_object()
                     .map(str::to_owned),
-                name: node
-                    .evidence
-                    .name
-                    .take_known()
-                    .filter(|value| !value.is_empty()),
-                value: node
-                    .evidence
-                    .value
-                    .take_known()
-                    .filter(|value| !value.is_empty()),
-                description: node
-                    .evidence
-                    .description
-                    .take_known()
-                    .filter(|value| !value.is_empty()),
+                name: node.evidence.name.meaningful_string(),
+                value: node.evidence.value.meaningful_string(),
+                description: node.evidence.description.meaningful_string(),
                 native_id: node.evidence.identifiers.preferred_identifier().cloned(),
             },
             presentation: crate::NodePresentation {

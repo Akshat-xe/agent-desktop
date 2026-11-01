@@ -318,11 +318,18 @@ fn a_retained_object_ref_is_found_without_following_its_stored_path() {
 #[test]
 fn a_retained_object_ref_refuses_a_replacement_at_the_old_rectangle() {
     let mut fake = Fake::new();
-    fake.add(FRAME_PATH, "/first", window_field(0, 38, 420, 34));
+    let mut first = window_field(0, 38, 420, 34);
+    first.node.properties.name = Field::Present("First".to_owned());
+    fake.add(FRAME_PATH, "/first", first);
     fake.add(FRAME_PATH, "/second", window_field(0, 80, 420, 34));
     let mut entry = fake.entry_of("/first", true);
-    entry.identity.name = Some("First".to_owned());
     entry.identity.retained_object = Some(":1.2/first".to_owned());
+    assert_eq!(
+        resolve(&mut fake, &entry, deadline())
+            .expect("the recorded object resolves")
+            .path(),
+        "/first"
+    );
 
     let children = &mut fake.nodes.get_mut(FRAME_PATH).expect("frame").children;
     children.remove(0);

@@ -72,12 +72,13 @@ pub(super) fn execute(
     format_response(args, query, resolution, snapshot_id.as_deref())
 }
 
-/// A rooted find draws its matches from the root's own subtree. A token root
-/// re-identifies itself through the adapter and is observed from its handle. A
-/// tokenless root is re-identified by a complete whole-window read, and that
-/// same read answers the query over the matched subtree: the refs the find
-/// publishes are then proven by the one observation it took, never by counts
-/// joined from two reads.
+/// A rooted find draws its matches from the root's own subtree, and the read that
+/// finds the root answers them too. The root is re-identified over one complete
+/// whole-window observation - a token root through its token, a tokenless root
+/// through its predicate - and the query runs scoped to that node: the refs the
+/// find publishes are then proven by the one observation it took, never by counts
+/// joined from two reads. A token root takes the same path, because a token says
+/// nothing about whether the descendants it contains carry one.
 fn rooted_resolution(
     adapter: &dyn PlatformAdapter,
     query: &LocatorQuery,
@@ -86,25 +87,6 @@ fn rooted_resolution(
     context: &CommandContext,
 ) -> Result<LocatorResolution, AppError> {
     let entry = crate::commands::helpers::load_ref_entry(root_ref, context)?;
-    if crate::refs::ref_identity::element_token(&entry).is_some() {
-        let (_, local_root_ref) = crate::refs::ref_token::resolve_ref_target(root_ref)?;
-        let handle = crate::refs::resolve_saved_ref::resolve_saved_ref(
-            adapter,
-            &entry,
-            request.deadline,
-            None,
-        )?;
-        return resolve_query(
-            adapter,
-            query,
-            ObservationRoot::Element {
-                handle: &handle,
-                entry: &entry,
-                root_ref: Some(&local_root_ref),
-            },
-            request,
-        );
-    }
     crate::locator::live_locator::resolve_query_from(adapter, query, request, |deadline| {
         let (_, tree, index) =
             crate::refs::resolve_saved_ref::observe_saved_ref(adapter, &entry, deadline, None)

@@ -101,7 +101,10 @@ are not exposed over the ABI. A bare `@eN` ref returns
   absent. Only the Windows adapter fills it; macOS and Linux return null.
 
 - **Native handles.** `ad_resolve_element_exact` and `ad_find_exact` return an
-  `AdNativeHandle`. `ad_execute_action` (headless, no preflight) and
+  `AdNativeHandle`. Both re-identify the element before publishing it: `ad_find_exact`
+  raises the landed handle against the selected entry's recorded role, native id, name
+  and description, and returns `AD_RESULT_ERR_STALE_REF` instead of a handle when a
+  different control occupies the anchored path. `ad_execute_action` (headless, no preflight) and
   `ad_execute_action_with_policy` act on it directly, bypassing the ref-action
   pipeline. Release every handle with `ad_free_handle(adapter, &handle)` on the
   same adapter and thread, before `ad_adapter_destroy`, on every platform. It
