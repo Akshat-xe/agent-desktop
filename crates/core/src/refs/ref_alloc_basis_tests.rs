@@ -220,14 +220,23 @@ fn a_truncated_tree_is_ambiguous_even_when_the_observed_subset_looks_unique() {
 }
 
 #[test]
-fn a_root_drill_down_is_ambiguous_for_identity_but_still_positional_without_any() {
+fn a_complete_drill_proves_identity_but_an_incomplete_drill_does_not() {
     let root = window_with(vec![
         entry("button", Some("Save"), Some("save-button"), None),
         entry("button", None, None, None),
     ]);
 
-    let (tree, refmap) = run(root, &allocation(Some("@e3")));
+    let (tree, refmap) = run(root.clone(), &allocation(Some("@e3")));
 
+    assert_eq!(
+        basis_of(&tree, &refmap, &[0]),
+        Some(IdentityBasis::NativeId)
+    );
+    assert_eq!(
+        basis_of(&tree, &refmap, &[1]),
+        Some(IdentityBasis::Positional)
+    );
+    let (tree, refmap) = run(root, &allocation_with(Some("@e3"), false));
     assert_eq!(
         basis_of(&tree, &refmap, &[0]),
         Some(IdentityBasis::Ambiguous)

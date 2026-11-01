@@ -38,7 +38,13 @@ pub(crate) fn execute_poll_loop(
     };
     loop {
         state.resolve_attempts = state.resolve_attempts.saturating_add(1);
-        match resolve_within_deadline(context.adapter, context.entry, deadline) {
+        match resolve_within_deadline(
+            context.adapter,
+            context.entry,
+            deadline,
+            context.ref_id,
+            context.context,
+        ) {
             ResolveAttemptOutcome::DeadlinePassed => return Err(timeout(&state, deadline)),
             ResolveAttemptOutcome::Failed(error) => {
                 handle_resolve_failure(

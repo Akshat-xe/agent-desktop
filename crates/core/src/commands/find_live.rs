@@ -40,7 +40,8 @@ pub(super) fn execute(
         Some(root_ref) => {
             let (_, local_root_ref) = crate::refs::ref_token::resolve_ref_target(root_ref)?;
             let entry = crate::commands::helpers::load_ref_entry(root_ref, context)?;
-            let handle = adapter.resolve_element_strict(&entry, deadline)?;
+            let handle =
+                crate::refs::ref_resolve::resolve(adapter, &entry, root_ref, context, deadline)?;
             resolve_query(
                 adapter,
                 query,

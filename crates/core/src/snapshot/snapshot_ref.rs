@@ -54,7 +54,7 @@ pub fn run_from_ref_with_context(
 
     let deadline = crate::Deadline::after(timeout_ms)?;
     let window = resolve_result_window(&entry, adapter, deadline)?;
-    let handle = adapter.resolve_element_strict(&entry, deadline)?;
+    let handle = crate::refs::ref_resolve::resolve_drill_root(adapter, &entry, &refmap, deadline)?;
 
     let observation_options = opts.with_ref_identity_bounds();
     let raw_tree = crate::tree::renderer_accessibility::observe_tree(
@@ -92,7 +92,7 @@ pub fn run_from_ref_with_context(
             root_ref_id: Some(&local_root_ref),
             path_prefix: path_prefix.as_slice(),
         },
-        complete: false,
+        complete: true,
     };
 
     let (mut tree, refmap) = store.update_existing_snapshot(
@@ -184,3 +184,11 @@ mod tests;
 #[cfg(test)]
 #[path = "snapshot_ref_alloc_tests.rs"]
 mod alloc_tests;
+
+#[cfg(test)]
+#[path = "snapshot_ref_identity_test_support.rs"]
+pub(crate) mod identity_test_support;
+
+#[cfg(test)]
+#[path = "snapshot_ref_identity_tests.rs"]
+mod identity_tests;

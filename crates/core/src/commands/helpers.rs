@@ -51,16 +51,17 @@ fn resolve_ref_within_deadline(
     context: &CommandContext,
 ) -> Result<(RefEntry, crate::adapter::NativeHandle), AppError> {
     let entry = load_ref_entry(ref_id, context)?;
-    let handle = resolve_handle_within_deadline(adapter, &entry, deadline).inspect_err(|err| {
-        let _ = context.trace_lazy("ref.resolve.error", || {
-            json!({
-                "ref": ref_id,
-                "code": err.code.as_str(),
-                "message": err.message.clone(),
-                "details": err.details.clone()
-            })
-        });
-    })?;
+    let handle = resolve_handle_within_deadline(adapter, &entry, deadline, ref_id, context)
+        .inspect_err(|err| {
+            let _ = context.trace_lazy("ref.resolve.error", || {
+                json!({
+                    "ref": ref_id,
+                    "code": err.code.as_str(),
+                    "message": err.message.clone(),
+                    "details": err.details.clone()
+                })
+            });
+        })?;
     tracing::debug!("resolve: {} resolved successfully", ref_id);
     context.trace_lazy("ref.resolve.ok", || json!({ "ref": ref_id }))?;
     Ok((entry, handle))
@@ -71,11 +72,13 @@ pub(crate) fn resolve_handle_within_deadline(
     adapter: &dyn PlatformAdapter,
     entry: &RefEntry,
     deadline: crate::Deadline,
+    ref_id: &str,
+    context: &CommandContext,
 ) -> Result<crate::adapter::NativeHandle, crate::AdapterError> {
     if deadline.is_expired() {
         return Err(deadline.timeout_error());
     }
-    adapter.resolve_element_strict(entry, deadline)
+    crate::refs::ref_resolve::resolve(adapter, entry, ref_id, context, deadline)
 }
 
 pub(crate) fn execute_ref_action_with_context(

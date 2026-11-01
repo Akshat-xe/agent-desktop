@@ -71,8 +71,7 @@ pub(crate) fn dispatch_resolved(
         .ok_or_else(|| AdapterError::stale_ref_because("target process instance is unavailable"))?;
     let expected_process = crate::ProcessIdentity::new(target.entry.process.pid, process_instance);
     let mut handle = target
-        .adapter
-        .resolve_element_strict(target.entry, target.deadline)
+        .resolve(target.deadline)
         .map_err(mark_pre_dispatch_resolution_failure)
         .inspect_err(|error| {
             crate::ref_action::ref_action_wait_support::trace_resolve_error(
@@ -109,11 +108,8 @@ pub(crate) fn dispatch_resolved(
                 }
             };
             handle = match recovered {
-                Some(handle) => handle,
-                None => target
-                    .adapter
-                    .resolve_element_strict(target.entry, target.deadline)
-                    .map_err(after_scroll)?,
+                Some(handle) if target.entry.scope.root_ref.is_none() => handle,
+                _ => target.resolve(target.deadline).map_err(after_scroll)?,
             };
             let scrolled_target = ResolvedRefAction::new(target, &handle);
             stable_preflight(&scrolled_target, &request)

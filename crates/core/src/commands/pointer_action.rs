@@ -8,15 +8,9 @@ use crate::{
 };
 use serde_json::{Value, json};
 
+mod entry_point_resolve;
 use crate::actionability::pointer_timeout::point_actionability_timeout;
-
-struct EntryPointResolve<'a> {
-    ref_id: &'a str,
-    entry: &'a RefEntry,
-    stability: Option<Option<u64>>,
-    lease: Option<&'a crate::InteractionLease>,
-    verify_receives_events: bool,
-}
+use entry_point_resolve::EntryPointResolve;
 
 pub(crate) struct PointResolveAttempt<'a> {
     pub args: crate::commands::point_resolve::PointResolveArgs<'a>,
@@ -37,8 +31,8 @@ fn resolve_point_from_entry(
         lease,
         verify_receives_events,
     } = request;
-    let mut handle =
-        resolve_handle_within_deadline(adapter, entry, deadline).inspect_err(|err| {
+    let mut handle = resolve_handle_within_deadline(adapter, entry, deadline, ref_id, context)
+        .inspect_err(|err| {
             let _ = context.trace_lazy("ref.resolve.error", || {
                 json!({
                     "ref": ref_id,
@@ -75,7 +69,7 @@ fn resolve_point_from_entry(
             .into());
         };
         adapter.scroll_into_view(&handle, lease)?;
-        handle = resolve_handle_within_deadline(adapter, entry, deadline)?;
+        handle = resolve_handle_within_deadline(adapter, entry, deadline, ref_id, context)?;
         let observation = adapter.observe_pointer(&handle, deadline)?;
         bounds = observation.bounds;
         states = observation.states;
@@ -310,7 +304,13 @@ fn scroll_point_target(
 ) -> Result<(), AppError> {
     let lease = adapter.acquire_interaction_lease(deadline)?;
     focus_point_under_lease(args, &lease, adapter, context)?;
-    let handle = resolve_handle_within_deadline(adapter, entry, deadline)?;
+    let handle = resolve_handle_within_deadline(
+        adapter,
+        entry,
+        deadline,
+        args.ref_id.unwrap_or_default(),
+        context,
+    )?;
     adapter.scroll_into_view(&handle, &lease)?;
     Ok(())
 }

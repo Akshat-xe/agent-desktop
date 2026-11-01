@@ -15,11 +15,10 @@ impl RefAllocPlan {
     pub(crate) fn new(
         root: &AccessibilityNode,
         skeleton_anchors: HashSet<Vec<usize>>,
-        drill_down: bool,
         complete: bool,
     ) -> Self {
         let mut counts = IdentityBasisCounts::new();
-        if drill_down || !complete {
+        if !complete {
             counts.mark_incomplete();
         }
         Self::count_look_alikes(root, &mut counts);

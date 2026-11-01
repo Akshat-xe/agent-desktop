@@ -41,6 +41,7 @@ mod observed_subtree;
 mod observed_tree;
 mod predicate;
 mod ref_evidence_requirements;
+pub(crate) mod ref_scope;
 mod resolve;
 mod select;
 mod selection_completeness;

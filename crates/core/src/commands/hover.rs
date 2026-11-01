@@ -79,7 +79,13 @@ pub fn execute(
             resolved.focused = focused;
             Ok((resolved, lease))
         })?;
-        confirm_receiver(&resolved, deadline, adapter)?;
+        confirm_receiver(
+            &resolved,
+            deadline,
+            adapter,
+            args.ref_id.as_deref(),
+            context,
+        )?;
         ensure_point_deadline(
             deadline,
             Some(json!({
@@ -117,14 +123,39 @@ fn confirm_receiver(
     resolved: &ResolvedPoint,
     deadline: crate::Deadline,
     adapter: &dyn PlatformAdapter,
+    ref_id: Option<&str>,
+    context: &CommandContext,
 ) -> Result<(), AppError> {
     let Some(entry) = resolved.source_entry.as_ref() else {
         return Ok(());
     };
-    adapter.confirm_pointer_receiver(entry, resolved.point.clone(), deadline)?;
+    if entry.scope.root_ref.is_some() {
+        let ref_id = ref_id.ok_or_else(|| {
+            crate::AdapterError::stale_ref_because("Scoped pointer target has no source ref")
+        })?;
+        let handle = crate::refs::ref_resolve::resolve(adapter, entry, ref_id, context, deadline)?;
+        if !matches!(
+            adapter.hit_test(&handle, resolved.point.clone(), deadline)?,
+            crate::adapter::hit_test::HitTestResult::ReachesTarget
+        ) {
+            return Err(crate::AdapterError::new(
+                crate::ErrorCode::ActionFailed,
+                "The pointer receiver inside the ref's source root could not be confirmed",
+            )
+            .with_details(json!({ "check": "receives_events" }))
+            .with_disposition(crate::DeliverySemantics::not_delivered())
+            .into());
+        }
+    } else {
+        adapter.confirm_pointer_receiver(entry, resolved.point.clone(), deadline)?;
+    }
     Ok(())
 }
 
 #[cfg(test)]
 #[path = "hover_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "hover_scope_tests.rs"]
+mod scope_tests;

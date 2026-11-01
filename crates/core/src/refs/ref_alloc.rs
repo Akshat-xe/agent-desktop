@@ -189,12 +189,7 @@ pub(crate) fn allocate_refs(
     if config.scope.root_ref_id.is_none() {
         plan_skeleton_anchors(&node, &mut Vec::new(), &mut skeleton_anchors);
     }
-    let plan = RefAllocPlan::new(
-        &node,
-        skeleton_anchors,
-        config.scope.root_ref_id.is_some(),
-        config.complete,
-    );
+    let plan = RefAllocPlan::new(&node, skeleton_anchors, config.complete);
     allocate_refs_at_path(
         node,
         refmap,
