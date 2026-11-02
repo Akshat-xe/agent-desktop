@@ -21,7 +21,7 @@ The npm package's `postinstall` script replaces the Node launcher with a link to
 npm install -g agent-desktop --allow-scripts=agent-desktop
 ```
 
-For a project install, run `npm install-scripts approve agent-desktop` inside the project, then reinstall. That command only edits the project's `package.json` and fails for a global install.
+For a project install, run `npm install-scripts approve agent-desktop` inside the project, then `npm rebuild agent-desktop`. The approve command only edits the project's `package.json` and fails for a global install.
 
 ## Release archives
 
