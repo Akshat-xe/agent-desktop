@@ -98,6 +98,9 @@ pub fn build(
 /// other answer - a missing surface, a build refusal, a timeout - is returned
 /// as the adapter supplied it, and a surface that answers with another window
 /// leaves the id to the application path.
+///
+/// `menu-bar-extras` with an app name is that app's own status item and takes the
+/// application path, where a background app that lists no window is read through its process.
 pub(crate) fn resolve_window_for_surface(
     adapter: &dyn PlatformAdapter,
     app_name: Option<&str>,

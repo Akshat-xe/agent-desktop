@@ -7,7 +7,8 @@ description: >
   macOS platform guide for the agent-desktop CLI. Use for desktop automation
   on macOS: granting Accessibility and Screen Recording permission (TCC),
   what headed mode does on macOS (physical-first click, type and scroll),
-  surfaces (menu, menubar, sheet, popover, alert), Notification Center,
+  surfaces (menu, menubar, sheet, popover, alert, dock, menu-bar-extras),
+  menu bar apps and system panels with no window, Notification Center,
   Chromium and Electron apps including launch --cdp, and fixing PERM_DENIED,
   empty accessibility trees, ACTION_FAILED and APP_UNRESPONSIVE.
 ---
@@ -35,7 +36,7 @@ Read the core skill first (`agent-desktop skills get desktop`) for the observe, 
 
 ## What differs on macOS
 
-**Headed is physical first** for `click`, `right-click`, `type`, `clear` and `scroll`. Core focuses the exact window of the ref. The adapter then sends a real click, key or wheel event to the verified point. `expand`, `collapse`, `set-value`, `select`, `toggle`, `check`, `uncheck`, `focus` and `scroll-to` stay semantic under `--headed`. Double-click, triple-click, `hover` and `drag` need `--headed`. Raw `--xy` input never changes focus.
+**Headed is physical first** for `click`, `right-click`, `type`, `clear` and `scroll`. Core focuses the exact window of the ref; a ref from a background app (menu bar app, Dock, system panel) or a status item has no window and is not focused. The adapter then sends a real click, key or wheel event to the verified point. `expand`, `collapse`, `set-value`, `select`, `toggle`, `check`, `uncheck`, `focus` and `scroll-to` stay semantic under `--headed`. Double-click, triple-click, `hover` and `drag` need `--headed`. Raw `--xy` input never changes focus.
 
 **Judge delivery by observation.** AX return codes do not prove an effect. Finder returns success from an `AXConfirm` that does nothing. Snapshot again or use `get` and `is` to check the result.
 
@@ -47,7 +48,7 @@ Read the core skill first (`agent-desktop skills get desktop`) for the observe, 
 
 **Chromium and Electron.** agent-desktop switches on the web accessibility of a Chromium renderer automatically when it needs it. For a dense running app, use `snapshot --skeleton -i --compact`, then drill with `--root @ref`.
 
-**Identity.** `launch` accepts a display name (`"System Settings"`) or a bundle ID (`com.apple.systempreferences`). Other commands take the display name through `--app`. Window IDs such as `w-4521` stay valid for the life of the window. Find them with `list-windows`.
+**Identity.** `launch` accepts a display name (`"System Settings"`) or a bundle ID (`com.apple.systempreferences`). Other commands take the display name through `--app`, or the bundle ID or executable name (`ControlCenter`) when no running app has that display name. Window IDs such as `w-4521` stay valid for the life of the window. Find them with `list-windows`.
 
 **Refs carry each element's own address.** A ref turns back into the exact element it was captured from, so identical twins, such as several identical `Delete` buttons, each act on their own row. If the element was removed or the app restarted, the ref is `STALE_REF`, `details.kind: retained_object_stale`, and it never falls back to a search for a look-alike. When an app yields no address for an element, that ref follows the cross-platform rule instead and must have been the only element in its window with its role, native id, name and description. Take a fresh snapshot after a list changes.
 

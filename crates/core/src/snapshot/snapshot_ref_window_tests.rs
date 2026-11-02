@@ -57,26 +57,29 @@ fn test_run_from_ref_does_not_persist_refs_when_source_window_is_gone() {
     );
 }
 
+fn capture_windowless(surface: crate::SnapshotSurface) -> String {
+    let adapter = StubAdapter::with_windows(named("button", "Dock"), vec![]);
+    let opts = TreeOptions {
+        surface,
+        ..drill_opts()
+    };
+    let deadline = crate::Deadline::after(1000).unwrap();
+    let captured =
+        crate::snapshot::build(&adapter, &opts, Some("TestApp"), None, deadline).unwrap();
+    assert!(captured.window.is_process_owner(), "{surface:?}");
+    save_latest(captured.refmap)
+}
+
 #[test]
-fn test_run_from_ref_drills_process_owned_ref_on_any_surface() {
+fn test_run_from_ref_drills_a_ref_captured_from_a_windowless_app() {
     for surface in [
         crate::SnapshotSurface::Window,
         crate::SnapshotSurface::Menubar,
     ] {
         let _guard = HomeGuard::new();
-        let src = crate::refs::ref_alloc_source::RefAllocSource {
-            window_title: Some(""),
-            surface,
-            ..source("TestApp")
-        };
-        let mut anchor = ref_entry_from_node(&named("group", "Dock"), &src, None, &[0]);
-        anchor.identity.unique_at_capture = true;
-        let mut map = RefMap::new();
-        let _ = map.allocate(anchor);
-        let snapshot_id = save_latest(map);
-
+        let snapshot_id = capture_windowless(surface);
         let adapter =
-            StubAdapter::with_windows(named("group", "Dock"), vec![window_info("w-9", true)]);
+            StubAdapter::with_windows(named("button", "Dock"), vec![window_info("w-9", true)]);
         let result = run_from_ref(&adapter, &drill_opts(), "@e1", Some(&snapshot_id)).unwrap();
         assert!(result.window.is_process_owner(), "{surface:?}");
     }

@@ -21,6 +21,22 @@ pub(crate) fn extras_menu_bar(
     surface_read::element(&element_for_pid(pid), "AXExtrasMenuBar", deadline)
 }
 
+/// Whether `element` is a status item: a child of its app's extras menu bar,
+/// which has no window and takes a click wherever the app is. A failed read
+/// answers false.
+pub(crate) fn is_status_item(element: &AXElement, deadline: Instant) -> bool {
+    use super::properties::attributes::copy_element_attr_result;
+    let parent = copy_element_attr_result(element, "AXParent", deadline);
+    let pid = super::properties::ax_ipc::pid(element, deadline);
+    match (parent, pid) {
+        (Ok(Some(parent)), Ok(pid)) => matches!(
+            extras_menu_bar(pid, deadline),
+            Ok(Some(extras)) if super::same_element(&parent, &extras)
+        ),
+        _ => false,
+    }
+}
+
 pub(crate) fn resolve_surface(
     surface: SnapshotSurface,
     deadline: Instant,
