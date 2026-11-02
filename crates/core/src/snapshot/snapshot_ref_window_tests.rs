@@ -6,9 +6,9 @@ fn seed_skeleton_refmap_on_window(window_id: Option<&'static str>) -> RefMap {
         ..source("TestApp")
     };
     let mut map = RefMap::new();
-    let anchor = ref_entry_from_node(&named("group", "Sidebar"), &src, None, &[0]);
+    let anchor = ref_entry_from_node(&drilled("group", "Sidebar"), &src, None, &[0]);
     let _ = map.allocate(anchor);
-    let other = ref_entry_from_node(&named("button", "Toolbar"), &src, None, &[1]);
+    let other = ref_entry_from_node(&drilled("button", "Toolbar"), &src, None, &[1]);
     let _ = map.allocate(other);
     map
 }
@@ -59,20 +59,20 @@ fn test_run_from_ref_does_not_persist_refs_when_source_window_is_gone() {
 
 #[test]
 fn test_run_from_ref_drills_process_owned_ref_on_any_surface() {
-    for surface in [crate::SnapshotSurface::Window, crate::SnapshotSurface::Dock] {
+    for surface in [
+        crate::SnapshotSurface::Window,
+        crate::SnapshotSurface::Menubar,
+    ] {
         let _guard = HomeGuard::new();
         let src = crate::refs::ref_alloc_source::RefAllocSource {
             window_title: Some(""),
             surface,
             ..source("TestApp")
         };
+        let mut anchor = ref_entry_from_node(&named("group", "Dock"), &src, None, &[0]);
+        anchor.identity.unique_at_capture = true;
         let mut map = RefMap::new();
-        let _ = map.allocate(ref_entry_from_node(
-            &named("group", "Dock"),
-            &src,
-            None,
-            &[0],
-        ));
+        let _ = map.allocate(anchor);
         let snapshot_id = save_latest(map);
 
         let adapter = StubAdapter::with_windows(named("group", "Dock"), vec![]);

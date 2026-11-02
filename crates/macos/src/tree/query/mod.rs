@@ -271,6 +271,7 @@ mod tests {
                 value: None,
                 description: None,
                 native_id: None,
+                unique_at_capture: false,
             },
             geometry: RefGeometry {
                 bounds_space: None,
@@ -287,6 +288,7 @@ mod tests {
                 source_window_title: None,
                 source_window_bounds_hash: None,
                 source_surface: Default::default(),
+                renderer_accessibility_forced: false,
             },
             scope: RefScope {
                 root_ref: None,

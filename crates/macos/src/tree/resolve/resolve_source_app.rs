@@ -1,21 +1,7 @@
 use agent_desktop_core::{AdapterError, RefEntry};
 
-use super::resolve_roots::CandidateRoots;
-
 use crate::tree::AXElement;
 use crate::tree::resolve::resolve_read_context::ResolveReadContext;
-
-/// The application element as the only root for an app-rooted entry.
-#[cfg(target_os = "macos")]
-pub(in crate::tree) fn app_rooted_roots(
-    application: &AXElement,
-    entry: &RefEntry,
-) -> Option<CandidateRoots> {
-    entry.source.is_process_rooted().then(|| CandidateRoots {
-        roots: vec![application.clone()],
-        scope_verified: false,
-    })
-}
 
 /// Window-owned sources are checked by application name. A process-owned source is already
 /// identified by its saved pid and process instance, which resolution verifies first.

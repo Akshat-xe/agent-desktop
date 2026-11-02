@@ -8,6 +8,8 @@ use crate::{
 };
 
 pub(crate) const FRAMED_LABEL: &str = "FramedLabel";
+pub(crate) const TOKEN_ROOT: &str = "axtok1:find-root";
+pub(crate) const TOKEN_ROOT_NAME: &str = "Root";
 
 pub(crate) fn framed_label_screen_bounds() -> crate::Rect {
     crate::Rect {
@@ -30,6 +32,7 @@ fn framed_label_window_bounds() -> crate::Rect {
 pub(crate) struct LiveFindAdapter {
     structurally_complete: bool,
     framed_label: bool,
+    token_root: bool,
 }
 
 impl LiveFindAdapter {
@@ -37,6 +40,7 @@ impl LiveFindAdapter {
         Self {
             structurally_complete: true,
             framed_label: false,
+            token_root: false,
         }
     }
 
@@ -44,6 +48,7 @@ impl LiveFindAdapter {
         Self {
             structurally_complete: false,
             framed_label: false,
+            token_root: false,
         }
     }
 
@@ -51,6 +56,17 @@ impl LiveFindAdapter {
         Self {
             structurally_complete: true,
             framed_label: true,
+            token_root: false,
+        }
+    }
+
+    /// A window whose root element carries an element token while the elements
+    /// inside it carry none.
+    pub(crate) fn with_token_root() -> Self {
+        Self {
+            structurally_complete: true,
+            framed_label: false,
+            token_root: true,
         }
     }
 
@@ -85,11 +101,17 @@ impl ObservationOps for LiveFindAdapter {
         request: &ObservationRequest,
     ) -> Result<ObservedTree, AdapterError> {
         if let ObservationRoot::Element { entry, .. } = &root {
-            return ObservedTree::from_roots(
+            let own = Self::evidence(&entry.identity.role, entry.identity.name.as_deref());
+            let children = if self.token_root {
                 vec![self.node(
-                    Self::evidence(&entry.identity.role, entry.identity.name.as_deref()),
+                    Self::evidence("button", Some("OnlyInWindowTwo")),
                     Vec::new(),
-                )],
+                )]
+            } else {
+                Vec::new()
+            };
+            return ObservedTree::from_roots(
+                vec![self.node(own, children)],
                 ObservationSource::from_root(&root, request.surface),
                 LocatorStats::default(),
                 self.structurally_complete,
@@ -110,6 +132,12 @@ impl ObservationOps for LiveFindAdapter {
             label.ref_evidence.bounds = LocatorField::Known(framed_label_screen_bounds());
             label.ref_evidence.window_bounds = LocatorField::Known(framed_label_window_bounds());
             children.push(self.node(label, Vec::new()));
+        }
+        if self.token_root {
+            let mut token_root = Self::evidence("group", Some(TOKEN_ROOT_NAME));
+            token_root.identifiers =
+                IdentifierEvidence::absent().with_retained_object(TOKEN_ROOT.into());
+            children = vec![self.node(token_root, children)];
         }
         let root_node = self.node(Self::evidence("window", Some(&window.title)), children);
         ObservedTree::from_roots(

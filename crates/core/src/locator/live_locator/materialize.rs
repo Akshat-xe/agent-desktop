@@ -11,25 +11,31 @@ pub(crate) fn materialize_refmap(
     query: &LocatorQuery,
     selected: Option<&[usize]>,
 ) -> Result<(RefMap, bool), crate::AdapterError> {
-    let source = &tree.source;
-    let nodes = &mut tree.nodes;
     let mut refmap = RefMap::new();
     let mut complete = true;
-    let indices = selected
-        .map(|indices| indices.to_vec())
-        .unwrap_or_else(|| (0..nodes.len()).collect());
-    for index in indices {
-        let node = &nodes[index];
-        let (addressable, known) = addressability(&node.evidence);
-        complete &= known;
-        if !addressable {
-            continue;
+    let indices: Vec<usize> = selected
+        .map(<[usize]>::to_vec)
+        .unwrap_or_else(|| (0..tree.nodes.len()).collect());
+    let mut planned = Vec::with_capacity(indices.len());
+    {
+        let proof = crate::refs::ref_capture_proof::CaptureProof::new(tree);
+        for index in indices {
+            let node = &tree.nodes[index];
+            let (addressable, known) = addressability(&node.evidence);
+            complete &= known;
+            if !addressable {
+                continue;
+            }
+            let mut entry = ref_entry(node, &tree.source, query);
+            entry.identity.unique_at_capture = proof.proves_node(&entry, index);
+            planned.push((index, entry));
         }
-        let entry = ref_entry(node, source, query);
+    }
+    for (index, entry) in planned {
         let ref_id = refmap.try_allocate(entry).map_err(|error| {
             crate::AdapterError::new(crate::ErrorCode::InvalidArgs, error.to_string())
         })?;
-        nodes[index].ref_id = Some(ref_id);
+        tree.nodes[index].ref_id = Some(ref_id);
     }
     Ok((refmap, complete))
 }
@@ -93,6 +99,7 @@ pub(crate) fn ref_entry(
             value: node.evidence.value.meaningful_string(),
             description: node.evidence.description.meaningful_string(),
             native_id: identifier,
+            unique_at_capture: false,
         },
         geometry: crate::RefGeometry {
             bounds,
@@ -109,6 +116,7 @@ pub(crate) fn ref_entry(
             source_window_title: None,
             source_window_bounds_hash: None,
             source_surface: SnapshotSurface::Window,
+            renderer_accessibility_forced: false,
         },
         scope: crate::RefScope {
             root_ref: None,
@@ -122,7 +130,11 @@ pub(crate) fn ref_entry(
 
 fn apply_source(entry: &mut RefEntry, source: &ObservationSource, node_path: &RefPath) {
     match source {
-        ObservationSource::Window { window, surface } => {
+        ObservationSource::Window {
+            window,
+            surface,
+            renderer_accessibility_forced,
+        } => {
             entry.process.pid = window.pid;
             entry.source.source_app = Some(window.app.clone());
             entry.source.source_window_id = (!window.is_process_owner()).then(|| window.id.clone());
@@ -130,6 +142,7 @@ fn apply_source(entry: &mut RefEntry, source: &ObservationSource, node_path: &Re
             entry.source.source_window_bounds_hash =
                 window.bounds.as_ref().and_then(crate::Rect::bounds_hash);
             entry.source.source_surface = *surface;
+            entry.source.renderer_accessibility_forced = *renderer_accessibility_forced;
             entry.process.process_instance = window.process_instance.clone();
         }
         ObservationSource::Element {
