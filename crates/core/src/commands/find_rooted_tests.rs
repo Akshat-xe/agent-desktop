@@ -139,6 +139,26 @@ fn a_token_root_find_over_token_matches_reads_only_its_subtree() {
     assert_eq!(adapter.window_reads(), 0);
 }
 
+/// A tokenless member whose actions are unread could become publishable once
+/// hydrated, so the subtree alone cannot stand and the window proves it.
+#[test]
+fn a_token_root_with_an_unread_tokenless_member_reads_the_window() {
+    let _guard = HomeGuard::new();
+    let adapter = LiveFindAdapter::with_token_root_and_unread_member();
+
+    let mut stored = RefMap::new();
+    stored.allocate(stored_token_root());
+    let snapshot_id = RefStore::new().unwrap().save_new_snapshot(&stored).unwrap();
+    let root_ref = format!("@{snapshot_id}:e1");
+
+    let _ = execute(
+        find_args(Some(root_ref), Some("OnlyInWindowTwo"), None),
+        &adapter,
+        &CommandContext::default(),
+    );
+    assert_eq!(adapter.window_reads(), 1);
+}
+
 fn stored_token_root() -> crate::refs::RefEntry {
     let mut entry =
         crate::adapter::minimal_ref_entry("group", Some(super::test_support::TOKEN_ROOT_NAME));

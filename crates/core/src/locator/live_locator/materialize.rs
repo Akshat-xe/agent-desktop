@@ -53,10 +53,13 @@ pub(crate) fn addressability(evidence: &LocatorEvidence) -> (bool, bool) {
 
 /// Whether publishing refs from this observation could publish one that names
 /// its node without an element token, which only a window-wide capture proof
-/// can vouch for. An unread token counts as absent.
+/// can vouch for. An unread token counts as absent, and an unsettled
+/// addressability counts as addressable: hydration can read actions that make
+/// such a node publishable.
 pub(crate) fn selects_tokenless_entry(tree: &ObservedTree) -> bool {
     tree.nodes.iter().any(|node| {
-        addressability(&node.evidence).0
+        let (addressable, settled) = addressability(&node.evidence);
+        (addressable || !settled)
             && !node
                 .evidence
                 .identifiers
