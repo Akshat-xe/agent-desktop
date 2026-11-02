@@ -93,9 +93,10 @@ fn assert_proven_match(response: &serde_json::Value) {
 }
 
 /// A root that re-identifies itself by token says nothing about whether the
-/// elements inside it carry one, so a rooted find reads the whole window and
-/// proves the matches it publishes there. The element-rooted read of the same
-/// subtree carries no such proof, and the ref it returned could never resolve.
+/// elements inside it carry one, so when one that would be published does not,
+/// a rooted find reads the whole window and proves the matches there. The
+/// element-rooted read of the same subtree carries no such proof, and the ref
+/// it returned could never resolve.
 #[test]
 fn a_token_root_find_proves_its_tokenless_matches_over_the_window() {
     let _guard = HomeGuard::new();
@@ -114,6 +115,28 @@ fn a_token_root_find_proves_its_tokenless_matches_over_the_window() {
     .expect("a rooted find answers from the read that re-identified its token root");
     assert_eq!(found["matches"].as_array().map(Vec::len), Some(1));
     assert_proven_match(&found);
+}
+
+/// When every element a token root holds carries a token too, the find reads
+/// that subtree alone and never pays for the window around it.
+#[test]
+fn a_token_root_find_over_token_matches_reads_only_its_subtree() {
+    let _guard = HomeGuard::new();
+    let adapter = LiveFindAdapter::with_token_root_and_matches();
+
+    let mut stored = RefMap::new();
+    stored.allocate(stored_token_root());
+    let snapshot_id = RefStore::new().unwrap().save_new_snapshot(&stored).unwrap();
+    let root_ref = format!("@{snapshot_id}:e1");
+
+    let found = execute(
+        find_args(Some(root_ref), Some("OnlyInWindowTwo"), None),
+        &adapter,
+        &CommandContext::default(),
+    )
+    .expect("a token root find answers from its own subtree");
+    assert_eq!(found["matches"].as_array().map(Vec::len), Some(1));
+    assert_eq!(adapter.window_reads(), 0);
 }
 
 fn stored_token_root() -> crate::refs::RefEntry {
