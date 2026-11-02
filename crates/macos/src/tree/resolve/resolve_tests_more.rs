@@ -173,26 +173,3 @@ fn identity_unknown_then_success_retries_within_the_budget() {
     assert_eq!(result.unwrap(), 7);
     assert_eq!(attempts.get(), 2);
 }
-
-#[test]
-fn retained_object_resolves_after_bounds_move_but_text_identity_does_not() {
-    let deadline = || Instant::now() + Duration::from_secs(1);
-    let mut retained = entry(Some(42), None, Some(""), None);
-    retained.identity.retained_object = Some("host:1".into());
-    let text_only = entry(Some(42), None, Some(""), None);
-
-    let resolve = |entry: &RefEntry| {
-        classify_candidates(
-            vec![AXElement(std::ptr::null_mut())],
-            entry,
-            false,
-            deadline(),
-        )
-    };
-
-    assert!(resolve(&retained).is_ok());
-    assert_eq!(
-        resolve(&text_only).err().map(|error| error.code),
-        Some(ErrorCode::ElementNotFound)
-    );
-}

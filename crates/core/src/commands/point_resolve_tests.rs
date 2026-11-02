@@ -338,6 +338,26 @@ fn transient_window_resolution_failure_blocks_headed_input() {
 }
 
 #[test]
+fn windowless_ref_skips_focus_only_when_process_owned() {
+    let adapter = FocusFailureAdapter {
+        resolve_error: None,
+        focus_error: None,
+        focus_calls: AtomicU32::new(0),
+    };
+    let context = CommandContext::default().with_headed(true);
+    let mut entry = focus_ref_entry();
+    entry.source.source_window_id = None;
+    let focus = |entry: &RefEntry| {
+        focus_for_physical_input(Some(entry), &adapter, &context, &focus_test_lease())
+    };
+    entry.source.source_window_title = Some(String::new());
+    assert!(!focus(&entry).unwrap());
+    entry.source.source_window_title = Some("Fixture".into());
+    assert_eq!(focus(&entry).unwrap_err().code(), "ACTION_NOT_SUPPORTED");
+    assert_eq!(adapter.focus_calls.load(Ordering::SeqCst), 0);
+}
+
+#[test]
 fn transient_focus_failure_blocks_headed_input() {
     let adapter = FocusFailureAdapter {
         resolve_error: None,

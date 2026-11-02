@@ -58,22 +58,25 @@ fn test_run_from_ref_does_not_persist_refs_when_source_window_is_gone() {
 }
 
 #[test]
-fn test_run_from_ref_drills_process_rooted_ref_without_a_window() {
-    let _guard = HomeGuard::new();
-    let src = crate::refs::ref_alloc_source::RefAllocSource {
-        window_title: Some(""),
-        ..source("TestApp")
-    };
-    let mut map = RefMap::new();
-    let _ = map.allocate(ref_entry_from_node(
-        &named("group", "Dock"),
-        &src,
-        None,
-        &[0],
-    ));
-    let snapshot_id = save_latest(map);
+fn test_run_from_ref_drills_process_owned_ref_on_any_surface() {
+    for surface in [crate::SnapshotSurface::Window, crate::SnapshotSurface::Dock] {
+        let _guard = HomeGuard::new();
+        let src = crate::refs::ref_alloc_source::RefAllocSource {
+            window_title: Some(""),
+            surface,
+            ..source("TestApp")
+        };
+        let mut map = RefMap::new();
+        let _ = map.allocate(ref_entry_from_node(
+            &named("group", "Dock"),
+            &src,
+            None,
+            &[0],
+        ));
+        let snapshot_id = save_latest(map);
 
-    let adapter = StubAdapter::with_windows(named("group", "Dock"), vec![]);
-    let result = run_from_ref(&adapter, &drill_opts(), "@e1", Some(&snapshot_id)).unwrap();
-    assert!(result.window.is_process_owner());
+        let adapter = StubAdapter::with_windows(named("group", "Dock"), vec![]);
+        let result = run_from_ref(&adapter, &drill_opts(), "@e1", Some(&snapshot_id)).unwrap();
+        assert!(result.window.is_process_owner(), "{surface:?}");
+    }
 }

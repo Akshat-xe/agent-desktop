@@ -131,7 +131,7 @@ pub fn run_from_ref_with_context(
 }
 
 /// The drill result reports the window the ref was captured from, so it must
-/// resolve that exact window — not any window of the process. A process-rooted
+/// resolve that exact window — not any window of the process. A process-owned
 /// ref has no window, so it reports the live process owner instead. Resolving
 /// before observation keeps a failed drill from persisting refs it never
 /// returns.
@@ -146,7 +146,7 @@ fn resolve_result_window(
                 "root ref has no process-instance identity",
             ))
         })?;
-        if entry.source.is_process_rooted() {
+        if entry.source.is_process_owned() {
             return live_process_owner(entry, instance, adapter, deadline);
         }
         return crate::system::window_lookup::find_window_for_process(

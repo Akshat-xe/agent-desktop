@@ -17,12 +17,17 @@ pub(in crate::tree) fn app_rooted_roots(
     })
 }
 
+/// Window-owned sources are checked by application name. A process-owned source is already
+/// identified by its saved pid and process instance, which resolution verifies first.
 #[cfg(target_os = "macos")]
 pub(in crate::tree) fn verify_source_application(
     application: &AXElement,
     entry: &RefEntry,
     context: &mut ResolveReadContext,
 ) -> Result<(), AdapterError> {
+    if entry.source.is_process_owned() {
+        return Ok(());
+    }
     let Some(expected) = entry
         .source
         .source_app

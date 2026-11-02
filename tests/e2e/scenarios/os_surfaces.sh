@@ -15,6 +15,16 @@ os_wait_volume() {
     return 1
 }
 
+os_panel_open=0
+
+os_restore_volume() {
+    if [ "$os_panel_open" = 1 ]; then
+        "$bin" press escape >/dev/null 2>&1 || true
+        os_panel_open=0
+    fi
+    osascript -e "set volume output volume $volume_original" >/dev/null 2>&1
+}
+
 os_control_center_volume() {
     local extras cc_ref panel sound_ref detail slider_ref set_output volume volume_moved=0
     extras="$("$bin" snapshot --surface menu-bar-extras -i 2>/dev/null)"
@@ -24,6 +34,7 @@ os_control_center_volume() {
         return
     fi
     okmsg "menu-bar-extras snapshot lists the Control Center item  [$cc_ref]"
+    os_panel_open=1
     panel="$("$bin" click "$cc_ref" --wait-for "button:Sound" 2>/dev/null)"
     sound_ref="$(os_ref "$panel" Sound)"
     if [ -z "$sound_ref" ]; then
@@ -68,7 +79,7 @@ for candidate in TextEdit Calculator Notes; do
     fi
 done
 if [ -z "$dock_launch" ]; then
-    badmsg "no stopped TextEdit, Calculator or Notes Dock item to launch"
+    skipmsg "Dock launch of a stopped app unavailable: no stopped TextEdit, Calculator or Notes item is pinned in the Dock"
 else
     dock_click="$("$bin" click "$(os_ref "$dock_surface" "$dock_launch")" 2>/dev/null)"
     dock_launched=0
@@ -88,9 +99,12 @@ case "$volume_original" in
         badmsg "system output volume is not readable through osascript  [volume='$volume_original']"
         ;;
     *)
+        trap 'os_restore_volume; cleanup' EXIT
+        trap 'exit 130' INT TERM HUP
         osascript -e "set volume output volume 20" >/dev/null 2>&1
         os_control_center_volume
-        "$bin" press escape >/dev/null 2>&1
-        osascript -e "set volume output volume $volume_original" >/dev/null 2>&1
+        os_restore_volume
+        trap cleanup EXIT
+        trap - INT TERM HUP
         ;;
 esac
