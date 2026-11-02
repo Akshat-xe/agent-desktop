@@ -22,11 +22,10 @@ pub(crate) fn surface_root(
     surface: SnapshotSurface,
     deadline: Deadline,
 ) -> Result<UIAElement, AdapterError> {
-    if matches!(&root, ObservationRoot::Window(window) if window.is_process_owner()) {
-        return Err(AdapterError::new(
-            ErrorCode::WindowNotFound,
-            "Application has no window to observe",
-        ));
+    if let ObservationRoot::Window(window) = &root
+        && window.is_process_owner()
+    {
+        return Err(AdapterError::app_has_no_window(&window.app));
     }
     match (root, surface) {
         (ObservationRoot::Window(window), SnapshotSurface::Window) => {

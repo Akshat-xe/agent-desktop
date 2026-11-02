@@ -24,6 +24,8 @@ Output shape:
       { "ref_id": "@s8f3k2p9:e1", "role": "button", "name": "About", "states": ["focused"] } ] } } }
 ```
 
+`data.window` is left out when macOS reads a windowless app through its process. On Windows and Linux the same app returns `WINDOW_NOT_FOUND`.
+
 Each ref names the snapshot that owns it, so a ref keeps resolving against its own snapshot when you interleave several apps or windows.
 
 Choose the scope:

@@ -56,6 +56,7 @@ struct StubAdapter {
     drops: Arc<AtomicU32>,
     windows: Vec<crate::WindowInfo>,
     expected_app: Option<String>,
+    apps: Vec<crate::AppInfo>,
 }
 
 impl StubAdapter {
@@ -67,6 +68,7 @@ impl StubAdapter {
             drops: Arc::new(AtomicU32::new(0)),
             windows: vec![window_info("w-42", true)],
             expected_app: None,
+            apps: Vec::new(),
         }
     }
 
@@ -78,6 +80,7 @@ impl StubAdapter {
             drops: Arc::new(AtomicU32::new(0)),
             windows,
             expected_app: None,
+            apps: Vec::new(),
         }
     }
 
@@ -89,6 +92,7 @@ impl StubAdapter {
             drops: Arc::new(AtomicU32::new(0)),
             windows: vec![window_info("w-42", true)],
             expected_app: None,
+            apps: Vec::new(),
         }
     }
 }
@@ -118,6 +122,10 @@ impl ObservationOps for StubAdapter {
             return Err(error.clone());
         }
         crate::adapter::observed_tree(&root, self.subtree.clone())
+    }
+
+    fn list_apps(&self, _deadline: crate::Deadline) -> Result<Vec<crate::AppInfo>, AdapterError> {
+        Ok(self.apps.clone())
     }
 
     fn list_windows(

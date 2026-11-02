@@ -13,7 +13,7 @@ pub(in crate::tree) fn app_rooted_roots(
 ) -> Option<CandidateRoots> {
     entry.source.is_process_rooted().then(|| CandidateRoots {
         roots: vec![application.clone()],
-        scope_verified: true,
+        scope_verified: false,
     })
 }
 

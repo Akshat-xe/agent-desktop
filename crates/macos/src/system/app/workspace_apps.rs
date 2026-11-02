@@ -75,10 +75,7 @@ impl WindowOwnerSnapshot {
             .iter()
             .filter(|owner| {
                 agent_desktop_core::app_name_matches(&owner.name, identifier)
-                    || [&owner.bundle_id, &owner.executable]
-                        .into_iter()
-                        .flatten()
-                        .any(|alias| alias.eq_ignore_ascii_case(identifier))
+                    || has_alias(&owner.bundle_id, &owner.executable, identifier)
             })
             .map(|owner| owner.pid)
             .collect()
@@ -132,11 +129,7 @@ pub(crate) fn list_apps_scoped_until(
         deadline,
         |app| {
             (agent_desktop_core::app_name_matches(&app.name, name)
-                || (bundle_id.is_none()
-                    && app
-                        .bundle_id
-                        .as_deref()
-                        .is_some_and(|candidate| candidate.eq_ignore_ascii_case(name))))
+                || (bundle_id.is_none() && has_alias(&app.bundle_id, &app.executable, name)))
                 && bundle_id.is_none_or(|bundle| {
                     app.bundle_id
                         .as_deref()
@@ -145,6 +138,14 @@ pub(crate) fn list_apps_scoped_until(
         },
         false,
     )
+}
+
+/// Whether `identifier` is the app's bundle ID or executable name.
+fn has_alias(bundle_id: &Option<String>, executable: &Option<String>, identifier: &str) -> bool {
+    [bundle_id, executable]
+        .into_iter()
+        .flatten()
+        .any(|alias| alias.eq_ignore_ascii_case(identifier))
 }
 
 pub(crate) fn window_owner_snapshot_until(

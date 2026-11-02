@@ -131,8 +131,10 @@ pub fn run_from_ref_with_context(
 }
 
 /// The drill result reports the window the ref was captured from, so it must
-/// resolve that exact window — not any window of the process. Resolving before
-/// observation keeps a failed drill from persisting refs it never returns.
+/// resolve that exact window — not any window of the process. A process-rooted
+/// ref has no window, so it reports the live process owner instead. Resolving
+/// before observation keeps a failed drill from persisting refs it never
+/// returns.
 fn resolve_result_window(
     entry: &crate::refs::RefEntry,
     adapter: &dyn PlatformAdapter,
@@ -144,6 +146,9 @@ fn resolve_result_window(
                 "root ref has no process-instance identity",
             ))
         })?;
+        if entry.source.is_process_rooted() {
+            return live_process_owner(entry, instance, adapter, deadline);
+        }
         return crate::system::window_lookup::find_window_for_process(
             crate::ProcessIdentity::new(entry.process.pid, instance),
             adapter,
@@ -170,6 +175,29 @@ fn resolve_result_window(
         .with_suggestion("Run 'snapshot' to refresh, then retry with an updated ref"),
         "Multiple windows matched the source window ID",
     )
+}
+
+fn live_process_owner(
+    entry: &crate::refs::RefEntry,
+    instance: &str,
+    adapter: &dyn PlatformAdapter,
+    deadline: crate::Deadline,
+) -> Result<crate::WindowInfo, AppError> {
+    let name = entry.source.source_app.clone().ok_or_else(|| {
+        AppError::Adapter(crate::AdapterError::stale_ref_because(
+            "root ref has no source app",
+        ))
+    })?;
+    let expected = crate::AppInfo {
+        name,
+        pid: entry.process.pid,
+        bundle_id: None,
+        process_instance: Some(instance.to_string()),
+        presentation: None,
+    };
+    let live =
+        crate::system::app_lookup::revalidate_app_for_mutation(adapter, &expected, deadline)?;
+    Ok(crate::WindowInfo::for_process(&live))
 }
 
 fn count_nodes(node: &crate::AccessibilityNode) -> usize {

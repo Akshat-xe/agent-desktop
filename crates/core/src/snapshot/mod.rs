@@ -106,21 +106,14 @@ pub(crate) fn resolve_window_for_surface(
         return resolve_window(adapter, app_name, window_id, deadline);
     }
     if surface == crate::SnapshotSurface::Window {
-        return match (resolve_window(adapter, app_name, None, deadline), app_name) {
-            (Err(AppError::Adapter(error)), Some(app))
-                if error.code == crate::ErrorCode::WindowNotFound =>
-            {
-                match crate::system::app_lookup::process_owner(adapter, app, deadline) {
-                    Err(AppError::Adapter(lookup))
-                        if lookup.code != crate::ErrorCode::AppNotFound =>
-                    {
-                        Err(error.into())
-                    }
-                    owner => owner,
-                }
-            }
-            (result, _) => result,
+        let Some(app) = app_name else {
+            return resolve_window(adapter, None, None, deadline);
         };
+        let windows = windows_for_app(adapter, app_name, deadline)?;
+        if windows.is_empty() {
+            return crate::system::app_lookup::windowless_app_owner(adapter, app, deadline);
+        }
+        return select_app_window(windows, app);
     }
     let app_status_item = app_name.is_some() && surface == crate::SnapshotSurface::MenuBarExtras;
     if is_shell_surface(surface) && !app_status_item {
@@ -134,7 +127,7 @@ pub(crate) fn resolve_window_for_surface(
     }
     let windows = windows_for_app(adapter, app_name, deadline)?;
     if let (true, Some(app)) = (windows.is_empty() && is_process_surface(surface), app_name) {
-        return crate::system::app_lookup::process_owner(adapter, app, deadline);
+        return crate::system::app_lookup::windowless_app_owner(adapter, app, deadline);
     }
     crate::system::window_lookup::select_surface_owner(
         windows,
@@ -166,14 +159,20 @@ fn is_shell_surface(surface: crate::SnapshotSurface) -> bool {
     )
 }
 
-/// Surfaces an app with no window still presents, read from its process; the
-/// owner then carries an empty window id.
+/// Surfaces a background app with no window still presents, read from its
+/// process; the owner then carries an empty window id.
 fn is_process_surface(surface: crate::SnapshotSurface) -> bool {
     matches!(
         surface,
-        crate::SnapshotSurface::Focused
-            | crate::SnapshotSurface::Menubar
-            | crate::SnapshotSurface::MenuBarExtras
+        crate::SnapshotSurface::Menubar | crate::SnapshotSurface::MenuBarExtras
+    )
+}
+
+fn select_app_window(windows: Vec<WindowInfo>, app: &str) -> Result<WindowInfo, AppError> {
+    crate::system::window_lookup::select_window(
+        windows,
+        crate::AdapterError::app_has_no_window(app),
+        "More than one window matches the target",
     )
 }
 
@@ -280,15 +279,7 @@ pub(crate) fn resolve_window(
                 }
             }
         }
-        crate::system::window_lookup::select_window(
-            windows,
-            crate::AdapterError::new(
-                crate::ErrorCode::WindowNotFound,
-                format!("Application '{app}' is running but has no matching window"),
-            )
-            .with_suggestion("Wait for the app to present a window, or run 'list-windows --app'."),
-            "More than one window matches the target",
-        )
+        select_app_window(windows, app)
     } else {
         crate::system::window_lookup::select_window(
             windows,
