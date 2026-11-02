@@ -75,7 +75,8 @@ fn test_run_from_ref_drills_process_owned_ref_on_any_surface() {
         let _ = map.allocate(anchor);
         let snapshot_id = save_latest(map);
 
-        let adapter = StubAdapter::with_windows(named("group", "Dock"), vec![]);
+        let adapter =
+            StubAdapter::with_windows(named("group", "Dock"), vec![window_info("w-9", true)]);
         let result = run_from_ref(&adapter, &drill_opts(), "@e1", Some(&snapshot_id)).unwrap();
         assert!(result.window.is_process_owner(), "{surface:?}");
     }

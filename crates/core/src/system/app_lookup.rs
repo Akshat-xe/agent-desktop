@@ -169,6 +169,36 @@ pub(crate) fn process_identity(app: &AppInfo) -> Result<ProcessIdentity, AppErro
     Ok(ProcessIdentity::new(app.pid, instance))
 }
 
+/// The live process a process-owned ref was captured from, revalidated by pid,
+/// process instance and name; a replaced or exited process is stale.
+pub(crate) fn live_process_owner(
+    adapter: &dyn PlatformAdapter,
+    entry: &crate::RefEntry,
+    deadline: Deadline,
+) -> Result<WindowInfo, AppError> {
+    let stale = |reason| AppError::Adapter(AdapterError::stale_ref_because(reason));
+    let expected = AppInfo {
+        name: entry
+            .source
+            .source_app
+            .clone()
+            .ok_or_else(|| stale("ref has no source app"))?,
+        pid: entry.process.pid,
+        bundle_id: None,
+        process_instance: Some(
+            entry
+                .process
+                .process_instance
+                .clone()
+                .ok_or_else(|| stale("ref has no process instance"))?,
+        ),
+        presentation: None,
+    };
+    Ok(WindowInfo::for_process(&revalidate_app_for_mutation(
+        adapter, &expected, deadline,
+    )?))
+}
+
 pub(crate) fn revalidate_app_for_mutation(
     adapter: &dyn PlatformAdapter,
     expected: &AppInfo,
