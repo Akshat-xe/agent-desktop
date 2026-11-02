@@ -125,7 +125,7 @@ fn apply_source(entry: &mut RefEntry, source: &ObservationSource, node_path: &Re
         ObservationSource::Window { window, surface } => {
             entry.process.pid = window.pid;
             entry.source.source_app = Some(window.app.clone());
-            entry.source.source_window_id = Some(window.id.clone()).filter(|id| !id.is_empty());
+            entry.source.source_window_id = (!window.is_process_owner()).then(|| window.id.clone());
             entry.source.source_window_title = Some(window.title.clone());
             entry.source.source_window_bounds_hash =
                 window.bounds.as_ref().and_then(crate::Rect::bounds_hash);

@@ -12,16 +12,11 @@ pub(crate) fn process_owner(
     app: &str,
     deadline: Deadline,
 ) -> Result<WindowInfo, AppError> {
-    let app = resolve_app(Some(app), adapter, deadline)?;
-    Ok(WindowInfo {
-        id: String::new(),
-        title: String::new(),
-        app: app.name,
-        pid: app.pid,
-        process_instance: app.process_instance,
-        bounds: None,
-        state: Default::default(),
-    })
+    Ok(WindowInfo::for_process(&resolve_app(
+        Some(app),
+        adapter,
+        deadline,
+    )?))
 }
 
 pub(crate) fn resolve_app(

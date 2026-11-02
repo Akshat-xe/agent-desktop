@@ -140,7 +140,7 @@ pub(crate) fn format_snapshot_fields(
         "complete": result.complete,
         "tree": tree
     });
-    if !win.id.is_empty() {
+    if !win.is_process_owner() {
         body["window"] = json!({ "id": win.id, "title": win.title });
     }
     if !result.complete {

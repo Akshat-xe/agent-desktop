@@ -44,15 +44,7 @@ pub(crate) fn resolve_surface(
         {
             let pid = crate::system::process::process_identity::to_pid_t(app.pid)?;
             if root_for(surface, pid, deadline)?.is_some() {
-                return Ok(WindowInfo {
-                    id: String::new(),
-                    title: String::new(),
-                    app: app.name.clone(),
-                    pid: app.pid,
-                    process_instance: app.process_instance.clone(),
-                    bounds: None,
-                    state: Default::default(),
-                });
+                return Ok(WindowInfo::for_process(app));
             }
         }
     }

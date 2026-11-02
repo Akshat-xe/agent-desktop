@@ -1,17 +1,9 @@
-use agent_desktop_core::{AdapterError, RefEntry, SnapshotSurface};
+use agent_desktop_core::{AdapterError, RefEntry};
 
 use super::resolve_roots::CandidateRoots;
 
 use crate::tree::AXElement;
 use crate::tree::resolve::resolve_read_context::ResolveReadContext;
-
-/// Whether the entry was observed from the application element itself, as a
-/// process owner with an empty window id and title is, so its path starts there.
-pub(in crate::tree) fn app_rooted(entry: &RefEntry) -> bool {
-    entry.source.source_surface == SnapshotSurface::Window
-        && entry.source.source_window_id.is_none()
-        && entry.source.source_window_title.as_deref() == Some("")
-}
 
 /// The application element as the only root for an app-rooted entry.
 #[cfg(target_os = "macos")]
@@ -19,7 +11,7 @@ pub(in crate::tree) fn app_rooted_roots(
     application: &AXElement,
     entry: &RefEntry,
 ) -> Option<CandidateRoots> {
-    app_rooted(entry).then(|| CandidateRoots {
+    entry.source.is_process_rooted().then(|| CandidateRoots {
         roots: vec![application.clone()],
         scope_verified: true,
     })

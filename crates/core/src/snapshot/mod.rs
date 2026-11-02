@@ -59,7 +59,7 @@ pub fn build(
         source: RefAllocSource {
             pid: window.pid,
             app: Some(window.app.as_str()),
-            window_id: Some(window.id.as_str()).filter(|id| !id.is_empty()),
+            window_id: (!window.is_process_owner()).then_some(window.id.as_str()),
             window_title: Some(window.title.as_str()),
             window_bounds_hash: window.bounds.as_ref().and_then(crate::Rect::bounds_hash),
             process_instance: window.process_instance.as_deref(),

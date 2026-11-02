@@ -34,7 +34,7 @@ fn refuse_stopped(
 
 fn root_element(root: &ObservationRoot<'_>) -> Result<AtspiElement, AdapterError> {
     match root {
-        ObservationRoot::Window(window) if window.id.is_empty() => Err(AdapterError::new(
+        ObservationRoot::Window(window) if window.is_process_owner() => Err(AdapterError::new(
             ErrorCode::WindowNotFound,
             "Application has no window to observe",
         )),

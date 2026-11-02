@@ -183,7 +183,7 @@ fn resolve_window_surface(
                 },
             )?
         }
-        SnapshotSurface::Window if window.id.is_empty() => {
+        SnapshotSurface::Window if window.is_process_owner() => {
             crate::tree::properties::element::element_for_pid(pid)
         }
         SnapshotSurface::Window => {
