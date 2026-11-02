@@ -43,17 +43,16 @@ os_restore_volume() {
 }
 
 os_control_center_volume() {
-    local extras cc_ref panel sound_ref detail slider_ref set_output volume volume_moved=0
+    local extras panel sound_ref detail slider_ref set_output volume volume_moved=0
     extras="$("$bin" snapshot --surface menu-bar-extras -i 2>/dev/null)"
-    cc_ref="$(os_ref "$extras" "Control Center")"
-    if [ -z "$cc_ref" ]; then
+    os_cc_ref="$(os_ref "$extras" "Control Center")"
+    if [ -z "$os_cc_ref" ]; then
         badmsg "menu-bar-extras snapshot lists no Control Center item ref  [ok=$(json_field "$extras" ok)]"
         return
     fi
-    okmsg "menu-bar-extras snapshot lists the Control Center item  [$cc_ref]"
-    os_cc_ref="$cc_ref"
+    okmsg "menu-bar-extras snapshot lists the Control Center item  [$os_cc_ref]"
     os_panel_open=1
-    panel="$("$bin" click "$cc_ref" --wait-for "button:Sound" 2>/dev/null)"
+    panel="$("$bin" click "$os_cc_ref" --wait-for "button:Sound" 2>/dev/null)"
     sound_ref="$(os_ref "$panel" Sound)"
     if [ -z "$sound_ref" ]; then
         badmsg "clicking Control Center did not return a panel snapshot with a Sound button  [ok=$(json_field "$panel" ok) error=$(json_field "$panel" error.code)]"
@@ -72,7 +71,7 @@ os_control_center_volume() {
         "ok=$(json_field "$set_output" ok) error=$(json_field "$set_output" error.code) volume=$volume"
     os_close_panel || badmsg "clicking the Control Center item again did not close its panel"
     os_panel_open=1
-    panel="$("$bin" --headed click "$cc_ref" 2>/dev/null)"
+    panel="$("$bin" --headed click "$os_cc_ref" 2>/dev/null)"
     assert "--headed click on the Control Center item opens its panel" \
         "$(os_wait_panel open && echo 1 || echo 0)" \
         "ok=$(json_field "$panel" ok) error=$(json_field "$panel" error.code)"

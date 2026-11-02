@@ -22,12 +22,10 @@ pub(crate) fn surface_root(
     surface: SnapshotSurface,
     deadline: Deadline,
 ) -> Result<UIAElement, AdapterError> {
-    if let ObservationRoot::Window(window) = &root
-        && window.is_process_owner()
-    {
-        return Err(AdapterError::app_has_no_window(&window.app));
-    }
     match (root, surface) {
+        (ObservationRoot::Window(window), _) if window.is_process_owner() => {
+            Err(AdapterError::app_has_no_window(&window.app))
+        }
         (ObservationRoot::Window(window), SnapshotSurface::Window) => {
             let handle = parse_window_id(&window.id)?;
             root_from_hwnd(handle, deadline)

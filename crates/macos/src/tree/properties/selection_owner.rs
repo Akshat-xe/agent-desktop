@@ -22,16 +22,13 @@ pub(super) fn container_selection(
     let mut current = el.clone();
     for _ in 0..MAX_SELECTION_OWNER_DEPTH {
         current = parent_of(&current, deadline, read)?;
-        let verdict = match verdicts.get(&current) {
-            Some(verdict) => verdict,
-            None => {
-                let verdict = own_selection(&current, deadline, read);
-                if read.complete {
-                    verdicts.insert(current.clone(), verdict);
-                }
-                verdict
+        let verdict = verdicts.get(&current).unwrap_or_else(|| {
+            let verdict = own_selection(&current, deadline, read);
+            if read.complete {
+                verdicts.insert(current.clone(), verdict);
             }
-        };
+            verdict
+        });
         if !read.complete {
             return None;
         }
@@ -51,10 +48,7 @@ pub(crate) fn selects_only_through_container(el: &AXElement, deadline: std::time
     if read_settable(el, own, deadline, &mut read).unwrap_or(false) {
         return false;
     }
-    let verdict = read
-        .complete
-        .then(|| container_selection(el, deadline, &mut read, &mut SelectionVerdicts::default()))
-        .flatten();
+    let verdict = container_selection(el, deadline, &mut read, &mut SelectionVerdicts::default());
     verdict == Some(true) || !read.complete
 }
 

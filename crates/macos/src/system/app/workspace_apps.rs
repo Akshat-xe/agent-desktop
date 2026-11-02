@@ -19,7 +19,6 @@ struct BridgedApplication {
     pid: i32,
     #[serde(default)]
     bundle_id: Option<String>,
-    #[serde(default)]
     executable: Option<String>,
     launch_time: NullableLaunchTime,
     activation_policy: ActivationPolicy,
