@@ -8,7 +8,7 @@ use crate::refs::RefEntry;
 use crate::{AdapterError, AppError, actionability};
 use serde_json::json;
 
-mod presentation;
+pub(crate) mod presentation;
 pub(crate) mod ref_action_actionability;
 pub(crate) mod ref_action_context;
 pub(crate) mod ref_action_poll;
@@ -137,14 +137,19 @@ pub(crate) fn dispatch_resolved(
     let action_name = request.action.name();
     let raises_surface = request.action.may_raise_surface();
     let presentation_action = request.action.clone();
+    let ripples = presentation::effect_ripples(&final_target, &presentation_action);
     presentation::before_dispatch(&final_target, &preflight, &presentation_action, lease);
     let dispatch_result =
         crate::execute_verified_action(final_target.adapter, final_target.handle, request, lease);
+    let mut preflight = preflight;
+    if presentation::after_text_entry(&final_target, &presentation_action, &dispatch_result) {
+        preflight.presentation_bounds = None;
+    }
     presentation::after_dispatch(
         final_target.adapter,
         final_target.context,
         &preflight,
-        &presentation_action,
+        ripples,
         &dispatch_result,
     );
     let mut result = dispatch_result?;

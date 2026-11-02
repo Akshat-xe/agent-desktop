@@ -124,6 +124,22 @@ impl ObservationOps for WindowsAdapter {
         crate::tree::text_selection::get_text_selection(handle, deadline)
     }
 
+    fn get_insertion_caret(
+        &self,
+        handle: &NativeHandle,
+        deadline: Deadline,
+    ) -> Result<Option<agent_desktop_core::Rect>, AdapterError> {
+        crate::tree::text_insertion::get_insertion_caret(handle, deadline)
+    }
+
+    fn get_focused_insertion_caret(
+        &self,
+        process: Option<agent_desktop_core::ProcessId>,
+        deadline: Deadline,
+    ) -> Result<Option<agent_desktop_core::Rect>, AdapterError> {
+        crate::tree::text_insertion::get_focused_insertion_caret(process, deadline)
+    }
+
     fn get_live_state(
         &self,
         handle: &NativeHandle,
