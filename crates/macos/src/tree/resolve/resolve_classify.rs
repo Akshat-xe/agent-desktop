@@ -32,6 +32,8 @@ pub(in crate::tree) fn classify_candidates(
     }
 }
 
+/// A candidate that is the retained native object the ref captured is the same
+/// element wherever it has moved since, so geometry adds no evidence.
 #[cfg(target_os = "macos")]
 fn candidate_is_sufficiently_verified(
     candidate: &AXElement,
@@ -39,6 +41,9 @@ fn candidate_is_sufficiently_verified(
     source_window_verified: bool,
     deadline: std::time::Instant,
 ) -> Result<bool, AdapterError> {
+    if entry.identity.retained_object.is_some() {
+        return Ok(true);
+    }
     if source_window_verified && !candidate_requires_bounds(entry) {
         return Ok(true);
     }
