@@ -5,8 +5,27 @@ use std::cell::RefCell;
 
 const VERDICT_CACHE_LEN: usize = 8;
 
+type Verdicts = Vec<(AXElement, Option<bool>)>;
+
 thread_local! {
-    static VERDICTS: RefCell<Vec<(AXElement, Option<bool>)>> = const { RefCell::new(Vec::new()) };
+    static VERDICTS: RefCell<Option<Verdicts>> = const { RefCell::new(None) };
+}
+
+/// Shares selection-owner answers among siblings for one observation only;
+/// any read outside an observation computes a fresh answer.
+pub(crate) struct ObservationVerdicts;
+
+impl ObservationVerdicts {
+    pub(crate) fn begin() -> Self {
+        VERDICTS.with(|cache| *cache.borrow_mut() = Some(Vec::new()));
+        Self
+    }
+}
+
+impl Drop for ObservationVerdicts {
+    fn drop(&mut self) {
+        VERDICTS.with(|cache| *cache.borrow_mut() = None);
+    }
 }
 
 pub(crate) const MAX_SELECTION_OWNER_DEPTH: usize = 2;
@@ -14,7 +33,8 @@ pub(crate) const MAX_SELECTION_OWNER_DEPTH: usize = 2;
 /// A row with no press action of its own is still clickable when an enabled
 /// ancestor lets its selection be written; such a member is a list item, not a
 /// control, so its own `AXEnabled` says nothing about whether it can be chosen.
-/// Siblings share their ancestors, so the answer is kept per parent.
+/// Siblings share their ancestors, so within an observation the answer is kept
+/// per parent.
 pub(super) fn container_owns_selection(
     el: &AXElement,
     deadline: std::time::Instant,
@@ -25,8 +45,9 @@ pub(super) fn container_owns_selection(
     };
     let same = crate::tree::properties::capabilities::same_element;
     let known = VERDICTS.with(|cache| {
-        let cache = cache.borrow();
         cache
+            .borrow()
+            .as_ref()?
             .iter()
             .find(|(seen, _)| same(seen, &parent))
             .map(|(_, verdict)| *verdict)
@@ -35,11 +56,12 @@ pub(super) fn container_owns_selection(
         let verdict = owner_from(&parent, deadline, read);
         if read.complete {
             VERDICTS.with(|cache| {
-                let mut cache = cache.borrow_mut();
-                if cache.len() >= VERDICT_CACHE_LEN {
-                    cache.remove(0);
+                if let Some(cache) = cache.borrow_mut().as_mut() {
+                    if cache.len() >= VERDICT_CACHE_LEN {
+                        cache.remove(0);
+                    }
+                    cache.push((parent.clone(), verdict));
                 }
-                cache.push((parent.clone(), verdict));
             });
         }
         verdict
