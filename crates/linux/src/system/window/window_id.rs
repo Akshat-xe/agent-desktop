@@ -49,12 +49,6 @@ fn invalid(id: &str) -> AdapterError {
 /// The bus name and object path an id was made from. Anything that is not
 /// exactly the form `encode` produces is rejected.
 pub(crate) fn decode(id: &str) -> Result<(String, String), AdapterError> {
-    if id.is_empty() {
-        return Err(AdapterError::new(
-            ErrorCode::WindowNotFound,
-            "Application has no window to observe",
-        ));
-    }
     let rest = id.strip_prefix(PREFIX).ok_or_else(|| invalid(id))?;
     let (bus, elements) = rest.split_once(BUS_SEPARATOR).ok_or_else(|| invalid(id))?;
     let bus = format!(":{bus}");

@@ -34,6 +34,10 @@ fn refuse_stopped(
 
 fn root_element(root: &ObservationRoot<'_>) -> Result<AtspiElement, AdapterError> {
     match root {
+        ObservationRoot::Window(window) if window.id.is_empty() => Err(AdapterError::new(
+            ErrorCode::WindowNotFound,
+            "Application has no window to observe",
+        )),
         ObservationRoot::Window(window) => {
             refuse_stopped(window, proc_stat::is_stopped)?;
             let (bus, path) = window_id::decode(&window.id)?;
