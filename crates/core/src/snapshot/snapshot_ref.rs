@@ -80,7 +80,8 @@ pub fn run_from_ref_with_context(
         path_prefix,
         observed,
     } = capture;
-    let capture_proof = crate::refs::ref_capture_proof::CaptureProof::new(&observed);
+    let capture_proof =
+        crate::refs::ref_capture_proof::CaptureProof::new(&observed).rooted_at(&path_prefix);
 
     let source_app = entry.source.source_app.as_deref();
     let source_window_id = entry.source.source_window_id.as_deref();

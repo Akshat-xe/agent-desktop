@@ -12,8 +12,8 @@ fn a_skeleton_anchor_resolves_and_its_drill_resolves() {
     let captured = snapshot(&adapter);
     assert_eq!(
         adapter.captures(),
-        2,
-        "the shallow walk decides, the whole window proves"
+        1,
+        "an adapter without element tokens reads the whole window once"
     );
     let (anchor_ref, anchor) = named(&captured.refmap, "Sidebar");
     assert!(

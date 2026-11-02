@@ -255,7 +255,7 @@ impl ObservedTree {
             .known()
             .cloned()
             .unwrap_or_else(|| "unknown".into());
-        let child_indices = std::mem::take(&mut node.children);
+        let child_indices = node.children.clone();
         let projected = AccessibilityNode {
             ref_id: node.ref_id.take(),
             role,

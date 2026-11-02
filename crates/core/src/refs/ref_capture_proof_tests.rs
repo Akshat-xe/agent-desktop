@@ -302,3 +302,41 @@ fn a_published_entry_is_proven_by_its_own_predicate_not_the_preferred_identifier
     assert_eq!(named.matches.len(), 1);
     assert!(named.matches[0].entry.identity.unique_at_capture);
 }
+
+#[test]
+fn a_skipped_native_sibling_does_not_unprove_the_refs_after_it() {
+    let observed = ObservedTree::from_roots(
+        vec![ObservedSubtree::new(
+            evidence("window", "Fixture", Vec::new(), 0),
+            vec![
+                ObservedSubtree::new(
+                    evidence("button", "Cancel", Vec::new(), 1),
+                    Vec::new(),
+                    true,
+                    None,
+                )
+                .with_source_child_index(0),
+                ObservedSubtree::new(
+                    evidence("button", "Save", Vec::new(), 1),
+                    Vec::new(),
+                    true,
+                    None,
+                )
+                .with_source_child_index(2),
+            ],
+            true,
+            None,
+        )],
+        ObservationSource::Window {
+            window: fixture_window(),
+            surface: crate::SnapshotSurface::Window,
+            renderer_accessibility_forced: false,
+        },
+        LocatorStats::default(),
+        true,
+    )
+    .expect("the fixture observes");
+    let root = window(vec![named("button", "Cancel"), named("button", "Save")]);
+
+    assert_eq!(flags(root, &observed), [true, true]);
+}

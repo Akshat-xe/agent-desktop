@@ -23,7 +23,7 @@ const MASKS: usize = (NATIVE_ID | NAME | DESCRIPTION) as usize + 1;
 /// will count later.
 pub(crate) struct CaptureProof<'a> {
     observed: &'a ObservedTree,
-    paths: OnceLock<HashMap<&'a [usize], usize>>,
+    start: Option<usize>,
     buckets: [OnceLock<HashMap<LiveKey<'a>, usize>>; MASKS],
     unread: Vec<(u8, LivePredicate<'a>)>,
     whole_window: bool,
@@ -36,7 +36,7 @@ impl<'a> CaptureProof<'a> {
         Self {
             observed,
             whole_window,
-            paths: OnceLock::new(),
+            start: observed.roots.first().map(|root| *root as usize),
             buckets: std::array::from_fn(|_| OnceLock::new()),
             unread: observed
                 .nodes
@@ -49,18 +49,49 @@ impl<'a> CaptureProof<'a> {
         }
     }
 
+    /// Starts allocation paths at the node whose observed path is `prefix`, as a
+    /// drill does: the prefix is that node's own path, and the rest of an
+    /// allocation path counts positions in the projected tree below it.
+    pub(crate) fn rooted_at(mut self, prefix: &[usize]) -> Self {
+        self.start = self
+            .observed
+            .nodes
+            .iter()
+            .position(|node| node.path.as_slice() == prefix);
+        self
+    }
+
+    /// Whether `entry`, allocated at `path`, is proven. The path is read the way
+    /// allocation wrote it: the start node's own path, then child positions in
+    /// the projection, which skips no child the observation kept even when the
+    /// native indices have gaps.
     pub(crate) fn proves(&self, entry: &RefEntry, path: &[usize]) -> bool {
-        self.paths
-            .get_or_init(|| {
-                self.observed
-                    .nodes
-                    .iter()
-                    .enumerate()
-                    .map(|(index, node)| (node.path.as_slice(), index))
-                    .collect()
-            })
-            .get(path)
-            .is_some_and(|index| self.proves_node(entry, *index))
+        let Some(mut index) = self.start else {
+            return false;
+        };
+        let Some(prefix) = self
+            .observed
+            .nodes
+            .get(index)
+            .map(|node| node.path.as_slice())
+        else {
+            return false;
+        };
+        let Some(steps) = path.strip_prefix(prefix) else {
+            return false;
+        };
+        for step in steps {
+            match self
+                .observed
+                .nodes
+                .get(index)
+                .and_then(|node| node.children.get(*step))
+            {
+                Some(child) => index = *child as usize,
+                None => return false,
+            }
+        }
+        self.proves_node(entry, index)
     }
 
     /// Whether `entry` was proven unique at the node it was built from: the

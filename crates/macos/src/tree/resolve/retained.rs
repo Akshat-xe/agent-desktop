@@ -74,6 +74,11 @@ pub(crate) fn evidence(element: &AXElement, identifiers: IdentifierEvidence) -> 
     }
 }
 
+/// Whether this macOS build can create and resolve element tokens.
+pub(crate) fn tokens_available() -> bool {
+    symbols().is_some()
+}
+
 fn symbols() -> Option<&'static Symbols> {
     static SYMBOLS: OnceLock<Option<Symbols>> = OnceLock::new();
     SYMBOLS.get_or_init(load_symbols).as_ref()
