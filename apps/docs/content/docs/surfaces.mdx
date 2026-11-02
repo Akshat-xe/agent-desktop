@@ -110,7 +110,7 @@ Which window agent-desktop reads depends on the kind:
 
 - `sheet`, `popover`, and `alert`: the app's accessible windows in order, focused first and then visible, and the first that presents one wins. With no `--app`, the frontmost process.
 - `menu`, `menubar`, and `focused`: any window of the app identifies the process, so several open windows are never ambiguous. On macOS, `window`, `menubar` and `menu-bar-extras` read a background app (a menu bar app, the Dock, Control Center, Notification Center) through its process when it has no window; the result then has no `window` field. A regular app that has not shown its window yet returns `WINDOW_NOT_FOUND`: wait for the window. `focused` always needs a focused window.
-- A shell kind needs no `--app`, because no application owns it.
+- A shell kind needs no `--app`, because no application owns it. On macOS, `menu-bar-extras` with `--app` reads that app's own status item instead.
 - `--window-id` pins the read to one window.
 
 A surface that is not open returns an error. On Linux, a closed menu returns `ELEMENT_NOT_FOUND`:
