@@ -143,7 +143,7 @@ fn stop_on_error_halts_after_first_failure() {
     assert_eq!(results[0]["ok"], false);
     assert_eq!(results[0]["version"], ENVELOPE_VERSION);
     assert_eq!(results[0]["command"], "snapshot");
-    assert_eq!(results[0]["error"]["code"], "PLATFORM_NOT_SUPPORTED");
+    assert_eq!(results[0]["error"]["code"], "INVALID_ARGS");
 }
 
 #[test]

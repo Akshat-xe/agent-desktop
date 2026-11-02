@@ -270,7 +270,7 @@ fn unsupported_surface_fails_before_adapter_traversal() {
         panic!("expected adapter error")
     };
 
-    assert_eq!(adapter_error.code, ErrorCode::PlatformNotSupported);
+    assert_eq!(adapter_error.code, ErrorCode::InvalidArgs);
     assert_eq!(
         adapter_error
             .details

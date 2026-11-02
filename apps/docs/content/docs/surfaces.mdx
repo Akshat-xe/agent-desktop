@@ -48,7 +48,7 @@ Per-kind limits are on the platform pages: [macOS](/desktop/platforms/macos), [W
 { "supported_surfaces": ["window", "sheet", "alert", "menu"] }
 ```
 
-Read it before you ask for a surface. An unsupported kind fails with `PLATFORM_NOT_SUPPORTED`, with the supported list in `details.supported_surfaces` and your request in `details.requested_surface`. On Linux, an empty `supported_surfaces` means the accessibility bus did not answer, not that the desktop is empty.
+Read it before you ask for a surface. A kind this OS does not have fails with `INVALID_ARGS`, with the supported list in `details.supported_surfaces` and your request in `details.requested_surface`. On Linux, an empty `supported_surfaces` means the accessibility bus did not answer, not that the desktop is empty.
 
 ## Know when a surface opened
 
@@ -157,4 +157,4 @@ agent-desktop --headed open-system-surface --surface action-center
 agent-desktop snapshot --surface action-center -i --compact
 ```
 
-It takes the foreground, so headless mode refuses it with `POLICY_DENIED`; pass `--headed` (see [Headed mode](/desktop/guides/headed-mode)). An already-present surface returns without being raised again. A kind the OS does not expose returns `PLATFORM_NOT_SUPPORTED`, and `platform_detail` names the alternative. On macOS, `dock` and `menu-bar-extras` are always on screen, so the command returns them at once; open Control Center or Notification Center by clicking its `menu-bar-extras` item. Which kinds open on Windows and Linux is on their platform pages.
+It takes the foreground, so on Windows and Linux headless mode refuses it with `POLICY_DENIED`; pass `--headed` (see [Headed mode](/desktop/guides/headed-mode)). An already-present surface returns without being raised again. A kind the OS does not expose returns `INVALID_ARGS`, and the suggestion or `platform_detail` names the kinds to use instead. On macOS, `dock` and `menu-bar-extras` are always on screen, so the command returns them at once, headless, with no `--headed`; open Control Center or Notification Center by clicking its `menu-bar-extras` item. Which kinds open on Windows and Linux is on their platform pages.

@@ -62,7 +62,7 @@ Off macOS, identical twins have no ref path: only `--headed mouse-click --xy X,Y
 
 ### Surfaces
 
-Surfaces are overlays: `menu`, `menubar`, `sheet`, `popover`, `alert`, `focused`, plus OS shell kinds on some platforms. Read `supported_surfaces` from `status` before you ask for one. An unsupported kind returns `PLATFORM_NOT_SUPPORTED` with the supported list in `details`. A shell surface needs no `--app`; on macOS, `menu-bar-extras` with `--app` reads that app's own status item. When it is closed you get `WINDOW_NOT_FOUND`; raise it with `open-system-surface`.
+Surfaces are overlays: `menu`, `menubar`, `sheet`, `popover`, `alert`, `focused`, plus OS shell kinds on some platforms. Read `supported_surfaces` from `status` before you ask for one. A kind this OS does not have returns `INVALID_ARGS` with the supported list in `details`. A shell surface needs no `--app`; on macOS, `menu-bar-extras` with `--app` reads that app's own status item. When it is closed you get `WINDOW_NOT_FOUND`; raise it with `open-system-surface`.
 
 Use a surface snapshot for dialogs and menus, not a window snapshot. To reach one item inside an overlay, use `find --surface` instead of a full dump.
 
@@ -134,7 +134,7 @@ Lists the overlay surfaces an app presents now, the values `snapshot --surface` 
 agent-desktop --headed open-system-surface --surface action-center
 ```
 
-Raises an OS shell surface and returns the window it presents, in the `w-<id>` form that `list-windows` uses. It takes the foreground, so strict headless is refused with `POLICY_DENIED`; pass `--headed`. An already-present surface returns without being raised again. A kind the OS does not expose returns `PLATFORM_NOT_SUPPORTED` naming the kinds to use instead. `action-center` and `start-menu` are Windows kinds; on macOS use `dock` or `menu-bar-extras`, and open Control Center or Notification Center by clicking its `menu-bar-extras` item. See the platform skill for the kinds.
+Raises an OS shell surface and returns the window it presents, in the `w-<id>` form that `list-windows` uses. It takes the foreground, so on Windows and Linux strict headless is refused with `POLICY_DENIED`; pass `--headed`. On macOS, `dock` and `menu-bar-extras` are always on screen, so they return headless with no `--headed`. An already-present surface returns without being raised again. A kind the OS does not expose returns `INVALID_ARGS` naming the kinds to use instead. `action-center` and `start-menu` are Windows kinds; on macOS use `dock` or `menu-bar-extras`, and open Control Center or Notification Center by clicking its `menu-bar-extras` item. See the platform skill for the kinds.
 
 ## Chromium and Electron apps
 

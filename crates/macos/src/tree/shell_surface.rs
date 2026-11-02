@@ -46,7 +46,7 @@ pub(crate) fn resolve_surface(
         SnapshotSurface::MenuBarExtras => &MENU_BAR_EXTRAS_HOSTS,
         _ => {
             return Err(AdapterError::new(
-                ErrorCode::PlatformNotSupported,
+                ErrorCode::InvalidArgs,
                 format!("'{}' is not a macOS shell surface", surface.as_str()),
             )
             .with_suggestion("Use dock or menu-bar-extras; open Control Center or Notification Center by clicking its menu-bar-extras item")

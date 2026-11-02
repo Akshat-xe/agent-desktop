@@ -213,14 +213,15 @@ impl SystemOps for LinuxAdapter {
             return Ok(());
         }
         Err(AdapterError::new(
-            ErrorCode::PlatformNotSupported,
-            format!("Snapshot surface '{}' is not supported on this platform", requested.as_str()),
+            ErrorCode::InvalidArgs,
+            format!("Snapshot surface '{}' is not available on this platform", requested.as_str()),
         )
         .with_details(serde_json::json!({
             "requested_surface": requested.as_str(),
             "supported_surfaces": supported.into_iter().map(SnapshotSurface::as_str).collect::<Vec<_>>()
         }))
-        .with_suggestion("Choose one of the supported snapshot surfaces"))
+        .with_suggestion("Choose one of the supported snapshot surfaces")
+        .with_disposition(agent_desktop_core::DeliverySemantics::not_delivered()))
     }
 
     fn open_session(

@@ -112,14 +112,15 @@ pub trait SystemOps: Send + Sync {
             return Ok(());
         }
         Err(AdapterError::new(
-            crate::ErrorCode::PlatformNotSupported,
-            format!("Snapshot surface '{}' is not supported on this platform", requested.as_str()),
+            crate::ErrorCode::InvalidArgs,
+            format!("Snapshot surface '{}' is not available on this platform", requested.as_str()),
         )
         .with_details(serde_json::json!({
             "requested_surface": requested.as_str(),
             "supported_surfaces": supported.into_iter().map(crate::SnapshotSurface::as_str).collect::<Vec<_>>()
         }))
-        .with_suggestion("Choose one of the supported snapshot surfaces"))
+        .with_suggestion("Choose one of the supported snapshot surfaces")
+        .with_disposition(crate::DeliverySemantics::not_delivered()))
     }
 
     /// Registers caller-scoped wake hints before the initial predicate read.
