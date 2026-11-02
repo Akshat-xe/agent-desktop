@@ -57,26 +57,41 @@ fn test_run_from_ref_does_not_persist_refs_when_source_window_is_gone() {
     );
 }
 
+fn capture_windowless(surface: crate::SnapshotSurface) -> String {
+    let adapter = StubAdapter::with_windows(named("button", "Dock"), vec![]);
+    let opts = TreeOptions {
+        surface,
+        ..drill_opts()
+    };
+    let deadline = crate::Deadline::after(1000).unwrap();
+    let captured =
+        crate::snapshot::build(&adapter, &opts, Some("TestApp"), None, deadline).unwrap();
+    assert!(captured.window.is_process_owner(), "{surface:?}");
+    save_latest(captured.refmap)
+}
+
 #[test]
-fn test_run_from_ref_drills_process_owned_ref_on_any_surface() {
+fn test_run_from_ref_drills_a_ref_captured_from_a_windowless_app() {
     for surface in [
         crate::SnapshotSurface::Window,
         crate::SnapshotSurface::Menubar,
     ] {
         let _guard = HomeGuard::new();
-        let src = crate::refs::ref_alloc_source::RefAllocSource {
-            window_title: Some(""),
-            surface,
-            ..source("TestApp")
-        };
-        let mut anchor = ref_entry_from_node(&named("group", "Dock"), &src, None, &[0]);
-        anchor.identity.unique_at_capture = true;
-        let mut map = RefMap::new();
-        let _ = map.allocate(anchor);
-        let snapshot_id = save_latest(map);
-
-        let adapter = StubAdapter::with_windows(named("group", "Dock"), vec![]);
+        let snapshot_id = capture_windowless(surface);
+        let adapter = StubAdapter::with_windows(named("button", "Dock"), vec![]);
         let result = run_from_ref(&adapter, &drill_opts(), "@e1", Some(&snapshot_id)).unwrap();
         assert!(result.window.is_process_owner(), "{surface:?}");
     }
+}
+
+#[test]
+fn test_run_from_ref_refuses_a_window_that_appeared_after_a_windowless_capture() {
+    let _guard = HomeGuard::new();
+    let snapshot_id = capture_windowless(crate::SnapshotSurface::Window);
+    let adapter =
+        StubAdapter::with_windows(named("button", "Dock"), vec![window_info("w-1", true)]);
+    let Err(error) = run_from_ref(&adapter, &drill_opts(), "@e1", Some(&snapshot_id)) else {
+        panic!("a windowless capture must not resolve to a window that appeared later");
+    };
+    assert_eq!(error.code(), "STALE_REF");
 }

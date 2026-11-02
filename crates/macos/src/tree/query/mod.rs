@@ -51,7 +51,6 @@ pub(crate) fn observe_tree(
 ) -> Result<ObservedTree, AdapterError> {
     let request = (*request).validate()?;
     let deadline = crate::tree::locator_deadline::from_operation(request.deadline)?;
-    let _verdicts = crate::tree::properties::selection_owner::ObservationVerdicts::begin();
     let resolved = resolve_root(root, &request, deadline)?;
     let (tree, renderer_ready, stats) =
         traversal::LocatorTraversal::new(&request, resolved.context, deadline)

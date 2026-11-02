@@ -16,12 +16,29 @@ os_wait_volume() {
 }
 
 os_panel_open=0
+os_cc_ref=""
+
+os_wait_panel() {
+    local want="$1" seen
+    for _ in $(seq 1 15); do
+        seen=closed
+        [ -n "$(os_ref "$("$bin" snapshot --app "Control Center" -i 2>/dev/null)" Sound)" ] && seen=open
+        [ "$seen" = "$want" ] && return 0
+        sleep 0.2
+    done
+    return 1
+}
+
+os_close_panel() {
+    [ "$os_panel_open" = 1 ] || return 0
+    os_panel_open=0
+    os_wait_panel closed && return 0
+    "$bin" click "$os_cc_ref" >/dev/null 2>&1
+    os_wait_panel closed
+}
 
 os_restore_volume() {
-    if [ "$os_panel_open" = 1 ]; then
-        "$bin" press escape >/dev/null 2>&1 || true
-        os_panel_open=0
-    fi
+    os_close_panel || badmsg "the Control Center panel stayed open after its item was clicked again"
     osascript -e "set volume output volume $volume_original" >/dev/null 2>&1
 }
 
@@ -34,6 +51,7 @@ os_control_center_volume() {
         return
     fi
     okmsg "menu-bar-extras snapshot lists the Control Center item  [$cc_ref]"
+    os_cc_ref="$cc_ref"
     os_panel_open=1
     panel="$("$bin" click "$cc_ref" --wait-for "button:Sound" 2>/dev/null)"
     sound_ref="$(os_ref "$panel" Sound)"
@@ -52,6 +70,12 @@ os_control_center_volume() {
     assert "set-value on the Control Center slider moves the system volume to about 50" \
         "$([ "$(json_field "$set_output" ok)" = "True" ] && [ "$volume_moved" = "1" ] && echo 1 || echo 0)" \
         "ok=$(json_field "$set_output" ok) error=$(json_field "$set_output" error.code) volume=$volume"
+    os_close_panel || badmsg "clicking the Control Center item again did not close its panel"
+    os_panel_open=1
+    panel="$("$bin" --headed click "$cc_ref" 2>/dev/null)"
+    assert "--headed click on the Control Center item opens its panel" \
+        "$(os_wait_panel open && echo 1 || echo 0)" \
+        "ok=$(json_field "$panel" ok) error=$(json_field "$panel" error.code)"
 }
 
 note "OS surfaces: process-name app, Dock, menu bar extras"
@@ -104,6 +128,10 @@ case "$volume_original" in
         osascript -e "set volume output volume 20" >/dev/null 2>&1
         os_control_center_volume
         os_restore_volume
+        volume_restored="$(os_volume)"
+        assert "the system output volume is restored after the scenario" \
+            "$([ "$volume_restored" = "$volume_original" ] && echo 1 || echo 0)" \
+            "volume=$volume_restored expected=$volume_original"
         trap cleanup EXIT
         trap - INT TERM HUP
         ;;

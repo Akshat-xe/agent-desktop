@@ -50,7 +50,8 @@ fn owner_snapshot_includes_regular_and_accessory_but_excludes_prohibited() {
 fn owner_snapshot_matches_visible_app_name_and_bundle_id() {
     let bytes = br#"{
         "applications":[
-            {"name":"\u200eWhatsApp","executable":"WhatsAppDesktop","pid":10,"bundle_id":"net.whatsapp.WhatsApp","launch_time":100.25,"activation_policy":"regular"}
+            {"name":"\u200eWhatsApp","executable":"WhatsAppDesktop","pid":10,"bundle_id":"net.whatsapp.WhatsApp","launch_time":100.25,"activation_policy":"regular"},
+            {"name":"Helper","executable":"WhatsApp","pid":11,"launch_time":100.5,"activation_policy":"accessory"}
         ],
         "frontmost_pid":10,
         "frontmost_launch_time":100.25

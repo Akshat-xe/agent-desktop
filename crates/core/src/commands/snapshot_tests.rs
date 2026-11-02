@@ -383,6 +383,14 @@ fn an_unproven_capture_is_flagged_in_the_payload() {
     };
     let proven = format_snapshot_fields(&result, None, None).unwrap();
     assert!(proven.get("identity_unproven").is_none());
+    assert_eq!(proven["window"]["id"], "w-1");
+    result.window.id.clear();
+    assert!(
+        format_snapshot_fields(&result, None, None)
+            .unwrap()
+            .get("window")
+            .is_none()
+    );
 
     result.identity_unproven = Some("the whole-window read was cut short".into());
     let unproven = format_snapshot_fields(&result, None, None).unwrap();

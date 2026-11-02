@@ -176,7 +176,7 @@ fn app_name_resolution_discriminates_absent_from_windowless() {
 #[test]
 fn a_windowless_app_is_a_process_owner_only_when_it_is_background() {
     use crate::AppPresentation::{Background, Foreground};
-    use crate::SnapshotSurface::{Menubar, Window};
+    use crate::SnapshotSurface::{MenuBarExtras, Menubar, Window};
     let app = |presentation| crate::AppInfo {
         presentation: Some(presentation),
         ..running_app("Helper")
@@ -184,6 +184,7 @@ fn a_windowless_app_is_a_process_owner_only_when_it_is_background() {
     let cases = [
         (vec![app(Background)], Window, None),
         (vec![app(Background)], Menubar, None),
+        (vec![app(Background)], MenuBarExtras, None),
         (vec![app(Foreground)], Window, Some("WINDOW_NOT_FOUND")),
         (vec![app(Foreground)], Menubar, Some("WINDOW_NOT_FOUND")),
         (vec![app(Background); 2], Window, Some("AMBIGUOUS_TARGET")),
@@ -311,9 +312,9 @@ fn the_seams_window_not_found_passes_through_with_its_suggestion() {
     );
 }
 
-/// A window-owned sub-surface is never routed to the seam, even when the
-/// adapter implements it: the application path stays the answer for kinds
-/// some application owns.
+/// A window-owned sub-surface, or an app's own status item, is never routed to
+/// the seam, even when the adapter implements it: the application path stays
+/// the answer for kinds some application owns.
 #[test]
 fn a_window_owned_surface_kind_is_not_routed_to_the_seam() {
     let adapter = ShellSurfaceAdapter {

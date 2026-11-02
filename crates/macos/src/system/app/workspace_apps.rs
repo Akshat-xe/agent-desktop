@@ -70,12 +70,17 @@ impl WindowOwnerSnapshot {
         self.owners.iter().map(|owner| owner.pid).collect()
     }
 
+    /// Pids of the apps `identifier` names. A bundle ID or executable name counts
+    /// only when no app has that display name, so an alias never merges two apps.
     pub(crate) fn matching_pids(&self, identifier: &str) -> rustc_hash::FxHashSet<i32> {
+        let named =
+            |owner: &WindowOwner| agent_desktop_core::app_name_matches(&owner.name, identifier);
+        let by_alias = !self.owners.iter().any(named);
         self.owners
             .iter()
             .filter(|owner| {
-                agent_desktop_core::app_name_matches(&owner.name, identifier)
-                    || has_alias(&owner.bundle_id, &owner.executable, identifier)
+                named(owner)
+                    || (by_alias && has_alias(&owner.bundle_id, &owner.executable, identifier))
             })
             .map(|owner| owner.pid)
             .collect()
@@ -120,12 +125,14 @@ pub(crate) fn require_complete(skipped: &[serde_json::Value]) -> Result<(), Adap
     ))
 }
 
+/// Apps named `name`, optionally pinned to `bundle_id`. Without one, a bundle
+/// ID or executable name matches only when no app has that display name.
 pub(crate) fn list_apps_scoped_until(
     name: &str,
     bundle_id: Option<&str>,
     deadline: Instant,
 ) -> Result<AppInventory, AdapterError> {
-    list_apps_with(
+    let mut inventory = list_apps_with(
         deadline,
         |app| {
             (agent_desktop_core::app_name_matches(&app.name, name)
@@ -137,7 +144,12 @@ pub(crate) fn list_apps_scoped_until(
                 })
         },
         false,
-    )
+    )?;
+    let named = |app: &AppInfo| agent_desktop_core::app_name_matches(&app.name, name);
+    if inventory.apps.iter().any(named) {
+        inventory.apps.retain(named);
+    }
+    Ok(inventory)
 }
 
 /// Whether `identifier` is the app's bundle ID or executable name.
