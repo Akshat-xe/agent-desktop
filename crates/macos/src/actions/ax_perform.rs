@@ -72,6 +72,13 @@ mod imp {
             &mut usage,
         );
         read.value
+            .or_else(|| {
+                read.error
+                    .filter(|error| {
+                        crate::tree::properties::ax_absence::is_absent_action_error(*error)
+                    })
+                    .map(|_| Vec::new())
+            })
             .map(|actions| actions.iter().any(|action| action == name))
     }
 }

@@ -231,8 +231,32 @@ mod imp {
             "AXRole",
             operation_deadline,
         ) {
+            Ok(Some(role)) if role == "AXMenuBarItem" && is_status_item(element, deadline) => {
+                Ok(None)
+            }
             Err(error) if error.code == ErrorCode::AppUnresponsive => Ok(None),
             result => result,
+        }
+    }
+
+    /// A status item sits in its app's extras menu bar, where a click reaches it
+    /// wherever the app is; only an app's own menu bar needs press-only delivery.
+    fn is_status_item(element: &AXElement, deadline: Deadline) -> bool {
+        use crate::tree::properties::attributes::copy_element_attr_result;
+        let Ok(deadline) = crate::tree::locator_deadline::from_operation(deadline) else {
+            return false;
+        };
+        let parent = copy_element_attr_result(element, "AXParent", deadline);
+        let pid = crate::tree::properties::ax_ipc::pid(element, deadline);
+        match (parent, pid) {
+            (Ok(Some(parent)), Ok(pid)) => {
+                let app = crate::tree::element_for_pid(pid);
+                matches!(
+                    copy_element_attr_result(&app, "AXExtrasMenuBar", deadline),
+                    Ok(Some(extras)) if crate::tree::same_element(&parent, &extras)
+                )
+            }
+            _ => false,
         }
     }
 }

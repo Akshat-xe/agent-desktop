@@ -17,6 +17,7 @@ pub(crate) struct AvailableActionsRead {
     pub(crate) api_disabled: bool,
     pub(crate) deadline_exhausted: bool,
     pub(crate) settable_reads: u64,
+    pub(crate) selects_through_container: bool,
 }
 
 impl Default for AvailableActionsRead {
@@ -29,6 +30,7 @@ impl Default for AvailableActionsRead {
             api_disabled: false,
             deadline_exhausted: false,
             settable_reads: 0,
+            selects_through_container: false,
         }
     }
 }
@@ -61,13 +63,14 @@ pub(crate) fn read_platform_available_actions(
             push_unique(&mut read.actions, capability::TOGGLE);
         }
     } else if crate::actions::select::container_select::role_activates_by_selection(role)
-        && read_settable(
+        && (read_settable(
             el,
             crate::actions::select::container_select::SELECTED,
             deadline,
             &mut read,
         )
         .unwrap_or(false)
+            || super::selection_owner::container_owns_selection(el, deadline, &mut read))
     {
         push_unique(&mut read.actions, capability::CLICK);
     }
@@ -111,7 +114,7 @@ pub(crate) fn read_platform_available_actions(
 }
 
 #[cfg(target_os = "macos")]
-fn read_settable(
+pub(super) fn read_settable(
     element: &AXElement,
     attribute: &str,
     deadline: std::time::Instant,

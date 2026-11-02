@@ -56,7 +56,7 @@ pub(crate) fn read_node(
             child_read: ChildRead::empty(false),
         });
     }
-    let attrs = read.attrs;
+    let mut attrs = read.attrs;
     let role = attrs
         .role
         .as_deref()
@@ -75,6 +75,7 @@ pub(crate) fn read_node(
         stats.reads.health.cannot_complete += u64::from(actions.cannot_complete);
         stats.reads.health.deadline_exhausted += u64::from(actions.deadline_exhausted);
         stats.semantic_reads.settable_reads += actions.settable_reads;
+        attrs.states.enabled |= actions.selects_through_container;
         if actions.api_disabled {
             return Err(permission_error("actions"));
         }
