@@ -13,10 +13,13 @@ mod imp {
     /// unsupported code to the action that navigates it, and moves its
     /// selection rather than the focus. Selection is therefore read as well,
     /// on every element, because an attribute an element does not publish reads
-    /// as absent and the rule simply never fires for it.
+    /// as absent and the rule simply never fires for it. A press can also keep
+    /// focus where it is and replace what the focused editor shows, so that
+    /// editor's value is read too.
     #[derive(Default)]
     pub(crate) struct FocusState {
         focused_element: Option<AXElement>,
+        focused_value: Option<String>,
         selected: Option<bool>,
         menu_open: Option<bool>,
     }
@@ -44,13 +47,17 @@ mod imp {
     pub(crate) fn focus_state(element: &AXElement, deadline: Deadline) -> Option<FocusState> {
         let app = crate::system::app::app_ops::pid_from_element(element, deadline)
             .map(crate::tree::element_for_pid)?;
+        let focused_element = crate::tree::properties::attributes::copy_element_attr_result(
+            &app,
+            "AXFocusedUIElement",
+            deadline,
+        )
+        .ok()?;
         Some(FocusState {
-            focused_element: crate::tree::properties::attributes::copy_element_attr_result(
-                &app,
-                "AXFocusedUIElement",
-                deadline,
-            )
-            .ok()?,
+            focused_value: focused_element
+                .as_ref()
+                .and_then(|focused| crate::tree::copy_value_typed(focused, deadline)),
+            focused_element,
             selected: crate::tree::properties::attributes::copy_bool_attr_result(
                 element,
                 crate::actions::select::container_select::SELECTED,
@@ -174,6 +181,7 @@ mod imp {
         let focus_moved_to_target = target_focused
             && matches!((before, after), (Some(before), Some(after)) if before != after);
         focus_moved_to_target
+            || focused_content_replaced(before, after)
             || selection_turned_on(before, after)
             || matches!(
                 (
@@ -182,6 +190,17 @@ mod imp {
                 ),
                 (Some(false), Some(true))
             )
+    }
+
+    /// The same element keeps focus but shows different content: the press
+    /// swapped what the focused editor holds.
+    fn focused_content_replaced(before: &Option<FocusState>, after: &Option<FocusState>) -> bool {
+        matches!((before, after), (Some(before), Some(after))
+            if before.focused_element.is_some()
+                && before == after
+                && before.focused_value.is_some()
+                && after.focused_value.is_some()
+                && before.focused_value != after.focused_value)
     }
 
     /// An element that was not selected and now is has been acted on, whatever
@@ -204,17 +223,28 @@ mod imp {
         fn focused(pid: i32) -> Option<FocusState> {
             Some(FocusState {
                 focused_element: Some(crate::tree::element_for_pid(pid)),
-                selected: None,
-                menu_open: None,
+                ..FocusState::default()
             })
         }
 
         fn selected(value: Option<bool>) -> Option<FocusState> {
             Some(FocusState {
-                focused_element: None,
                 selected: value,
-                menu_open: None,
+                ..FocusState::default()
             })
+        }
+
+        #[test]
+        fn replaced_content_in_the_same_focused_editor_is_an_effect() {
+            let editor = |value: &str| {
+                Some(FocusState {
+                    focused_value: Some(value.into()),
+                    ..focused(1).unwrap_or_default()
+                })
+            };
+            assert!(observed_change(&editor("old note"), &editor(""), false));
+            assert!(!observed_change(&editor("same"), &editor("same"), false));
+            assert!(!observed_change(&editor("old note"), &focused(1), false));
         }
 
         #[test]

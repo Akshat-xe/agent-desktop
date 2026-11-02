@@ -115,19 +115,14 @@ impl SystemOps for MacOSAdapter {
     }
 
     /// The Dock and the menu bar extras are always presented, so opening one
-    /// returns it without raising anything.
+    /// returns it without raising anything or moving the foreground, which is
+    /// why no policy floor applies.
     fn open_system_surface(
         &self,
         surface: SnapshotSurface,
-        policy: agent_desktop_core::InteractionPolicy,
+        _policy: agent_desktop_core::InteractionPolicy,
         lease: &InteractionLease,
     ) -> Result<WindowInfo, AdapterError> {
-        if !policy.allow_focus_steal {
-            return Err(AdapterError::policy_denied_for_policy(
-                "open a shell surface",
-                policy,
-            ));
-        }
         crate::tree::shell_surface::resolve_surface(
             surface,
             crate::tree::locator_deadline::from_operation(lease.deadline())?,
