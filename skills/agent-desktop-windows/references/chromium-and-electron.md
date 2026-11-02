@@ -57,8 +57,9 @@ read cannot fix it. After you launch a WPF application, use
 
 ## Unnamed Web Content
 
-A ref to web content with **no accessible name** resolves only if its role was
-unique in the window when you took it and still is. Bounds are never identity.
-A ref to one of several unnamed elements with the same role returns
-`AMBIGUOUS_TARGET`; use headed coordinate input from a parent's bounds, or a
-CDP client (`launch --cdp`).
+A ref to web content with **no accessible name** is identified by its role plus
+any AutomationId or description it carries, and resolves only if that
+combination was unique in the window when you took it and still is. Bounds are
+never identity. A ref to one of several unnamed elements that share role,
+AutomationId and description returns `AMBIGUOUS_TARGET`; use headed coordinate
+input from a parent's bounds, or a CDP client (`launch --cdp`).

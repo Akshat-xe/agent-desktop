@@ -7,6 +7,7 @@ use crate::{
     refs::ref_alloc_options::RefAllocOptions,
     refs::ref_alloc_scope::RefAllocScope,
     refs::ref_alloc_source::RefAllocSource,
+    refs::ref_root_read::{RootRead, read_saved_root},
     refs::refs_store::RefStore,
     snapshot::SnapshotResult,
 };
@@ -153,14 +154,16 @@ fn drill_capture(
     deadline: crate::Deadline,
 ) -> Result<DrillCapture, AppError> {
     ObservationRequest::snapshot(opts, deadline).validate()?;
-    if crate::refs::ref_identity::element_token(entry).is_some() {
-        let subtree = read_token_subtree(adapter, opts, entry, deadline)?;
-        if !ref_alloc::selects_tokenless_entry(&subtree.tree) {
-            return Ok(subtree);
-        }
-    }
-    let (window, mut observed, index) =
-        crate::refs::resolve_saved_ref::observe_saved_ref(adapter, entry, deadline, None, false)?;
+    let (window, mut observed, index) = match read_saved_root(
+        adapter,
+        entry,
+        deadline,
+        |window, handle| read_token_subtree(adapter, opts, entry, window, handle, deadline),
+        |subtree| !ref_alloc::selects_tokenless_entry(&subtree.tree),
+    )? {
+        RootRead::Subtree(subtree) => return Ok(subtree),
+        RootRead::Window(window_read) => *window_read,
+    };
     if !observed.is_exhaustive() {
         return Err(drill_incomplete(observed.nodes.len()));
     }
@@ -186,20 +189,20 @@ fn drill_capture(
 
 /// A token root's subtree read alone, through the adapter that owns the
 /// token. It proves nothing, so it stands only for a drill whose refs all carry
-/// tokens; the window is resolved first, so a failed drill persists nothing.
+/// tokens.
 fn read_token_subtree(
     adapter: &dyn PlatformAdapter,
     opts: &TreeOptions,
     entry: &crate::refs::RefEntry,
+    window: &WindowInfo,
+    handle: &crate::adapter::NativeHandle,
     deadline: crate::Deadline,
 ) -> Result<DrillCapture, AppError> {
-    let window = crate::refs::resolve_saved_ref::recorded_window(adapter, entry, deadline)?;
-    let handle = adapter.resolve_element_strict(entry, deadline)?;
     let options = opts.with_ref_identity_bounds();
     let mut observed = crate::tree::renderer_accessibility::observe_tree(
         adapter,
         ObservationRoot::Element {
-            handle: &handle,
+            handle,
             entry,
             root_ref: None,
         },
@@ -211,7 +214,7 @@ fn read_token_subtree(
         return Err(drill_incomplete(nodes_observed));
     }
     Ok(DrillCapture {
-        window,
+        window: window.clone(),
         tree,
         nodes_observed,
         path_prefix: entry.scope.path.clone(),

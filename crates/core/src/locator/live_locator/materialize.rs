@@ -51,6 +51,20 @@ pub(crate) fn addressability(evidence: &LocatorEvidence) -> (bool, bool) {
     }
 }
 
+/// Whether publishing refs from this observation could publish one that names
+/// its node without an element token, which only a window-wide capture proof
+/// can vouch for. An unread token counts as absent.
+pub(crate) fn selects_tokenless_entry(tree: &ObservedTree) -> bool {
+    tree.nodes.iter().any(|node| {
+        addressability(&node.evidence).0
+            && !node
+                .evidence
+                .identifiers
+                .retained_object()
+                .is_some_and(crate::refs::ref_identity::is_element_token)
+    })
+}
+
 /// Whether every field a ref entry and a match response carry was read, none
 /// of them unknown. An observation of that kind leaves nothing for a second
 /// read of the same node to add.

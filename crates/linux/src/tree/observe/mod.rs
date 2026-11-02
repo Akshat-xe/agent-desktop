@@ -89,10 +89,11 @@ type Walker<'a> = dyn FnMut(
     + 'a;
 
 /// Walks until the tree has stopped growing when the window of a web engine
-/// is observed, otherwise once. An element a ref already names sits in a tree
-/// that has already been observed, so it does not wait for window population.
-/// The second value is false when the wait ended on its budget with
-/// the tree still changing. A later read that fails because the budget ran
+/// is observed, otherwise once. A read that only resolves a saved ref is
+/// never waited for: the ref was captured from a settled tree, and one
+/// complete read of the live window is what it is judged by. The second value
+/// is false when the wait ended on its budget with the tree still changing.
+/// A later read that fails because the budget ran
 /// out returns the walk before it; any other failure is the failure of the
 /// observation.
 fn settled_walk(
@@ -102,7 +103,9 @@ fn settled_walk(
     request: &ObservationRequest,
     host: &mut SettleHost<'_>,
 ) -> Result<(Walk<ObservedRead>, bool), AdapterError> {
-    let web_process = matches!(root, ObservationRoot::Window(_)) && (host.is_web_process)(element)?;
+    let settles = !request.observation_mode.identity_only;
+    let web_process =
+        settles && matches!(root, ObservationRoot::Window(_)) && (host.is_web_process)(element)?;
     let mut tracker: Option<(Readiness, Instant)> = None;
     let mut previous: Option<Walk<ObservedRead>> = None;
     let mut sampling_deadline = request.deadline;
@@ -132,7 +135,8 @@ fn settled_walk(
         {
             return nested_surface(element, walk, limits, request, host);
         }
-        let waits = matches!(root, ObservationRoot::Window(_))
+        let waits = settles
+            && matches!(root, ObservationRoot::Window(_))
             && (web_process || has_web_document(&walk.root));
         if !walk.complete || !waits {
             return Ok(if purpose == ReadPurpose::Sampling {

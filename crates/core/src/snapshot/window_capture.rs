@@ -53,7 +53,8 @@ pub(crate) fn capture_window(
     let shallow = depth < crate::refs::resolve_saved_ref::WHOLE_WINDOW_DEPTH;
     let mut unproven = None;
     if shallow && !adapter.retains_element_tokens() {
-        match whole_window(adapter, opts, window, deadline) {
+        let attempt = deadline.capped(deadline.remaining() * 3 / 4);
+        match whole_window(adapter, opts, window, attempt) {
             Ok(observed) => {
                 return Ok(WindowCapture {
                     observed,
