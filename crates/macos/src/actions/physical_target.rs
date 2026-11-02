@@ -98,7 +98,6 @@ fn target_window(
     }
     match result {
         Ok(Some(window)) => {
-            crate::tree::properties::attributes::set_messaging_timeout(&window, deadline)?;
             let main = crate::tree::properties::attributes::copy_bool_attr_result(
                 &window, "AXMain", deadline,
             );

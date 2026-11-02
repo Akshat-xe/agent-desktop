@@ -183,7 +183,7 @@ fn resolve_window_surface(
                 },
             )?
         }
-        SnapshotSurface::Window if window.is_process_owner() => {
+        SnapshotSurface::Window | SnapshotSurface::Dock if window.is_process_owner() => {
             crate::tree::properties::element::element_for_pid(pid)
         }
         SnapshotSurface::Window => {
@@ -197,13 +197,9 @@ fn resolve_window_surface(
             .ok_or_else(|| AdapterError::element_not_found("No open context menu"))?,
         SnapshotSurface::Menubar => crate::tree::surfaces::menubar_for_pid(pid, deadline)?
             .ok_or_else(|| AdapterError::element_not_found("No menu bar found"))?,
-        SnapshotSurface::MenuBarExtras | SnapshotSurface::Dock => {
-            crate::tree::shell_surface::root_for(surface, pid, deadline)?.ok_or_else(|| {
-                AdapterError::new(
-                    ErrorCode::ElementNotFound,
-                    format!("No {} found", surface.as_str()),
-                )
-            })?
+        SnapshotSurface::MenuBarExtras => {
+            crate::tree::shell_surface::extras_menu_bar(pid, deadline)?
+                .ok_or_else(|| AdapterError::element_not_found("No menu bar extras found"))?
         }
         _ => return Err(AdapterError::not_supported("snapshot surface")),
     };

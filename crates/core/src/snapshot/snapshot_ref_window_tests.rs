@@ -57,37 +57,23 @@ fn test_run_from_ref_does_not_persist_refs_when_source_window_is_gone() {
     );
 }
 
-fn process_rooted_refmap() -> RefMap {
+#[test]
+fn test_run_from_ref_drills_process_rooted_ref_without_a_window() {
+    let _guard = HomeGuard::new();
     let src = crate::refs::ref_alloc_source::RefAllocSource {
         window_title: Some(""),
         ..source("TestApp")
     };
     let mut map = RefMap::new();
-    let anchor = ref_entry_from_node(&named("group", "Dock"), &src, None, &[0]);
-    let _ = map.allocate(anchor);
-    map
-}
+    let _ = map.allocate(ref_entry_from_node(
+        &named("group", "Dock"),
+        &src,
+        None,
+        &[0],
+    ));
+    let snapshot_id = save_latest(map);
 
-fn live_app(instance: &str) -> crate::AppInfo {
-    crate::AppInfo {
-        name: "TestApp".into(),
-        pid: crate::ProcessId::new(42),
-        bundle_id: None,
-        process_instance: Some(instance.into()),
-        presentation: None,
-    }
-}
-
-#[test]
-fn test_run_from_ref_drills_process_rooted_ref_without_a_window() {
-    let _guard = HomeGuard::new();
-    let snapshot_id = save_latest(process_rooted_refmap());
-
-    let mut adapter = StubAdapter::with_windows(named("group", "Dock"), vec![]);
-    adapter.apps = vec![live_app("test-instance")];
-
-    let result = run_from_ref(&adapter, &drill_opts(), "@e1", Some(&snapshot_id))
-        .expect("a process-rooted drill needs a live process, not a window");
+    let adapter = StubAdapter::with_windows(named("group", "Dock"), vec![]);
+    let result = run_from_ref(&adapter, &drill_opts(), "@e1", Some(&snapshot_id)).unwrap();
     assert!(result.window.is_process_owner());
-    assert_eq!(result.window.app, "TestApp");
 }

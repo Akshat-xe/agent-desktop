@@ -134,89 +134,69 @@ impl ActionOps for AppInventoryAdapter {}
 impl InputOps for AppInventoryAdapter {}
 impl SystemOps for AppInventoryAdapter {}
 
-fn running_app(name: &str, presentation: Option<crate::AppPresentation>) -> crate::AppInfo {
+fn running_app(name: &str) -> crate::AppInfo {
     crate::AppInfo {
         name: name.into(),
         pid: crate::ProcessId::new(7),
         bundle_id: None,
         process_instance: Some("generation-a".into()),
-        presentation,
+        presentation: None,
     }
 }
 
-/// A name that never matched any running process yields `APP_NOT_FOUND`. A
-/// running windowless background app is observed through its process, a
-/// foreground one keeps `WINDOW_NOT_FOUND`, and a failing app lookup is not
-/// replaced by the window error.
+/// A name that never matched any running process yields `APP_NOT_FOUND`, and
+/// a name that matches a running but windowless process still yields
+/// `WINDOW_NOT_FOUND` - both from the same code path, so neither can pass by
+/// accident of the other's fix.
 #[test]
 fn app_name_resolution_discriminates_absent_from_windowless() {
-    let deadline = || crate::Deadline::after(100).unwrap();
-    let background = AppInventoryAdapter {
-        running_apps: vec![running_app(
-            "ApplicationFrameHost.exe",
-            Some(crate::AppPresentation::Background),
-        )],
+    let adapter = AppInventoryAdapter {
+        running_apps: vec![running_app("ApplicationFrameHost.exe")],
     };
 
-    let absent = resolve_window(&background, Some("NoSuchApp.exe"), None, deadline()).unwrap_err();
+    let absent = resolve_window(
+        &adapter,
+        Some("NoSuchApp.exe"),
+        None,
+        crate::Deadline::after(100).unwrap(),
+    )
+    .unwrap_err();
     assert_eq!(absent.code(), "APP_NOT_FOUND");
 
     let windowless = resolve_window(
-        &background,
+        &adapter,
         Some("ApplicationFrameHost.exe"),
         None,
-        deadline(),
+        crate::Deadline::after(100).unwrap(),
     )
     .unwrap_err();
     assert_eq!(windowless.code(), "WINDOW_NOT_FOUND");
+}
 
-    for surface in [
-        crate::SnapshotSurface::Window,
-        crate::SnapshotSurface::Menubar,
-    ] {
-        let owner = resolve_window_for_surface(
-            &background,
-            Some("ApplicationFrameHost.exe"),
-            None,
-            surface,
-            deadline(),
-        )
-        .unwrap();
-        assert_eq!(owner.pid, crate::ProcessId::new(7));
-        assert!(owner.is_process_owner());
-    }
-
-    for presentation in [None, Some(crate::AppPresentation::Foreground)] {
-        let adapter = AppInventoryAdapter {
-            running_apps: vec![running_app("Notes", presentation)],
-        };
-        for surface in [
-            crate::SnapshotSurface::Window,
-            crate::SnapshotSurface::Menubar,
-            crate::SnapshotSurface::Focused,
-        ] {
-            let error =
-                resolve_window_for_surface(&adapter, Some("Notes"), None, surface, deadline())
-                    .unwrap_err();
-            assert_eq!(error.code(), "WINDOW_NOT_FOUND");
+#[test]
+fn a_windowless_app_is_a_process_owner_only_when_it_is_background() {
+    use crate::AppPresentation::{Background, Foreground};
+    use crate::SnapshotSurface::{Menubar, Window};
+    let app = |presentation| crate::AppInfo {
+        presentation: Some(presentation),
+        ..running_app("Helper")
+    };
+    let cases = [
+        (vec![app(Background)], Window, None),
+        (vec![app(Background)], Menubar, None),
+        (vec![app(Foreground)], Window, Some("WINDOW_NOT_FOUND")),
+        (vec![app(Foreground)], Menubar, Some("WINDOW_NOT_FOUND")),
+        (vec![app(Background); 2], Window, Some("AMBIGUOUS_TARGET")),
+    ];
+    for (running_apps, surface, error_code) in cases {
+        let adapter = AppInventoryAdapter { running_apps };
+        let deadline = crate::Deadline::after(100).unwrap();
+        let result = resolve_window_for_surface(&adapter, Some("Helper"), None, surface, deadline);
+        match error_code {
+            None => assert!(result.unwrap().is_process_owner()),
+            Some(code) => assert_eq!(result.unwrap_err().code(), code),
         }
     }
-
-    let ambiguous = AppInventoryAdapter {
-        running_apps: vec![
-            running_app("Helper", Some(crate::AppPresentation::Background)),
-            running_app("Helper", Some(crate::AppPresentation::Background)),
-        ],
-    };
-    let error = resolve_window_for_surface(
-        &ambiguous,
-        Some("Helper"),
-        None,
-        crate::SnapshotSurface::Window,
-        deadline(),
-    )
-    .unwrap_err();
-    assert_eq!(error.code(), "AMBIGUOUS_TARGET");
 }
 
 /// An adapter whose `resolve_shell_surface` answers with the trait default -

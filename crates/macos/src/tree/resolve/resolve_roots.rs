@@ -1,9 +1,9 @@
 use agent_desktop_core::{AdapterError, RefEntry, SnapshotSurface};
 
 use super::resolve_read_context::ResolveReadContext;
-use crate::tree::AXElement;
 use crate::tree::element_dedupe::push_unique;
 use crate::tree::properties::element::element_for_pid;
+use crate::tree::{AXElement, shell_surface::extras_menu_bar};
 
 #[cfg(target_os = "macos")]
 pub(in crate::tree) struct CandidateRoots {
@@ -116,7 +116,9 @@ fn source_surface_scoped_roots(
         SnapshotSurface::Sheet => crate::tree::surfaces::sheet_for_pid(pid, deadline)?,
         SnapshotSurface::Popover => crate::tree::surfaces::popover_for_pid(pid, deadline)?,
         SnapshotSurface::Alert => crate::tree::surfaces::alert_for_pid(pid, deadline)?,
-        surface => crate::tree::shell_surface::root_for(surface, pid, deadline)?,
+        SnapshotSurface::Dock => Some(application.clone()),
+        SnapshotSurface::MenuBarExtras => extras_menu_bar(pid, deadline)?,
+        _ => None,
     };
     let Some(root) = root else {
         return Err(

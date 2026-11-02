@@ -13,18 +13,12 @@ const MENU_BAR_EXTRAS_HOSTS: [&str; 3] = [
     "com.apple.systemuiserver",
 ];
 
-/// The surface's root in `pid`, or `None` when that process does not present it.
-pub(crate) fn root_for(
-    surface: SnapshotSurface,
+/// The system menu bar extras root in `pid`, or `None` when it presents none.
+pub(crate) fn extras_menu_bar(
     pid: i32,
     deadline: Instant,
 ) -> Result<Option<AXElement>, AdapterError> {
-    let app = element_for_pid(pid);
-    match surface {
-        SnapshotSurface::MenuBarExtras => surface_read::element(&app, "AXExtrasMenuBar", deadline),
-        SnapshotSurface::Dock => Ok(Some(app)),
-        _ => Ok(None),
-    }
+    surface_read::element(&element_for_pid(pid), "AXExtrasMenuBar", deadline)
 }
 
 pub(crate) fn resolve_surface(
@@ -43,7 +37,7 @@ pub(crate) fn resolve_surface(
             .filter(|app| app.bundle_id.as_deref() == Some(*host))
         {
             let pid = crate::system::process::process_identity::to_pid_t(app.pid)?;
-            if root_for(surface, pid, deadline)?.is_some() {
+            if surface == SnapshotSurface::Dock || extras_menu_bar(pid, deadline)?.is_some() {
                 return Ok(WindowInfo::for_process(app));
             }
         }
