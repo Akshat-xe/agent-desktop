@@ -31,6 +31,9 @@ pub(in crate::tree) fn candidate_roots(
     if source_window_scope_required(entry) {
         return source_window_scoped_roots(&application, entry, context);
     }
+    if let Some(roots) = super::resolve_source_app::app_rooted_roots(&application, entry) {
+        return Ok(roots);
+    }
 
     let mut roots = Vec::new();
     let windows = read_root_array(&application, "AXWindows", context)?;

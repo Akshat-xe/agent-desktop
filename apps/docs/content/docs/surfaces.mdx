@@ -109,7 +109,7 @@ To reach one item, `find --surface` is cheaper than a dump:
 Which window agent-desktop reads depends on the kind:
 
 - `sheet`, `popover`, and `alert`: the app's accessible windows in order, focused first and then visible, and the first that presents one wins. With no `--app`, the frontmost process.
-- `menu`, `menubar`, and `focused`: any window of the app identifies the process, so several open windows are never ambiguous. `menubar` and `menu-bar-extras` also work for an app with no window; the result then has no `window` field.
+- `menu`, `menubar`, and `focused`: any window of the app identifies the process, so several open windows are never ambiguous. `menubar` and `menu-bar-extras` also work for an app with no window; the result then has no `window` field. On macOS, `window` and `focused` do the same: `--app` with no window reads the app's process.
 - A shell kind needs no `--app`, because no application owns it.
 - `--window-id` pins the read to one window.
 

@@ -268,7 +268,7 @@ fn is_retryable_resolution_error(error: &AdapterError) -> bool {
 #[cfg(target_os = "macos")]
 fn can_use_path_fast_path(entry: &RefEntry) -> bool {
     let source_scoped = if entry.source.source_surface == SnapshotSurface::Window {
-        source_window_scope_required(entry)
+        source_window_scope_required(entry) || resolve_source_app::app_rooted(entry)
     } else {
         true
     };
@@ -281,7 +281,7 @@ fn can_use_path_fast_path(entry: &RefEntry) -> bool {
 #[cfg(target_os = "macos")]
 fn can_use_locator_anchor_path(entry: &RefEntry) -> bool {
     let source_scoped = if entry.source.source_surface == SnapshotSurface::Window {
-        source_window_scope_required(entry)
+        source_window_scope_required(entry) || resolve_source_app::app_rooted(entry)
     } else {
         true
     };

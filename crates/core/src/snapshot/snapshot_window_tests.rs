@@ -172,16 +172,22 @@ fn app_name_resolution_discriminates_absent_from_windowless() {
     .unwrap_err();
     assert_eq!(windowless.code(), "WINDOW_NOT_FOUND");
 
-    let menubar_owner = resolve_window_for_surface(
-        &adapter,
-        Some("ApplicationFrameHost.exe"),
-        None,
+    for surface in [
+        crate::SnapshotSurface::Window,
+        crate::SnapshotSurface::Focused,
         crate::SnapshotSurface::Menubar,
-        crate::Deadline::after(100).unwrap(),
-    )
-    .unwrap();
-    assert_eq!(menubar_owner.pid, crate::ProcessId::new(7));
-    assert!(menubar_owner.id.is_empty());
+    ] {
+        let owner = resolve_window_for_surface(
+            &adapter,
+            Some("ApplicationFrameHost.exe"),
+            None,
+            surface,
+            crate::Deadline::after(100).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(owner.pid, crate::ProcessId::new(7));
+        assert!(owner.id.is_empty());
+    }
 }
 
 /// An adapter whose `resolve_shell_surface` answers with the trait default -

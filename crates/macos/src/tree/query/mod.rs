@@ -183,6 +183,9 @@ fn resolve_window_surface(
                 },
             )?
         }
+        SnapshotSurface::Window if window.id.is_empty() => {
+            crate::tree::properties::element::element_for_pid(pid)
+        }
         SnapshotSurface::Window => {
             crate::system::window::window_resolve::window_element_for_info_with_deadline(
                 window, deadline,

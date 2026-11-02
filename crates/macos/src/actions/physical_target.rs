@@ -4,7 +4,7 @@ use crate::tree::AXElement;
 
 pub(crate) struct PreparedPhysicalTarget {
     identity: crate::system::process::process_identity::ProcessIdentity,
-    window: AXElement,
+    window: Option<AXElement>,
 }
 
 impl PreparedPhysicalTarget {
@@ -24,9 +24,20 @@ impl PreparedPhysicalTarget {
                 )
             })?;
         let window = target_window(element, deadline)?;
-        crate::system::focus::verify_app_focused(pid, deadline)?;
-        crate::system::focus::verify_window_main(&window, deadline)?;
-        Ok(Self { identity, window })
+        let prepared = Self { identity, window };
+        prepared.verify_focus(deadline)?;
+        Ok(prepared)
+    }
+
+    /// Requires the app to be frontmost and the window main, unless the target
+    /// sits in a floating surface that never becomes main; the hit test still
+    /// gates delivery.
+    fn verify_focus(&self, deadline: Deadline) -> Result<(), AdapterError> {
+        let Some(window) = &self.window else {
+            return Ok(());
+        };
+        crate::system::focus::verify_app_focused(self.identity.pid(), deadline)?;
+        crate::system::focus::verify_window_main(window, deadline)
     }
 
     pub(crate) fn verify_pointer(
@@ -35,8 +46,7 @@ impl PreparedPhysicalTarget {
         point: &Point,
         deadline: Deadline,
     ) -> Result<(), AdapterError> {
-        crate::system::focus::verify_app_focused(self.identity.pid(), deadline)?;
-        crate::system::focus::verify_window_main(&self.window, deadline)?;
+        self.verify_focus(deadline)?;
         match crate::tree::hit_test::hit_test_ax_element(element, point.clone(), deadline)? {
             agent_desktop_core::adapter::hit_test::HitTestResult::ReachesTarget => {}
             agent_desktop_core::adapter::hit_test::HitTestResult::InterceptedBy {
@@ -73,7 +83,12 @@ impl PreparedPhysicalTarget {
     }
 }
 
-fn target_window(element: &AXElement, deadline: Deadline) -> Result<AXElement, AdapterError> {
+/// The window that must stay main during input, or `None` when the element has
+/// no owning window or that window reports no `AXMain` (a floating panel).
+fn target_window(
+    element: &AXElement,
+    deadline: Deadline,
+) -> Result<Option<AXElement>, AdapterError> {
     crate::tree::properties::attributes::set_messaging_timeout(element, deadline)?;
     let result = crate::tree::properties::attributes::copy_element_attr_result(
         element, "AXWindow", deadline,
@@ -82,12 +97,14 @@ fn target_window(element: &AXElement, deadline: Deadline) -> Result<AXElement, A
         return Err(deadline.timeout_error());
     }
     match result {
-        Ok(Some(window)) => Ok(window),
-        Ok(None) => Err(AdapterError::new(
-            ErrorCode::ActionFailed,
-            "Physical input target has no verified owning window",
-        )
-        .with_details(serde_json::json!({ "physical_delivery_started": false }))),
+        Ok(Some(window)) => {
+            crate::tree::properties::attributes::set_messaging_timeout(&window, deadline)?;
+            let main = crate::tree::properties::attributes::copy_bool_attr_result(
+                &window, "AXMain", deadline,
+            );
+            Ok(Some(window).filter(|_| !matches!(main, Ok(None))))
+        }
+        Ok(None) => Ok(None),
         Err(error) => Err(AdapterError::new(
             ErrorCode::ActionFailed,
             "Could not verify the physical input target window",

@@ -5,6 +5,25 @@ use crate::{
     adapter::{PlatformAdapter, WindowFilter},
 };
 
+/// A `WindowInfo` with an empty id that identifies the app's process, for
+/// surfaces read from the process rather than a window.
+pub(crate) fn process_owner(
+    adapter: &dyn PlatformAdapter,
+    app: &str,
+    deadline: Deadline,
+) -> Result<WindowInfo, AppError> {
+    let app = resolve_app(Some(app), adapter, deadline)?;
+    Ok(WindowInfo {
+        id: String::new(),
+        title: String::new(),
+        app: app.name,
+        pid: app.pid,
+        process_instance: app.process_instance,
+        bounds: None,
+        state: Default::default(),
+    })
+}
+
 pub(crate) fn resolve_app(
     app: Option<&str>,
     adapter: &dyn PlatformAdapter,

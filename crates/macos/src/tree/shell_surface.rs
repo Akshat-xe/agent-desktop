@@ -22,9 +22,7 @@ pub(crate) fn root_for(
     let app = element_for_pid(pid);
     match surface {
         SnapshotSurface::MenuBarExtras => surface_read::element(&app, "AXExtrasMenuBar", deadline),
-        SnapshotSurface::Dock => Ok(surface_read::elements(&app, "AXChildren", deadline)?
-            .into_iter()
-            .next()),
+        SnapshotSurface::Dock => Ok(Some(app)),
         _ => Ok(None),
     }
 }
