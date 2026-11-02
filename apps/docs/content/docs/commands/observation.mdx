@@ -277,4 +277,4 @@ agent-desktop --headed open-system-surface --surface KIND
 }
 ```
 
-The command takes the foreground, so headless mode refuses it with `POLICY_DENIED` before anything is raised; pass `--headed`. A kind the OS does not expose returns `PLATFORM_NOT_SUPPORTED`, with the alternative in `platform_detail` where one exists. macOS opens none, so every call there returns `PLATFORM_NOT_SUPPORTED`: its `dock` and `menu-bar-extras` are always on screen. Which kinds open on Windows and Linux is on their platform pages.
+The command takes the foreground, so headless mode refuses it with `POLICY_DENIED` before anything is raised; pass `--headed`. A kind the OS does not expose returns `PLATFORM_NOT_SUPPORTED`, with the alternative in `platform_detail` where one exists. On macOS, `dock` and `menu-bar-extras` are always on screen, so the command returns them at once; open Control Center or Notification Center by clicking its `menu-bar-extras` item. Which kinds open on Windows and Linux is on their platform pages.

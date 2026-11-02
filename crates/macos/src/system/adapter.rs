@@ -114,6 +114,26 @@ impl SystemOps for MacOSAdapter {
         crate::system::signals::supported_surfaces_impl()
     }
 
+    /// The Dock and the menu bar extras are always presented, so opening one
+    /// returns it without raising anything.
+    fn open_system_surface(
+        &self,
+        surface: SnapshotSurface,
+        policy: agent_desktop_core::InteractionPolicy,
+        lease: &InteractionLease,
+    ) -> Result<WindowInfo, AdapterError> {
+        if !policy.allow_focus_steal {
+            return Err(AdapterError::policy_denied_for_policy(
+                "open a shell surface",
+                policy,
+            ));
+        }
+        crate::tree::shell_surface::resolve_surface(
+            surface,
+            crate::tree::locator_deadline::from_operation(lease.deadline())?,
+        )
+    }
+
     fn capture_signal_baseline(
         &self,
         filter: &SignalFilter,

@@ -157,4 +157,4 @@ agent-desktop --headed open-system-surface --surface action-center
 agent-desktop snapshot --surface action-center -i --compact
 ```
 
-It takes the foreground, so headless mode refuses it with `POLICY_DENIED`; pass `--headed` (see [Headed mode](/desktop/guides/headed-mode)). An already-present surface returns without being raised again. A kind the OS does not expose returns `PLATFORM_NOT_SUPPORTED`, and `platform_detail` names the alternative. macOS opens none: its `dock` and `menu-bar-extras` are always on screen. Which kinds open on Windows and Linux is on their platform pages.
+It takes the foreground, so headless mode refuses it with `POLICY_DENIED`; pass `--headed` (see [Headed mode](/desktop/guides/headed-mode)). An already-present surface returns without being raised again. A kind the OS does not expose returns `PLATFORM_NOT_SUPPORTED`, and `platform_detail` names the alternative. On macOS, `dock` and `menu-bar-extras` are always on screen, so the command returns them at once; open Control Center or Notification Center by clicking its `menu-bar-extras` item. Which kinds open on Windows and Linux is on their platform pages.

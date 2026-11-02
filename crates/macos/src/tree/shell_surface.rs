@@ -44,7 +44,14 @@ pub(crate) fn resolve_surface(
     let hosts: &[&str] = match surface {
         SnapshotSurface::Dock => &["com.apple.dock"],
         SnapshotSurface::MenuBarExtras => &MENU_BAR_EXTRAS_HOSTS,
-        _ => return Err(AdapterError::not_supported("resolve_shell_surface")),
+        _ => {
+            return Err(AdapterError::new(
+                ErrorCode::PlatformNotSupported,
+                format!("'{}' is not a macOS shell surface", surface.as_str()),
+            )
+            .with_suggestion("Use dock or menu-bar-extras; open Control Center or Notification Center by clicking its menu-bar-extras item")
+            .with_disposition(agent_desktop_core::DeliverySemantics::not_delivered()));
+        }
     };
     let apps = crate::system::app::workspace_apps::list_apps_inventory_until(deadline)?.apps;
     for host in hosts {
