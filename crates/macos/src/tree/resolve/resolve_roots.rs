@@ -113,8 +113,7 @@ fn source_surface_scoped_roots(
         SnapshotSurface::Sheet => crate::tree::surfaces::sheet_for_pid(pid, deadline)?,
         SnapshotSurface::Popover => crate::tree::surfaces::popover_for_pid(pid, deadline)?,
         SnapshotSurface::Alert => crate::tree::surfaces::alert_for_pid(pid, deadline)?,
-        SnapshotSurface::Window => None,
-        _ => None,
+        surface => crate::tree::shell_surface::root_for(surface, pid, deadline)?,
     };
     let Some(root) = root else {
         return Err(

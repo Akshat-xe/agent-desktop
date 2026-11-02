@@ -171,6 +171,17 @@ fn app_name_resolution_discriminates_absent_from_windowless() {
     )
     .unwrap_err();
     assert_eq!(windowless.code(), "WINDOW_NOT_FOUND");
+
+    let menubar_owner = resolve_window_for_surface(
+        &adapter,
+        Some("ApplicationFrameHost.exe"),
+        None,
+        crate::SnapshotSurface::Menubar,
+        crate::Deadline::after(100).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(menubar_owner.pid, crate::ProcessId::new(7));
+    assert!(menubar_owner.id.is_empty());
 }
 
 /// An adapter whose `resolve_shell_surface` answers with the trait default -
@@ -295,14 +306,18 @@ fn a_window_owned_surface_kind_is_not_routed_to_the_seam() {
         resolution: Ok(shell_window()),
     };
 
-    let resolved = resolve_window_for_surface(
-        &adapter,
-        Some("WhatsApp"),
-        None,
+    for surface in [
         crate::SnapshotSurface::Sheet,
-        crate::Deadline::after(100).unwrap(),
-    )
-    .unwrap();
-
-    assert_eq!(resolved.id, "w-1");
+        crate::SnapshotSurface::MenuBarExtras,
+    ] {
+        let resolved = resolve_window_for_surface(
+            &adapter,
+            Some("WhatsApp"),
+            None,
+            surface,
+            crate::Deadline::after(100).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(resolved.id, "w-1");
+    }
 }

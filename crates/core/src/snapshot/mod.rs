@@ -59,7 +59,7 @@ pub fn build(
         source: RefAllocSource {
             pid: window.pid,
             app: Some(window.app.as_str()),
-            window_id: Some(window.id.as_str()),
+            window_id: Some(window.id.as_str()).filter(|id| !id.is_empty()),
             window_title: Some(window.title.as_str()),
             window_bounds_hash: window.bounds.as_ref().and_then(crate::Rect::bounds_hash),
             process_instance: window.process_instance.as_deref(),
@@ -105,7 +105,8 @@ pub(crate) fn resolve_window_for_surface(
     if window_id.is_some() || matches!(surface, crate::SnapshotSurface::Window) {
         return resolve_window(adapter, app_name, window_id, deadline);
     }
-    if is_shell_surface(surface) {
+    let app_status_item = app_name.is_some() && surface == crate::SnapshotSurface::MenuBarExtras;
+    if is_shell_surface(surface) && !app_status_item {
         match adapter.resolve_shell_surface(surface, deadline) {
             Ok(window) => return Ok(window),
             Err(error) if !error.is_default_not_supported("resolve_shell_surface") => {
@@ -114,8 +115,21 @@ pub(crate) fn resolve_window_for_surface(
             Err(_) => {}
         }
     }
+    let windows = windows_for_app(adapter, app_name, deadline)?;
+    if let (true, Some(app)) = (windows.is_empty() && is_process_surface(surface), app_name) {
+        let app = crate::system::app_lookup::resolve_app(Some(app), adapter, deadline)?;
+        return Ok(WindowInfo {
+            id: String::new(),
+            title: String::new(),
+            app: app.name,
+            pid: app.pid,
+            process_instance: app.process_instance,
+            bounds: None,
+            state: Default::default(),
+        });
+    }
     crate::system::window_lookup::select_surface_owner(
-        windows_for_app(adapter, app_name, deadline)?,
+        windows,
         crate::AdapterError::new(
             crate::ErrorCode::WindowNotFound,
             format!(
@@ -139,6 +153,17 @@ fn is_shell_surface(surface: crate::SnapshotSurface) -> bool {
             | crate::SnapshotSurface::SystemTrayOverflow
             | crate::SnapshotSurface::ActionCenter
             | crate::SnapshotSurface::QuickSettings
+            | crate::SnapshotSurface::Dock
+            | crate::SnapshotSurface::MenuBarExtras
+    )
+}
+
+/// Surfaces read from the owning process alone, so a menu bar app with no
+/// window still presents them; its owner then carries an empty window id.
+fn is_process_surface(surface: crate::SnapshotSurface) -> bool {
+    matches!(
+        surface,
+        crate::SnapshotSurface::Menubar | crate::SnapshotSurface::MenuBarExtras
     )
 }
 

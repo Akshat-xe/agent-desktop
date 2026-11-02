@@ -19,6 +19,8 @@ struct BridgedApplication {
     pid: i32,
     #[serde(default)]
     bundle_id: Option<String>,
+    #[serde(default)]
+    executable: Option<String>,
     launch_time: NullableLaunchTime,
     activation_policy: ActivationPolicy,
 }
@@ -51,6 +53,7 @@ pub(crate) struct WindowOwner {
     pub(crate) pid: i32,
     pub(crate) name: String,
     pub(crate) bundle_id: Option<String>,
+    pub(crate) executable: Option<String>,
     pub(crate) launch_time: Option<f64>,
     pub(crate) activation_policy: ActivationPolicy,
 }
@@ -72,10 +75,10 @@ impl WindowOwnerSnapshot {
             .iter()
             .filter(|owner| {
                 agent_desktop_core::app_name_matches(&owner.name, identifier)
-                    || owner
-                        .bundle_id
-                        .as_deref()
-                        .is_some_and(|bundle_id| bundle_id.eq_ignore_ascii_case(identifier))
+                    || [&owner.bundle_id, &owner.executable]
+                        .into_iter()
+                        .flatten()
+                        .any(|alias| alias.eq_ignore_ascii_case(identifier))
             })
             .map(|owner| owner.pid)
             .collect()
@@ -276,6 +279,7 @@ fn window_owner_snapshot_from_json(
             pid: app.pid,
             name: app.name,
             bundle_id: app.bundle_id,
+            executable: app.executable,
             launch_time,
             activation_policy: app.activation_policy,
         });

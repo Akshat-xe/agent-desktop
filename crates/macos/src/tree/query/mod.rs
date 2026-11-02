@@ -194,6 +194,14 @@ fn resolve_window_surface(
             .ok_or_else(|| AdapterError::element_not_found("No open context menu"))?,
         SnapshotSurface::Menubar => crate::tree::surfaces::menubar_for_pid(pid, deadline)?
             .ok_or_else(|| AdapterError::element_not_found("No menu bar found"))?,
+        SnapshotSurface::MenuBarExtras | SnapshotSurface::Dock => {
+            crate::tree::shell_surface::root_for(surface, pid, deadline)?.ok_or_else(|| {
+                AdapterError::new(
+                    ErrorCode::ElementNotFound,
+                    format!("No {} found", surface.as_str()),
+                )
+            })?
+        }
         _ => return Err(AdapterError::not_supported("snapshot surface")),
     };
     crate::tree::locator_deadline::remaining(deadline)?;
