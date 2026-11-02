@@ -83,6 +83,22 @@ CORE_OS_ALLOWLIST = {
     "trace/trace_tests.rs",
 }
 
+# Every CLI call is its own process that serves nothing. Only these files may
+# open a listener or server, and only for the reason beside them; a new entry
+# is a review decision. Test files and inline test modules are not scanned.
+LISTENER_ALLOWLIST = {
+    "crates/core/src/system/cdp_endpoint.rs",
+    "crates/macos/src/system/cursor_overlay/child.rs",
+    "crates/windows/src/system/cursor_overlay/server.rs",
+}
+LISTENER = re.compile(r"(?<![A-Za-z0-9_])(?:(?:UnixListener|TcpListener|UdpSocket|UnixDatagram)\s*::\s*bind\w*"
+                      r"|CreateNamedPipe[AW]?|NamedPipeServer|ServerOptions|libc\s*::\s*listen)(?![A-Za-z0-9_])")
+HOST_MARKER = "AGENT_DESKTOP_INTERNAL_COMMAND_HOST"
+HOST_MARKER_ALLOWLIST = {"crates/macos/src/system/process/legacy_host.rs"}
+TEST_FILE = re.compile(r"(^|/)tests/|_tests\.rs$|test_support")
+TEST_MODULE = re.compile(r"#\s*\[\s*cfg\s*\(\s*test\s*\)\s*\]\s*(?:pub(?:\s*\([^)]*\))?\s+)?mod\s+\w+\s*\{")
+
+
 STR = re.compile(r"__S(\d+)__")
 
 
@@ -256,6 +272,18 @@ def mod_decls(src):
         yield m.group(1), head, path_lit
 
 
+def production_code(code):
+    """The code with every inline `#[cfg(test)] mod name { ... }` block removed."""
+    out, i = [], 0
+    for m in TEST_MODULE.finditer(code):
+        if m.start() < i:
+            continue
+        out.append(code[i:m.start()])
+        i = balanced(code, m.end() - 1)
+    out.append(code[i:])
+    return "".join(out)
+
+
 def cfg_test(attrs_text):
     return any(re.search(r"(?<![A-Za-z0-9_])test(?![A-Za-z0-9_])", c) for c in re.findall(r"cfg\s*\(([^\]]*)\)", attrs_text))
 
@@ -347,6 +375,22 @@ def check(repo):
                           "behind PlatformAdapter, or add the file to CORE_OS_ALLOWLIST in review")
     for stale in sorted(CORE_OS_ALLOWLIST - seen):
         err("G5", f"CORE_OS_ALLOWLIST lists crates/core/src/{stale}, which no longer carries OS-conditional code")
+
+    serving = set()
+    for f, src in sources.items():
+        rel = os.path.relpath(f, repo).replace(os.sep, "/")
+        if TEST_FILE.search(rel):
+            continue
+        if LISTENER.search(production_code(src.code)):
+            if rel in LISTENER_ALLOWLIST:
+                serving.add(rel)
+            else:
+                err("G12", f"{rel} opens a listener or server; every call is its own process and serves nothing, "
+                           "so a new server needs a LISTENER_ALLOWLIST entry in review")
+        if rel not in HOST_MARKER_ALLOWLIST and any(HOST_MARKER in lit for lit in src.lits):
+            err("G12", f"{rel} names {HOST_MARKER}, the marker of the removed command host")
+    for stale in sorted(LISTENER_ALLOWLIST - serving):
+        err("G12", f"LISTENER_ALLOWLIST lists {stale}, which no longer opens a listener")
 
     for p in PLATFORMS:
         if not os.path.exists(os.path.join(repo, "crates", p, "Cargo.toml")):
@@ -540,14 +584,21 @@ PLANTS = {
             ("crates/core/src/tree/mod.rs", "pub mod node;\n#[cfg_attr(test, path = \"../input/mod.rs\")]\nmod misplaced;\n"),
             ("crates/core/src/tree/mod.rs", "pub mod node;\n#[path = \"@ABS@/crates/core/src/input/mod.rs\"]\nmod misplaced;\n")],
 }
+PLANTS["G12"] = [
+    ("crates/macos/src/system/host.rs", "fn f() { let _ = std::os::unix::net::UnixListener::bind(\"/tmp/h.sock\"); }\n"),
+    ("crates/core/src/system/host.rs", "fn f() { let _ = std::net::TcpListener::bind((\"127.0.0.1\", 0)); }\n"),
+    ("crates/windows/src/system/host.rs", "fn f() { let _ = CreateNamedPipeW; }\n"),
+    ("src/host.rs", "const MARKER: &str = \"AGENT_DESKTOP_INTERNAL_COMMAND_HOST=1\";\n"),
+]
 SUPPORT = {"G2": {"crates/core/custom.rs": "fn main() {}\n"},
            "G8": {"crates/linux/src/input/real_tests.rs": "impl SystemOps for crate::adapter::A {}\n"}}
 
 
 def self_test():
     """Plant one violation per case in a minimal clean workspace; every case must fire, the clean tree must pass."""
-    global CORE_OS_ALLOWLIST
+    global CORE_OS_ALLOWLIST, LISTENER_ALLOWLIST
     saved = CORE_OS_ALLOWLIST
+    saved_listeners = LISTENER_ALLOWLIST
     tmp = tempfile.mkdtemp(prefix="arch-selftest-")
     try:
         def build(overrides):
@@ -568,6 +619,7 @@ def self_test():
                     fh.write(text.replace("@ABS@", tmp))
 
         CORE_OS_ALLOWLIST = set()
+        LISTENER_ALLOWLIST = set()
         build({})
         clean = check(tmp)
         if clean:
@@ -583,8 +635,14 @@ def self_test():
         build({})
         if not [e for e in check(tmp) if e.startswith("G5:") and "no longer" in e]:
             raise SystemExit("self-test: a stale CORE_OS_ALLOWLIST entry was not reported")
+        CORE_OS_ALLOWLIST = set()
+        LISTENER_ALLOWLIST = {"crates/core/src/lib.rs"}
+        build({})
+        if not [e for e in check(tmp) if e.startswith("G12:") and "no longer" in e]:
+            raise SystemExit("self-test: a stale LISTENER_ALLOWLIST entry was not reported")
     finally:
         CORE_OS_ALLOWLIST = saved
+        LISTENER_ALLOWLIST = saved_listeners
         shutil.rmtree(tmp, ignore_errors=True)
 
 
