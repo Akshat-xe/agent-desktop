@@ -103,14 +103,16 @@ fn settled_walk(
     let mut tracker: Option<(Readiness, Instant)> = None;
     let mut previous: Option<Walk<ObservedRead>> = None;
     let mut sampling_deadline = request.deadline;
+    let full = full_read(request);
     loop {
-        let purpose = if tracker
-            .as_ref()
-            .is_some_and(|(readiness, _)| !readiness.needs_payload())
+        let purpose = if full == ReadPurpose::Snapshot
+            && tracker
+                .as_ref()
+                .is_some_and(|(readiness, _)| !readiness.needs_payload())
         {
             ReadPurpose::Sampling
         } else {
-            ReadPurpose::Snapshot
+            full
         };
         let walk = match (host.walker)(element, limits, sampling_deadline, purpose) {
             Ok(walk) => walk,
@@ -164,7 +166,7 @@ fn settled_walk(
             }
             Step::Wait(gap) => {
                 (host.pause)(gap);
-                if purpose == ReadPurpose::Snapshot {
+                if purpose == full {
                     previous = Some(walk);
                 }
             }
@@ -191,7 +193,7 @@ fn nested_surface(
             max_logical_depth: whole.max_logical_depth,
             ..*limits
         };
-        window_walk = (host.walker)(window, &uncut, request.deadline, ReadPurpose::Snapshot)?;
+        window_walk = (host.walker)(window, &uncut, request.deadline, full_read(request))?;
     }
     if !window_walk.complete || is_incomplete(&window_walk.root, request.surface) {
         return Err(AdapterError::timeout(
@@ -213,8 +215,18 @@ fn nested_surface(
             .with_suggestion("Snapshot the window and select a dialog by ref"));
         }
     };
-    let walk = (host.walker)(&dialog, limits, request.deadline, ReadPurpose::Snapshot)?;
+    let walk = (host.walker)(&dialog, limits, request.deadline, full_read(request))?;
     Ok((walk, true))
+}
+
+/// The walk's own read: identity evidence alone when the request only
+/// resolves a saved ref, the full snapshot read otherwise.
+fn full_read(request: &ObservationRequest) -> ReadPurpose {
+    if request.observation_mode.identity_only {
+        ReadPurpose::Count
+    } else {
+        ReadPurpose::Snapshot
+    }
 }
 
 /// What the settle loop needs from outside the tree: the walk itself, whether
@@ -257,7 +269,9 @@ fn observe_decorated(
     };
     let started = Instant::now();
     let (mut walk, settled) = settled_walk(&root, &element, &limits, &request, &mut host)?;
-    (host.place)(&mut walk)?;
+    if !request.observation_mode.identity_only {
+        (host.place)(&mut walk)?;
+    }
     let complete = walk.complete && settled;
     let displays = read_displays();
     let (subtree, mut stats) = project_with(walk, &limits, decorate, displays.as_deref());

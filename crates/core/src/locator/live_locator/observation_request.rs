@@ -33,6 +33,9 @@ pub struct ObservationMode {
     /// (via the `--force-electron-a11y` CLI flag), so the adapter should not
     /// guess at guidance; it returns the tree it observed.
     pub force_renderer_accessibility: bool,
+    /// The read only resolves a saved ref: it needs identity evidence and the
+    /// child structure, never geometry or actions, so an adapter may skip them.
+    pub identity_only: bool,
 }
 
 impl ObservationRequest {
@@ -78,6 +81,7 @@ impl ObservationRequest {
             observation_mode: ObservationMode {
                 skeleton: options.skeleton,
                 force_renderer_accessibility: options.force_renderer_accessibility,
+                identity_only: false,
             },
         }
     }

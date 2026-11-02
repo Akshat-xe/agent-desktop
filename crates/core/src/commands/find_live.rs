@@ -88,9 +88,10 @@ fn rooted_resolution(
 ) -> Result<LocatorResolution, AppError> {
     let entry = crate::commands::helpers::load_ref_entry(root_ref, context)?;
     crate::locator::live_locator::resolve_query_from(adapter, query, request, |deadline| {
-        let (_, tree, index) =
-            crate::refs::resolve_saved_ref::observe_saved_ref(adapter, &entry, deadline, None)
-                .map_err(AppError::Adapter)?;
+        let (_, tree, index) = crate::refs::resolve_saved_ref::observe_saved_ref(
+            adapter, &entry, deadline, None, false,
+        )
+        .map_err(AppError::Adapter)?;
         crate::locator::live_locator::ObservedObservation::under(tree, index)
     })
 }

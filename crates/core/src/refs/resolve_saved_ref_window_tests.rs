@@ -101,7 +101,7 @@ fn a_token_missing_from_a_cut_short_read_is_not_proven_absent() {
     entry.identity.retained_object = Some("axtok1:page-7:node-3".into());
     let deadline = Deadline::standard().expect("a standard deadline");
 
-    let Err(unknown) = observe_saved_ref(&cut_short, &entry, deadline, None) else {
+    let Err(unknown) = observe_saved_ref(&cut_short, &entry, deadline, None, false) else {
         panic!("the token may sit in the unread region");
     };
     assert_eq!(unknown.code, ErrorCode::Timeout);
@@ -110,7 +110,7 @@ fn a_token_missing_from_a_cut_short_read_is_not_proven_absent() {
         "resolution_identity_unknown"
     );
 
-    let Err(absent) = observe_saved_ref(&whole, &entry, deadline, None) else {
+    let Err(absent) = observe_saved_ref(&whole, &entry, deadline, None, false) else {
         panic!("a whole read without the token proves it gone");
     };
     assert_eq!(absent.code, ErrorCode::StaleRef);

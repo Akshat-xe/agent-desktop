@@ -160,7 +160,7 @@ fn drill_capture(
         }
     }
     let (window, mut observed, index) =
-        crate::refs::resolve_saved_ref::observe_saved_ref(adapter, entry, deadline, None)?;
+        crate::refs::resolve_saved_ref::observe_saved_ref(adapter, entry, deadline, None, false)?;
     if !observed.is_exhaustive() {
         return Err(drill_incomplete(observed.nodes.len()));
     }

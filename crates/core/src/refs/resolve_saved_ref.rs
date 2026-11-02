@@ -1,8 +1,7 @@
 use serde_json::json;
 
 use crate::{
-    AdapterError, AppError, Deadline, ErrorCode, IdentityMatch, PlatformAdapter, RefEntry,
-    WindowInfo,
+    AdapterError, AppError, Deadline, IdentityMatch, PlatformAdapter, RefEntry, WindowInfo,
     adapter::{NativeHandle, TreeOptions},
     locator::live_locator::{
         ObservationRequest, ObservationRoot, ObservedTree, materialize_ref_entry,
@@ -10,7 +9,7 @@ use crate::{
     refs::ref_full_predicate::FullPredicate,
     refs::ref_identity::element_token,
     refs::ref_live_predicate::LivePredicate,
-    refs::resolve_errors::identity_unknown_error,
+    refs::resolve_errors::{identity_not_unique, identity_unknown_error},
 };
 
 /// The depth a whole-window observation reaches: the limit a snapshot walk
@@ -34,7 +33,7 @@ pub fn resolve_saved_ref(
     if element_token(entry).is_some() {
         return adapter.resolve_element_strict(entry, deadline);
     }
-    let (_, observed, found) = observe_saved_ref(adapter, entry, deadline, lease)?;
+    let (_, observed, found) = observe_saved_ref(adapter, entry, deadline, lease, true)?;
     let anchor = positional_anchor(entry, &observed, found)?;
     let handle = adapter.resolve_locator_anchor(&anchor, deadline)?;
     let root = ObservationRoot::Element {
@@ -85,12 +84,13 @@ pub(crate) type SavedRefMatch = (WindowInfo, ObservedTree, usize);
 /// measure one observation. A ref carrying an element token names its node by
 /// that token; every other ref names it by the predicate it was capture-proven
 /// with, and an entry that was not unique at capture has no such evidence to
-/// gather.
+/// gather. `identity_only` marks a read that only resolves and publishes nothing.
 pub(crate) fn observe_saved_ref(
     adapter: &dyn PlatformAdapter,
     entry: &RefEntry,
     deadline: Deadline,
     lease: Option<&crate::InteractionLease>,
+    identity_only: bool,
 ) -> Result<SavedRefMatch, AdapterError> {
     let token = element_token(entry);
     if token.is_none() && !entry.identity.unique_at_capture {
@@ -102,7 +102,9 @@ pub(crate) fn observe_saved_ref(
         force_renderer_accessibility: entry.source.renderer_accessibility_forced,
         ..TreeOptions::default()
     };
-    let observed = observe_whole_window(adapter, &base, &window, deadline, lease)?;
+    let mut request = whole_window_request(&base, deadline)?;
+    request.observation_mode.identity_only = identity_only;
+    let observed = observe_window(adapter, &request, &window, lease)?;
     let index = saved_ref_node(entry, token, &observed)?;
     let node = observed
         .nodes
@@ -237,6 +239,18 @@ pub(crate) fn observe_whole_window(
     deadline: Deadline,
     lease: Option<&crate::InteractionLease>,
 ) -> Result<ObservedTree, AdapterError> {
+    observe_window(
+        adapter,
+        &whole_window_request(base, deadline)?,
+        window,
+        lease,
+    )
+}
+
+fn whole_window_request(
+    base: &TreeOptions,
+    deadline: Deadline,
+) -> Result<ObservationRequest, AdapterError> {
     let options = TreeOptions {
         max_depth: WHOLE_WINDOW_DEPTH,
         surface: base.surface,
@@ -244,11 +258,19 @@ pub(crate) fn observe_whole_window(
         ..TreeOptions::default()
     }
     .with_ref_identity_bounds();
-    let request = ObservationRequest::snapshot(&options, deadline).validate()?;
+    ObservationRequest::snapshot(&options, deadline).validate()
+}
+
+fn observe_window(
+    adapter: &dyn PlatformAdapter,
+    request: &ObservationRequest,
+    window: &WindowInfo,
+    lease: Option<&crate::InteractionLease>,
+) -> Result<ObservedTree, AdapterError> {
     let mut observed = crate::tree::renderer_accessibility::observe_tree(
         adapter,
         ObservationRoot::Window(window),
-        &request,
+        request,
         lease,
     )
     .map_err(adapter_error)?;
@@ -257,7 +279,7 @@ pub(crate) fn observe_whole_window(
         ..
     } = &mut observed.source
     {
-        *renderer_accessibility_forced = options.force_renderer_accessibility;
+        *renderer_accessibility_forced = request.observation_mode.force_renderer_accessibility;
     }
     Ok(observed)
 }
@@ -323,25 +345,6 @@ fn positional_anchor(
         ..entry.identity.clone()
     };
     Ok(anchor)
-}
-
-fn identity_not_unique(entry: &RefEntry) -> AdapterError {
-    AdapterError::new(
-        ErrorCode::AmbiguousTarget,
-        "Saved ref was not proven unique when it was captured, so it cannot be re-identified safely",
-    )
-    .with_suggestion(
-        "Either another element in the window matched it, or the window could not be read \
-         whole within the snapshot timeout. For a large window, retake the snapshot with a \
-         larger --timeout-ms. Identical twins are refused again by every snapshot; where \
-         headed pointer input is available, an explicit --headed coordinate click can pick one.",
-    )
-    .with_details(json!({
-        "kind": "identity_not_unique",
-        "retryable": false,
-        "role": entry.identity.role,
-    }))
-    .with_disposition(crate::DeliverySemantics::not_delivered())
 }
 
 fn ambiguous_live_match(entry: &RefEntry) -> AdapterError {
