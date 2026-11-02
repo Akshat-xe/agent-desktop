@@ -34,6 +34,7 @@ pub(crate) struct LiveFindAdapter {
     framed_label: bool,
     token_root: bool,
     token_matches: bool,
+    unread_member: bool,
     window_reads: std::sync::atomic::AtomicUsize,
 }
 
@@ -44,6 +45,7 @@ impl LiveFindAdapter {
             framed_label: false,
             token_root: false,
             token_matches: false,
+            unread_member: false,
             window_reads: Default::default(),
         }
     }
@@ -51,20 +53,14 @@ impl LiveFindAdapter {
     pub(crate) fn incomplete() -> Self {
         Self {
             structurally_complete: false,
-            framed_label: false,
-            token_root: false,
-            token_matches: false,
-            window_reads: Default::default(),
+            ..Self::complete()
         }
     }
 
     pub(crate) fn with_framed_label() -> Self {
         Self {
-            structurally_complete: true,
             framed_label: true,
-            token_root: false,
-            token_matches: false,
-            window_reads: Default::default(),
+            ..Self::complete()
         }
     }
 
@@ -72,11 +68,8 @@ impl LiveFindAdapter {
     /// inside it carry none.
     pub(crate) fn with_token_root() -> Self {
         Self {
-            structurally_complete: true,
-            framed_label: false,
             token_root: true,
-            token_matches: false,
-            window_reads: Default::default(),
+            ..Self::complete()
         }
     }
 
@@ -85,6 +78,15 @@ impl LiveFindAdapter {
         Self {
             token_matches: true,
             ..Self::with_token_root()
+        }
+    }
+
+    /// A token root whose matches carry tokens beside a tokenless member whose
+    /// actions are still unread, which hydration could make publishable.
+    pub(crate) fn with_token_root_and_unread_member() -> Self {
+        Self {
+            unread_member: true,
+            ..Self::with_token_root_and_matches()
         }
     }
 
@@ -133,11 +135,16 @@ impl ObservationOps for LiveFindAdapter {
     ) -> Result<ObservedTree, AdapterError> {
         if let ObservationRoot::Element { entry, .. } = &root {
             let own = Self::evidence(&entry.identity.role, entry.identity.name.as_deref());
-            let children = if self.token_root {
+            let mut children = if self.token_root {
                 vec![self.node(self.button("OnlyInWindowTwo"), Vec::new())]
             } else {
                 Vec::new()
             };
+            if self.unread_member {
+                let mut member = Self::evidence("group", Some("Unread"));
+                member.ref_evidence.available_actions = LocatorField::Unknown;
+                children.push(self.node(member, Vec::new()));
+            }
             return ObservedTree::from_roots(
                 vec![self.node(own, children)],
                 ObservationSource::from_root(&root, request.surface),
