@@ -18,9 +18,10 @@ There is no Homebrew or Scoop package. The custom Homebrew tap and Scoop bucket 
 The npm package's `postinstall` script replaces the Node launcher with a link to the native binary. Some package managers block install scripts, and npm 12 does by default. Then every call runs through the Node launcher, which adds about 125 ms. The launcher prints a one-time notice to stderr. Allow the script and reinstall:
 
 ```bash
-npm install-scripts approve agent-desktop                    # npm 12
-npm install -g agent-desktop --allow-scripts=agent-desktop   # npm 11
+npm install -g agent-desktop --allow-scripts=agent-desktop
 ```
+
+For a project install, run `npm install-scripts approve agent-desktop` inside the project, then reinstall. That command only edits the project's `package.json` and fails for a global install.
 
 ## Release archives
 
