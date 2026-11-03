@@ -1,6 +1,7 @@
 //! Stdio MCP server. Every leaf CLI command is one tool, and every call runs that command through the CLI.
 
 mod call;
+mod calls;
 mod catalog;
 
 use clap::{ArgAction, ArgMatches, Command, CommandFactory, parser::ValueSource};
@@ -43,7 +44,7 @@ pub(crate) fn serve(matches: &ArgMatches) -> ExitCode {
     let server = Arc::new(Server {
         tools: catalog::tools(),
         globals: forwarded_globals(matches),
-        running: call::Running::default(),
+        calls: calls::Calls::default(),
     });
     let out = Arc::new(Mutex::new(std::io::stdout()));
     let mut input = std::io::stdin().lock();
@@ -78,7 +79,12 @@ pub(crate) fn serve(matches: &ArgMatches) -> ExitCode {
             continue;
         }
         if let Some(id) = message.get("id") {
-            call::admit(&server.running, id);
+            if !server.calls.admit(id) {
+                let error =
+                    RpcError::new(-32600, "Invalid Request: a call with this id is running");
+                write_line(&out, &error.response(id.clone()));
+                continue;
+            }
         }
         running.push(std::thread::spawn(move || server.respond(&out, &message)));
     }
@@ -115,13 +121,15 @@ fn read_message(input: &mut impl BufRead) -> Option<Result<Vec<u8>, RpcError>> {
 struct Server {
     tools: Vec<catalog::Tool>,
     globals: Vec<String>,
-    running: call::Running,
+    calls: calls::Calls,
 }
 
 impl Server {
     fn respond(&self, out: &Mutex<std::io::Stdout>, message: &Value) {
         if message["method"] == "notifications/cancelled" {
-            call::cancel(&self.running, &message["params"]["requestId"]);
+            if let Some(id) = message["params"].get("requestId") {
+                self.calls.cancel(id);
+            }
             return;
         }
         let Some(id) = message.get("id").cloned() else {
@@ -129,7 +137,11 @@ impl Server {
         };
         let method = message["method"].as_str().unwrap_or_default();
         let params = message.get("params").cloned().unwrap_or_else(|| json!({}));
-        let response = match self.handle(&id, method, &params) {
+        let result = self.handle(&id, method, &params);
+        if method == "tools/call" && !self.calls.finish(&id) {
+            return;
+        }
+        let response = match result {
             Ok(result) => json!({ "jsonrpc": "2.0", "id": id, "result": result }),
             Err(error) => error.response(id),
         };
@@ -201,13 +213,7 @@ impl Server {
             Some(Value::Object(arguments)) => arguments.clone(),
             Some(_) => return Err(RpcError::new(-32602, "Tool arguments must be an object")),
         };
-        Ok(call::call(
-            tool,
-            &arguments,
-            &self.globals,
-            &self.running,
-            id,
-        ))
+        Ok(call::call(tool, &arguments, &self.globals, &self.calls, id))
     }
 }
 

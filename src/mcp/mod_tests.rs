@@ -4,7 +4,7 @@ fn server() -> Server {
     Server {
         tools: catalog::tools(),
         globals: Vec::new(),
-        running: call::Running::default(),
+        calls: calls::Calls::default(),
     }
 }
 
