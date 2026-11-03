@@ -1,17 +1,37 @@
 # Changelog
 
-## Unreleased
+## [2.0.0](https://github.com/vercel-labs/agent-desktop/compare/v1.0.2...v2.0.0) (2026-11-02)
 
 ### ⚠ BREAKING CHANGES
 
 * The C ABI major version is now 7. `ad_resolve_element_exact` and `ad_execute_ref_action_exact_with_policy` always refuse with `ACTION_NOT_SUPPORTED` (`details.kind: exact_entry_unsupported`): a C caller cannot supply the capture proof a ref now resolves by, so act through a snapshot ref instead.
 * The response envelope moves to 2.6. On Windows and Linux, a ref to one of several identical controls, a ref from a window the snapshot could not read whole, and a ref from an earlier snapshot now return `AMBIGUOUS_TARGET` with `details.kind: identity_not_unique` where some used to act. A snapshot that could not read its window whole to prove its refs now says so with `data.identity_unproven: true`. See the version 2.6 migration in `docs/json-output.md`.
+* A surface kind the OS does not have now returns `INVALID_ARGS` instead of `PLATFORM_NOT_SUPPORTED`, and names the kinds to use. FFI callers see the matching `AdResult` code. An adapter that has no snapshot surfaces at all still returns `PLATFORM_NOT_SUPPORTED`.
+
+### Features
+
+* Reach the macOS Dock and menu bar status items with `snapshot --surface dock` and `--surface menu-bar-extras`. With `--app`, `menu-bar-extras` reads that app's own status item. `open-system-surface` returns either surface at once, headless, with no `window` in its data.
+* Observe a macOS background app that has no window, such as a menu bar app, the Dock, or the Control Center and Notification Center panels, through its process. Its snapshot leaves out `data.window`. `--app` also matches an app's executable name or bundle ID, so `--app ControlCenter` works.
+* Add `type --interval-ms` to type one keystroke every N ms (1 to 2000), verified against the field after the last keystroke.
+* Show the insertion caret in the cursor overlay after `type` and `set-value`, on macOS and Windows.
+* Draw the cursor label as a black pill sized to its text, on macOS and Windows.
+* Colour the cursor body with the accent by default. `--fill` sets a different body colour.
+* Draw `--image` and `--pointer-image` cursors on Windows.
+* Start a headless action's cursor travel before it takes the interaction lease, so the cursors of parallel agents move at the same time.
 
 ### Bug Fixes
 
 * Remove the macOS command host. Every CLI call runs in its own process, as on Windows and Linux. The npm install and every CLI call stop any command host an earlier version left running. After an install that skips npm scripts, or a manual install, run `agent-desktop version` once.
 * Refs from snapshots taken before this release carry no capture proof, so take a new snapshot. On Windows and Linux they return `AMBIGUOUS_TARGET` with `details.kind: identity_not_unique`; on macOS a ref still resolves while the element its token names is alive.
 * A ref does not act on a different element after the UI changes. On macOS a ref follows its own element: a ref to a removed row returns `STALE_REF`, and identical controls can each be used by ref. On Windows and Linux a ref resolves only if it was unique when captured and exactly one element matches it now; a ref to one of several identical controls returns `AMBIGUOUS_TARGET`. Identity is the element's role and stable fields, not its instance: an identical element that replaced the original is acted on, and a toolkit that keeps a removed widget listed (GTK4, Qt6 on Linux) can still receive the action.
+* On macOS, a `--headed` click on a status item or on a background app's control sends a real click, without first focusing a window the app does not have.
+* On macOS, a press whose return code proves nothing counts as delivered when focus moves, or the focused element changes, inside the pressed element's window. Notes' New Note no longer reports `ACTION_FAILED` after creating the note.
+* On macOS, `set-value` on a stepped control re-reads the value after each step before giving up, and says when the steps cannot reach the target.
+* Keep the overlay caret on the insertion point after key presses. On macOS, place it on an indented new line.
+* On macOS, draw overlay controls as they arrive, hide a cleared label, and stop clipping the click highlight's glow.
+* On Windows, stop every command ending in a crash report and about 3 s of error reporting at exit.
+* On Windows, type CR LF as one line break.
+* On Windows, stop scaling the overlay's coordinates twice, which sent the cursor off screen at 200% scaling, and stop the overlay flashing a black square when it starts.
 
 ## [1.0.2](https://github.com/vercel-labs/agent-desktop/compare/v1.0.1...v1.0.2) (2026-10-30)
 
