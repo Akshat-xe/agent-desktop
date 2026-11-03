@@ -811,7 +811,10 @@ do_exec() {
   guest_hash_line=$(guest_transport ssh "$target" 'shasum -a 1 ~/.local/bin/agent-desktop' 2>/dev/null || true)
   guest_hash=$(printf '%s\n' "$guest_hash_line" | awk '{ print tolower($1) }')
   if [ "$host_hash" != "$guest_hash" ]; then
-    if ! guest_transport scp "$AD_BINARY" "$target:~/.local/bin/agent-desktop"; then
+    staged_binary='~/.local/bin/agent-desktop.new'
+    if ! guest_transport ssh "$target" 'mkdir -p ~/.local/bin' >/dev/null || \
+      ! guest_transport scp "$AD_BINARY" "$target:$staged_binary" >/dev/null || \
+      ! guest_transport ssh "$target" "chmod 755 $staged_binary && mv -f $staged_binary ~/.local/bin/agent-desktop" >/dev/null; then
       exec_failure "agent-desktop could not be copied into sandbox $name." "Run agent-desktop sandbox status $name."
     fi
   fi
