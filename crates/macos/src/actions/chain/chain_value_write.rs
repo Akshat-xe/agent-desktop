@@ -98,11 +98,14 @@ mod imp {
             {
                 Some((next, text)) => {
                     if !increment_progressed(&current_text, &text, requested) {
-                        return Err(delivery.annotate(stalled_increment_error(
-                            &current_text,
-                            &text,
-                            requested,
-                        )));
+                        return Err(delivery.annotate(
+                            AdapterError::new(
+                                agent_desktop_core::ErrorCode::ActionFailed,
+                                format!("Native steps cannot reach {requested}: the last step moved the value from {current_text} to {text}"),
+                            )
+                            .with_suggestion("Read the current value and set one the control's steps reach.")
+                            .with_details(serde_json::json!({ "before_step": current_text, "after_step": text })),
+                        ));
                     }
                     current = next;
                     current_text = text;
@@ -214,28 +217,6 @@ mod imp {
             }
             std::thread::sleep(settle.remaining().min(std::time::Duration::from_millis(20)));
         }
-    }
-
-    fn stalled_increment_error(before: &str, after: &str, target: &str) -> AdapterError {
-        let crossed = increment_action(before, target)
-            .zip(increment_action(after, target))
-            .is_some_and(|(was, now)| was != now);
-        let error = if crossed {
-            AdapterError::new(
-                agent_desktop_core::ErrorCode::ActionFailed,
-                format!("The control's native step skips {target}: one step moved it from {before} to {after}"),
-            )
-            .with_suggestion(format!("Set a value the control's steps reach, such as {before} or {after}."))
-        } else {
-            AdapterError::new(
-                agent_desktop_core::ErrorCode::ActionFailed,
-                format!("The control stopped moving toward {target} at {after}"),
-            )
-            .with_suggestion("Read the current value; the control may be at its limit.")
-        };
-        error.with_details(
-            serde_json::json!({ "requested": target, "before_step": before, "after_step": after }),
-        )
     }
 
     pub(crate) fn increment_target_reached(current: &str, target: &str) -> bool {
