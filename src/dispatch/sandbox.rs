@@ -14,13 +14,40 @@ pub(crate) fn dispatch(
     sandbox::execute(to_core(args.action), adapter)
 }
 
+fn reject_outer_options(cli: &crate::Cli) -> Result<(), AppError> {
+    let any_set = [
+        cli.visual_debug.verbose,
+        cli.visual_debug.debug,
+        cli.visual_debug.screenshot.is_some(),
+        cli.identity.session.is_some(),
+        cli.identity.agent_id.is_some(),
+        cli.trace.is_some(),
+        cli.trace_strict,
+        cli.interaction.headed,
+        cli.post_action_wait.wait_for.is_some(),
+        cli.post_action_wait.wait_for_gone.is_some(),
+        cli.post_action_wait.wait_timeout.is_some(),
+    ]
+    .contains(&true);
+    if !any_set {
+        return Ok(());
+    }
+    Err(AppError::invalid_input_with_suggestion(
+        "Options before `sandbox exec` are not applied inside the sandbox.",
+        "Put agent-desktop options after `--`, for example `agent-desktop sandbox exec dev -- snapshot --app Finder --session <id>`.",
+    ))
+}
+
 pub(crate) fn run_exec(
+    cli: &crate::Cli,
     args: &SandboxExecArgs,
     cmd_name: &str,
     adapter: &dyn PlatformAdapter,
 ) -> ExitCode {
-    let result = agent_desktop_core::validate_state_root_env()
-        .map_err(crate::pre_dispatch_error)
+    let result = reject_outer_options(cli)
+        .and_then(|()| {
+            agent_desktop_core::validate_state_root_env().map_err(crate::pre_dispatch_error)
+        })
         .and_then(|()| sandbox::execute_exec(args.name.clone(), args.args.clone(), adapter));
     match result {
         Ok(passthrough) => match write_stdout(&passthrough.stdout) {

@@ -91,8 +91,8 @@ fn exec_failure(provider: &str, output: &ProviderScriptOutput) -> AdapterError {
         .filter(|value| value.get("ok").and_then(Value::as_bool) == Some(false));
 
     match failure {
-        Some(value) => failure_error(provider, LIST_SUGGESTION, false, &value, output),
-        None => unreadable(provider, LIST_SUGGESTION, false, output),
+        Some(value) => failure_error(provider, LIST_SUGGESTION, true, &value, output),
+        None => unreadable(provider, LIST_SUGGESTION, true, output),
     }
 }
 
@@ -105,7 +105,7 @@ fn missing_status(provider: &str, output: &ProviderScriptOutput) -> AdapterError
             ),
         )
         .with_suggestion(LIST_SUGGESTION)
-        .with_disposition(DeliverySemantics::not_delivered()),
+        .with_disposition(DeliverySemantics::unknown()),
         output,
     )
 }

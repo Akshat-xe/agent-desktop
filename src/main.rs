@@ -135,7 +135,7 @@ fn run() -> ExitCode {
     if let Commands::Sandbox(args) = &cmd
         && let SandboxActionCli::Exec(exec) = &args.action
     {
-        return dispatch::sandbox::run_exec(exec, cmd_name, &build_adapter());
+        return dispatch::sandbox::run_exec(&cli, exec, cmd_name, &build_adapter());
     }
     #[cfg(target_os = "macos")]
     if !cmd.needs_caller_process() {

@@ -1,6 +1,8 @@
 use agent_desktop_core::commands::sandbox_action::SandboxAction;
+use agent_desktop_core::{AppError, ErrorCode};
+use clap::Parser;
 
-use super::to_core;
+use super::{reject_outer_options, to_core};
 use crate::cli_args::sandbox::{
     SandboxActionCli, SandboxCreateArgs, SandboxExecArgs, SandboxNameArgs,
 };
@@ -63,4 +65,38 @@ fn every_cli_action_carries_its_fields_to_the_core_action() {
     };
     assert_eq!(name, "dev");
     assert_eq!(args, ["snapshot", "--app", "Finder"]);
+}
+
+#[test]
+fn outer_global_options_are_rejected_before_sandbox_exec() {
+    let plain =
+        crate::Cli::try_parse_from(["agent-desktop", "sandbox", "exec", "dev", "--", "version"])
+            .unwrap();
+    assert!(reject_outer_options(&plain).is_ok());
+
+    let outer = crate::Cli::try_parse_from([
+        "agent-desktop",
+        "--session",
+        "abc",
+        "sandbox",
+        "exec",
+        "dev",
+        "--",
+        "version",
+    ])
+    .unwrap();
+    let AppError::Adapter(error) = reject_outer_options(&outer).unwrap_err() else {
+        panic!("outer options must be an adapter error");
+    };
+    assert_eq!(error.code, ErrorCode::InvalidArgs);
+    assert_eq!(
+        error.message,
+        "Options before `sandbox exec` are not applied inside the sandbox."
+    );
+    assert_eq!(
+        error.suggestion.as_deref(),
+        Some(
+            "Put agent-desktop options after `--`, for example `agent-desktop sandbox exec dev -- snapshot --app Finder --session <id>`."
+        )
+    );
 }

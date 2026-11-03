@@ -251,6 +251,7 @@ fn exec_status_125_returns_the_provider_failure_object() {
     assert_eq!(error.code, ErrorCode::SandboxNotFound);
     assert_eq!(error.message, "The sandbox dev does not exist.");
     assert_eq!(error.suggestion.as_deref(), Some(NEXT_SUGGESTION));
+    assert_eq!(error.disposition, DeliverySemantics::unknown());
 }
 
 #[test]
@@ -291,4 +292,5 @@ fn exec_without_an_exit_status_reports_a_plain_error() {
     );
     assert_eq!(error.suggestion.as_deref(), Some(LIST_SUGGESTION));
     assert_eq!(error.platform_detail.as_deref(), Some("ssh died"));
+    assert_eq!(error.disposition, DeliverySemantics::unknown());
 }
