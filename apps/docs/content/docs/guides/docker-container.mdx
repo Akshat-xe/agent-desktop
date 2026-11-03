@@ -58,7 +58,6 @@ COPY entrypoint.sh /usr/local/bin/agent-desktop-entrypoint
 RUN chmod 0755 /usr/local/bin/agent-desktop-entrypoint
 
 USER agent
-WORKDIR /home/agent
 ENTRYPOINT ["/usr/local/bin/agent-desktop-entrypoint"]
 ```
 
@@ -145,7 +144,7 @@ docker image rm agent-desktop-container:1.0.2
 ## Limits
 
 - The desktop is headless: 1280x800 on display `:99`, and nothing appears on your screen.
-- The image runs as the user `agent`, and everything agent-desktop stores lives in `/home/agent/.agent-desktop`. Removing the container removes that state.
+- The image runs as the user `agent`, and everything agent-desktop stores lives in that user's `~/.agent-desktop`. Removing the container removes that state.
 - The binary must match the container's architecture. Build on the machine that runs the container, or pass `--platform` to `docker run` and download the matching archive.
 - `sandbox` commands are not available in the container, because `macos-vm` needs macOS. Use the container's desktop directly, as above.
 - Running the container on a remote host is a manual setup today. A remote option is coming.
