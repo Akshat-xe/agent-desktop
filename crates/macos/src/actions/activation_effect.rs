@@ -13,9 +13,8 @@ mod imp {
     /// unsupported code to the action that navigates it, and moves its
     /// selection rather than the focus. Selection is therefore read as well,
     /// on every element, because an attribute an element does not publish reads
-    /// as absent and the rule simply never fires for it. A press can also keep
-    /// focus where it is and replace what the focused editor shows, so that
-    /// editor's value is read too.
+    /// as absent and the rule simply never fires for it. The focused editor's
+    /// value is read because a press can replace what that editor shows.
     #[derive(Default)]
     pub(crate) struct FocusState {
         focused_element: Option<AXElement>,
@@ -118,11 +117,15 @@ mod imp {
         deadline: Deadline,
     ) -> bool {
         let after = focus_state(element, deadline);
-        let target_focused = after
+        let focused = after
             .as_ref()
-            .and_then(|state| state.focused_element.as_ref())
-            .is_some_and(|focused| focus_reached(focused, element, deadline));
+            .and_then(|state| state.focused_element.as_ref());
+        let target_focused =
+            focused.is_some_and(|focused| focus_reached(focused, element, deadline));
         observed_change(before, &after, target_focused)
+            || focus_changed_in_target_window(before, &after, || {
+                focused.and_then(|focused| shares_window(focused, element, deadline)) == Some(true)
+            })
     }
 
     /// A control that owns an editor hands focus to the editor, not to itself:
@@ -181,7 +184,6 @@ mod imp {
         let focus_moved_to_target = target_focused
             && matches!((before, after), (Some(before), Some(after)) if before != after);
         focus_moved_to_target
-            || focused_content_replaced(before, after)
             || selection_turned_on(before, after)
             || matches!(
                 (
@@ -192,15 +194,26 @@ mod imp {
             )
     }
 
-    /// The same element keeps focus but shows different content: the press
-    /// swapped what the focused editor holds.
-    fn focused_content_replaced(before: &Option<FocusState>, after: &Option<FocusState>) -> bool {
+    /// Focus moved, or the focused element shows new content, in the target's window.
+    fn focus_changed_in_target_window(
+        before: &Option<FocusState>,
+        after: &Option<FocusState>,
+        focused_in_target_window: impl FnOnce() -> bool,
+    ) -> bool {
         matches!((before, after), (Some(before), Some(after))
-            if before.focused_element.is_some()
-                && before == after
-                && before.focused_value.is_some()
-                && after.focused_value.is_some()
-                && before.focused_value != after.focused_value)
+            if after.focused_element.is_some() && (before != after
+                || matches!((&before.focused_value, &after.focused_value), (Some(old), Some(new)) if old != new)))
+            && focused_in_target_window()
+    }
+
+    fn shares_window(focused: &AXElement, element: &AXElement, deadline: Deadline) -> Option<bool> {
+        let window = |el| {
+            crate::tree::properties::attributes::copy_element_attr_result(el, "AXWindow", deadline)
+        };
+        Some(crate::tree::same_element(
+            &window(focused).ok()??,
+            &window(element).ok()??,
+        ))
     }
 
     /// An element that was not selected and now is has been acted on, whatever
@@ -235,16 +248,21 @@ mod imp {
         }
 
         #[test]
-        fn replaced_content_in_the_same_focused_editor_is_an_effect() {
-            let editor = |value: &str| {
+        fn a_focus_change_counts_only_inside_the_pressed_elements_window() {
+            let editor = |pid, value: &str| {
                 Some(FocusState {
                     focused_value: Some(value.into()),
-                    ..focused(1).unwrap_or_default()
+                    ..focused(pid).unwrap_or_default()
                 })
             };
-            assert!(observed_change(&editor("old note"), &editor(""), false));
-            assert!(!observed_change(&editor("same"), &editor("same"), false));
-            assert!(!observed_change(&editor("old note"), &focused(1), false));
+            let changed =
+                |old, new, in_window| focus_changed_in_target_window(&old, &new, || in_window);
+            assert!(changed(editor(1, "old note"), editor(1, ""), true));
+            assert!(changed(focused(1), editor(2, ""), true));
+            assert!(!changed(editor(1, "old note"), editor(1, ""), false));
+            assert!(!changed(focused(1), editor(2, ""), false));
+            assert!(!changed(editor(1, "same"), editor(1, "same"), true));
+            assert!(!changed(editor(1, "old note"), focused(1), true));
         }
 
         #[test]

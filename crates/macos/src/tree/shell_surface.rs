@@ -53,9 +53,10 @@ pub(crate) fn resolve_surface(
             .with_disposition(agent_desktop_core::DeliverySemantics::not_delivered()));
         }
     };
-    let apps = crate::system::app::workspace_apps::list_apps_inventory_until(deadline)?.apps;
+    let inventory = crate::system::app::workspace_apps::list_apps_inventory_until(deadline)?;
     for host in hosts {
-        for app in apps
+        for app in inventory
+            .apps
             .iter()
             .filter(|app| app.bundle_id.as_deref() == Some(*host))
         {
@@ -65,6 +66,7 @@ pub(crate) fn resolve_surface(
             }
         }
     }
+    crate::system::app::workspace_apps::require_complete(&inventory.skipped)?;
     Err(AdapterError::new(
         ErrorCode::WindowNotFound,
         format!(
