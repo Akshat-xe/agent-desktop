@@ -1,6 +1,6 @@
 # Changelog
 
-## [1.1.0](https://github.com/vercel-labs/agent-desktop/compare/v1.0.2...v1.1.0) (2026-11-02)
+## [2.0.0](https://github.com/vercel-labs/agent-desktop/compare/v1.0.2...v2.0.0) (2026-11-02)
 
 ### ⚠ BREAKING CHANGES
 
