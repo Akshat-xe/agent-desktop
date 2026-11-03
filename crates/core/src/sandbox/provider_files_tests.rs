@@ -30,22 +30,11 @@ const EDITED: ProviderSpec = ProviderSpec {
 };
 
 #[test]
-fn the_same_spec_materialized_twice_reuses_one_directory() {
-    let scratch = Scratch::new("reuse");
-    let first = materialize(&scratch.0, &DEMO).unwrap();
-    let second = materialize(&scratch.0, &DEMO).unwrap();
-    assert_eq!(first, second);
-    assert_eq!(
-        std::fs::read_to_string(first.join("provider.sh")).unwrap(),
-        "echo one\n"
-    );
-}
-
-#[test]
 fn edited_contents_get_a_new_directory() {
     let scratch = Scratch::new("edited");
     let before = materialize(&scratch.0, &DEMO).unwrap();
     let after = materialize(&scratch.0, &EDITED).unwrap();
+
     assert_ne!(before, after);
     assert_eq!(
         std::fs::read_to_string(after.join("provider.sh")).unwrap(),

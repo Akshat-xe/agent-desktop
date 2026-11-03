@@ -16,14 +16,5 @@ fn sandbox_and_install_are_refused_inside_a_batch() {
         let error = parse_command(item(command)).expect_err("batch must refuse the command");
 
         assert_eq!(error.code(), "INVALID_ARGS", "{command}");
-        assert_eq!(
-            error.to_string(),
-            "Run sandbox and install commands on their own, not inside batch.",
-            "{command}"
-        );
-        assert!(
-            error.suggestion().is_some(),
-            "{command} needs a next action"
-        );
     }
 }

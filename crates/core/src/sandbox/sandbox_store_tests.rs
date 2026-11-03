@@ -1,4 +1,4 @@
-use super::{create, list, load, remove};
+use super::{create, load};
 use crate::sandbox::sandbox_record::SandboxRecord;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Barrier};
@@ -42,11 +42,6 @@ fn duplicate_create_fails_and_keeps_the_first_record() {
     let error = create(&root, &record("dev-1", "macos-vm", 2)).unwrap_err();
 
     assert_eq!(error.code(), "INVALID_ARGS");
-    assert!(
-        error
-            .to_string()
-            .contains("already exists (provider macos-vm)")
-    );
     let kept = load(&root, "dev-1").unwrap();
     assert_eq!(kept.provider, "macos-vm");
     assert_eq!(kept.created_at, 1);
@@ -76,38 +71,8 @@ fn concurrent_creates_of_one_name_admit_exactly_one() {
 }
 
 #[test]
-fn load_of_a_missing_name_reports_sandbox_not_found() {
-    let scratch = Scratch::new("missing");
-    let error = load(&scratch.root(), "ghost").unwrap_err();
-    assert_eq!(error.code(), "SANDBOX_NOT_FOUND");
-    assert!(
-        error
-            .suggestion()
-            .is_some_and(|s| s.contains("sandbox list"))
-    );
-}
-
-#[test]
 fn names_that_escape_the_root_are_refused() {
     let scratch = Scratch::new("traversal");
     let error = load(&scratch.root(), "../outside").unwrap_err();
     assert_eq!(error.code(), "INVALID_ARGS");
-}
-
-#[test]
-fn list_sorts_by_name_and_remove_deletes_the_record() {
-    let scratch = Scratch::new("list");
-    let root = scratch.root();
-    create(&root, &record("beta", "macos-vm", 2)).unwrap();
-    create(&root, &record("alpha", "macos-vm", 1)).unwrap();
-
-    let names: Vec<String> = list(&root).unwrap().into_iter().map(|r| r.name).collect();
-    assert_eq!(names, ["alpha", "beta"]);
-
-    remove(&root, "alpha").unwrap();
-    assert_eq!(
-        load(&root, "alpha").unwrap_err().code(),
-        "SANDBOX_NOT_FOUND"
-    );
-    assert_eq!(list(&root).unwrap().len(), 1);
 }

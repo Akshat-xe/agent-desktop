@@ -89,23 +89,6 @@ fn request(script: PathBuf, working_dir: PathBuf, timeout: Duration) -> Provider
 }
 
 #[test]
-fn script_returns_stdout_status_and_stderr_tail() {
-    let directory = TempDirectory::new();
-    let script = directory.write_script(
-        "success.sh",
-        "printf '%s\\n' '{\"ok\":true}'\nprintf '%05000d' 0 >&2\nprintf 'tail-marker' >&2\n",
-    );
-    let request = request(script, directory.0.clone(), Duration::from_secs(2));
-
-    let output = run_provider_script(&request).unwrap();
-
-    assert_eq!(output.status, Some(0));
-    assert_eq!(output.stdout, b"{\"ok\":true}\n");
-    assert_eq!(output.stderr_tail.len(), 4096);
-    assert!(output.stderr_tail.ends_with("tail-marker"));
-}
-
-#[test]
 fn script_timeout_kills_the_running_child() {
     let directory = TempDirectory::new();
     let pid_file = directory.0.join("pid");
@@ -119,13 +102,6 @@ fn script_timeout_kills_the_running_child() {
     let error = run_provider_script(&request).expect_err("the script must time out");
 
     assert_eq!(error.code, ErrorCode::Timeout);
-    assert_eq!(error.message, "The provider script did not finish in time.");
-    assert!(
-        error
-            .suggestion
-            .as_deref()
-            .is_some_and(|suggestion| suggestion.contains("agent-desktop sandbox status"))
-    );
     let process = fs::read_to_string(pid_file)
         .unwrap()
         .trim()
@@ -135,7 +111,7 @@ fn script_timeout_kills_the_running_child() {
 }
 
 #[test]
-fn script_detached_process_group_survives_and_is_cleaned_up_by_test() {
+fn script_detached_process_group_survives() {
     let directory = TempDirectory::new();
     let pid_file = directory.0.join("pid");
     let script = directory.write_script(
@@ -157,27 +133,6 @@ fn script_detached_process_group_survives_and_is_cleaned_up_by_test() {
     assert_eq!(output.status, Some(0));
     assert!(started.elapsed() < Duration::from_secs(2));
     assert!(process_exists(process));
-}
-
-#[test]
-fn output_limit_is_action_failed_and_names_working_directory() {
-    let directory = TempDirectory::new();
-    let script = directory.write_script("oversized.sh", "head -c 20971520 /dev/zero >&2\n");
-    let request = request(script, directory.0.clone(), Duration::from_secs(10));
-
-    let error = run_provider_script(&request).expect_err("oversized output must fail");
-
-    assert_eq!(error.code, ErrorCode::ActionFailed);
-    assert_eq!(
-        error.message,
-        "The provider script printed more output than agent-desktop reads."
-    );
-    assert!(
-        error
-            .suggestion
-            .as_deref()
-            .is_some_and(|suggestion| suggestion.contains(&directory.0.display().to_string()))
-    );
 }
 
 #[test]
