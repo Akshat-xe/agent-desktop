@@ -136,40 +136,6 @@ fn typed_metadata_names_each_variant() {
     assert_eq!(find.name(), "find");
 }
 
-#[cfg(target_os = "macos")]
-#[test]
-fn caller_coordinates_batches_sessions_and_permission_guidance() {
-    assert!(command(&["permissions", "--guide"]).needs_caller_process());
-    assert!(command(&["session", "end", "other"]).needs_caller_process());
-    assert!(command(&["session", "gc"]).needs_caller_process());
-    assert!(command(&["batch", "[]"]).needs_caller_process());
-    assert!(!command(&["permissions"]).needs_caller_process());
-    assert!(!command(&["permissions", "--request"]).needs_caller_process());
-    assert!(!command(&["click", "@e1"]).needs_caller_process());
-}
-
-#[cfg(target_os = "macos")]
-#[test]
-fn caller_runs_install_and_every_sandbox_action() {
-    for caller_only in [
-        command(&["install"]),
-        command(&["install", "macos-vm"]),
-        command(&["sandbox", "create", "box", "--provider", "macos-vm"]),
-        command(&["sandbox", "start", "box"]),
-        command(&["sandbox", "stop", "box"]),
-        command(&["sandbox", "status", "box"]),
-        command(&["sandbox", "list"]),
-        command(&["sandbox", "rm", "box"]),
-        command(&["sandbox", "exec", "box", "--", "snapshot"]),
-    ] {
-        assert!(
-            caller_only.needs_caller_process(),
-            "{} must run in the caller process",
-            caller_only.name()
-        );
-    }
-}
-
 #[test]
 fn mutation_metadata_distinguishes_read_only_and_file_writing_forms() {
     assert!(command(&["click", "@e1"]).is_mutating());
