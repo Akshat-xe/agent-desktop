@@ -1,6 +1,7 @@
 //! Stdio MCP server. Every leaf CLI command is one tool, and every call runs that command through the CLI.
 
 mod call;
+mod calls;
 mod catalog;
 
 use clap::{ArgAction, ArgMatches, Command, CommandFactory, parser::ValueSource};
@@ -21,8 +22,12 @@ const MAX_MESSAGE_BYTES: usize = 4 * 1024 * 1024;
 const INSTRUCTIONS: &str = "\
 agent-desktop reads native accessibility trees and operates desktop apps. Each tool runs the \
 agent-desktop CLI command of the same name and returns its JSON envelope: ok with data, or ok \
-false with error. Read desktop_skills_get with name \"desktop\" first for the observe-act loop, \
-and with name \"platform\" for what differs on this OS. Refs such as @s8f3k2p9:e1 come from \
+false with error; a call rejected before the command runs returns plain text. Read \
+desktop_skills_get with name \"desktop\" first for the observe-act loop, and with name \
+\"platform\" for what differs on this OS. The skills use CLI syntax: `agent-desktop snapshot \
+--app Finder` is desktop_snapshot with {\"app\": \"Finder\"}, and the input schema replaces \
+--help. Global flags (--session, --agent-id, --headed, --wait-for, --trace) are fixed \
+by how this server was started and cannot be passed per call. Refs such as @s8f3k2p9:e1 come from \
 desktop_snapshot and go stale when the UI changes: on STALE_REF or AMBIGUOUS_TARGET, snapshot \
 again. Repeat an action only when its disposition.retry is \"safe\".";
 
@@ -39,6 +44,7 @@ pub(crate) fn serve(matches: &ArgMatches) -> ExitCode {
     let server = Arc::new(Server {
         tools: catalog::tools(),
         globals: forwarded_globals(matches),
+        calls: calls::Calls::default(),
     });
     let out = Arc::new(Mutex::new(std::io::stdout()));
     let mut input = std::io::stdin().lock();
@@ -71,6 +77,14 @@ pub(crate) fn serve(matches: &ArgMatches) -> ExitCode {
         if running.len() >= MAX_CONCURRENT_CALLS {
             server.respond_busy(&out, &message);
             continue;
+        }
+        if let Some(id) = message.get("id") {
+            if !server.calls.admit(id) {
+                let error =
+                    RpcError::new(-32600, "Invalid Request: a call with this id is running");
+                write_line(&out, &error.response(id.clone()));
+                continue;
+            }
         }
         running.push(std::thread::spawn(move || server.respond(&out, &message)));
     }
@@ -107,16 +121,27 @@ fn read_message(input: &mut impl BufRead) -> Option<Result<Vec<u8>, RpcError>> {
 struct Server {
     tools: Vec<catalog::Tool>,
     globals: Vec<String>,
+    calls: calls::Calls,
 }
 
 impl Server {
     fn respond(&self, out: &Mutex<std::io::Stdout>, message: &Value) {
+        if message["method"] == "notifications/cancelled" {
+            if let Some(id) = message["params"].get("requestId") {
+                self.calls.cancel(id);
+            }
+            return;
+        }
         let Some(id) = message.get("id").cloned() else {
             return;
         };
         let method = message["method"].as_str().unwrap_or_default();
         let params = message.get("params").cloned().unwrap_or_else(|| json!({}));
-        let response = match self.handle(method, &params) {
+        let result = self.handle(&id, method, &params);
+        if method == "tools/call" && !self.calls.finish(&id) {
+            return;
+        }
+        let response = match result {
             Ok(result) => json!({ "jsonrpc": "2.0", "id": id, "result": result }),
             Err(error) => error.response(id),
         };
@@ -141,7 +166,7 @@ impl Server {
         );
     }
 
-    fn handle(&self, method: &str, params: &Value) -> Result<Value, RpcError> {
+    fn handle(&self, id: &Value, method: &str, params: &Value) -> Result<Value, RpcError> {
         if let Some(requested) = params["_meta"][PROTOCOL_VERSION_META].as_str() {
             if requested != MODERN_VERSION {
                 return Err(
@@ -166,7 +191,7 @@ impl Server {
                 "ttlMs": TOOLS_TTL_MS,
                 "cacheScope": "public",
             }),
-            "tools/call" => self.call(params)?,
+            "tools/call" => self.call(id, params)?,
             other => return Err(RpcError::new(-32601, format!("Method not found: {other}"))),
         };
         result["resultType"] = Value::from("complete");
@@ -174,7 +199,7 @@ impl Server {
         Ok(result)
     }
 
-    fn call(&self, params: &Value) -> Result<Value, RpcError> {
+    fn call(&self, id: &Value, params: &Value) -> Result<Value, RpcError> {
         let name = params["name"]
             .as_str()
             .ok_or_else(|| RpcError::new(-32602, "tools/call requires a tool name"))?;
@@ -188,7 +213,7 @@ impl Server {
             Some(Value::Object(arguments)) => arguments.clone(),
             Some(_) => return Err(RpcError::new(-32602, "Tool arguments must be an object")),
         };
-        Ok(call::call(tool, &arguments, &self.globals))
+        Ok(call::call(tool, &arguments, &self.globals, &self.calls, id))
     }
 }
 

@@ -4,6 +4,7 @@ fn server() -> Server {
     Server {
         tools: catalog::tools(),
         globals: Vec::new(),
+        calls: calls::Calls::default(),
     }
 }
 
@@ -11,11 +12,19 @@ fn server() -> Server {
 fn legacy_initialize_echoes_a_supported_version_and_falls_back_to_the_newest() {
     let server = server();
     let echoed = server
-        .handle("initialize", &json!({ "protocolVersion": "2025-06-18" }))
+        .handle(
+            &Value::Null,
+            "initialize",
+            &json!({ "protocolVersion": "2025-06-18" }),
+        )
         .unwrap_or_else(|_| panic!("initialize"));
     assert_eq!(echoed["protocolVersion"], "2025-06-18");
     let fallback = server
-        .handle("initialize", &json!({ "protocolVersion": "1999-01-01" }))
+        .handle(
+            &Value::Null,
+            "initialize",
+            &json!({ "protocolVersion": "1999-01-01" }),
+        )
         .unwrap_or_else(|_| panic!("initialize"));
     assert_eq!(fallback["protocolVersion"], LEGACY_VERSIONS[0]);
     assert_eq!(fallback["capabilities"], json!({ "tools": {} }));
@@ -24,7 +33,7 @@ fn legacy_initialize_echoes_a_supported_version_and_falls_back_to_the_newest() {
 #[test]
 fn modern_requests_with_an_unknown_version_get_the_supported_list() {
     let params = json!({ "_meta": { PROTOCOL_VERSION_META: "1999-01-01" } });
-    let Err(error) = server().handle("tools/list", &params) else {
+    let Err(error) = server().handle(&Value::Null, "tools/list", &params) else {
         panic!("an unknown modern version must be refused");
     };
     assert_eq!(error.code, -32022);
@@ -35,7 +44,7 @@ fn modern_requests_with_an_unknown_version_get_the_supported_list() {
 fn modern_tools_list_is_cacheable_and_complete() {
     let params = json!({ "_meta": { PROTOCOL_VERSION_META: MODERN_VERSION } });
     let result = server()
-        .handle("tools/list", &params)
+        .handle(&Value::Null, "tools/list", &params)
         .unwrap_or_else(|_| panic!("tools/list"));
     assert_eq!(result["resultType"], "complete");
     assert_eq!(result["cacheScope"], "public");
@@ -47,7 +56,11 @@ fn modern_tools_list_is_cacheable_and_complete() {
 
 #[test]
 fn unknown_tools_are_protocol_errors() {
-    let Err(error) = server().handle("tools/call", &json!({ "name": "desktop_nope" })) else {
+    let Err(error) = server().handle(
+        &Value::Null,
+        "tools/call",
+        &json!({ "name": "desktop_nope" }),
+    ) else {
         panic!("unknown tool must be refused");
     };
     assert_eq!(error.code, -32602);
