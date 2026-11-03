@@ -38,7 +38,7 @@ Each command prints one JSON envelope. A trimmed snapshot:
 
 ```json
 {
-  "version": "2.5",
+  "version": "2.6",
   "ok": true,
   "command": "snapshot",
   "data": {
@@ -133,7 +133,7 @@ import ctypes
 lib = ctypes.CDLL("./lib/libagent_desktop_ffi.dylib")
 lib.ad_adapter_create.restype = ctypes.c_void_p
 lib.ad_adapter_destroy.argtypes = [ctypes.c_void_p]
-assert lib.ad_init(6) == 0  # AD_RESULT_OK when the header's AD_ABI_VERSION_MAJOR matches the library
+assert lib.ad_init(7) == 0  # AD_RESULT_OK when the header's AD_ABI_VERSION_MAJOR matches the library
 adapter = lib.ad_adapter_create()
 lib.ad_adapter_destroy(adapter)
 ```
