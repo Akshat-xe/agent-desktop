@@ -117,15 +117,13 @@ mod imp {
         deadline: Deadline,
     ) -> bool {
         let after = focus_state(element, deadline);
-        let target_focused = after
+        let focused = after
             .as_ref()
-            .and_then(|state| state.focused_element.as_ref())
-            .is_some_and(|focused| focus_reached(focused, element, deadline));
+            .and_then(|state| state.focused_element.as_ref());
+        let target_focused =
+            focused.is_some_and(|focused| focus_reached(focused, element, deadline));
         observed_change(before, &after, target_focused)
-            || focused_content_replaced(before, &after, || {
-                let focused = after
-                    .as_ref()
-                    .and_then(|state| state.focused_element.as_ref());
+            || focus_changed_in_target_window(before, &after, || {
                 focused.and_then(|focused| shares_window(focused, element, deadline)) == Some(true)
             })
     }
@@ -196,16 +194,16 @@ mod imp {
             )
     }
 
-    /// The focused editor in the pressed element's own window now shows new content.
-    fn focused_content_replaced(
+    /// Focus moved, or the focused element shows new content, in the target's window.
+    fn focus_changed_in_target_window(
         before: &Option<FocusState>,
         after: &Option<FocusState>,
-        editor_in_target_window: impl FnOnce() -> bool,
+        focused_in_target_window: impl FnOnce() -> bool,
     ) -> bool {
         matches!((before, after), (Some(before), Some(after))
-            if before.focused_element.is_some() && before == after
-                && matches!((&before.focused_value, &after.focused_value), (Some(old), Some(new)) if old != new))
-            && editor_in_target_window()
+            if after.focused_element.is_some() && (before != after
+                || matches!((&before.focused_value, &after.focused_value), (Some(old), Some(new)) if old != new)))
+            && focused_in_target_window()
     }
 
     fn shares_window(focused: &AXElement, element: &AXElement, deadline: Deadline) -> Option<bool> {
@@ -250,19 +248,21 @@ mod imp {
         }
 
         #[test]
-        fn replaced_content_in_the_same_focused_editor_is_an_effect() {
+        fn a_focus_change_counts_only_inside_the_pressed_elements_window() {
             let editor = |pid, value: &str| {
                 Some(FocusState {
                     focused_value: Some(value.into()),
                     ..focused(pid).unwrap_or_default()
                 })
             };
-            let replaced = |old, new, in_window| focused_content_replaced(&old, &new, || in_window);
-            assert!(replaced(editor(1, "old note"), editor(1, ""), true));
-            assert!(!replaced(editor(1, "old note"), editor(1, ""), false));
-            assert!(!replaced(editor(1, "same"), editor(1, "same"), true));
-            assert!(!replaced(editor(1, "old note"), focused(1), true));
-            assert!(!replaced(editor(1, "old note"), editor(2, ""), true));
+            let changed =
+                |old, new, in_window| focus_changed_in_target_window(&old, &new, || in_window);
+            assert!(changed(editor(1, "old note"), editor(1, ""), true));
+            assert!(changed(focused(1), editor(2, ""), true));
+            assert!(!changed(editor(1, "old note"), editor(1, ""), false));
+            assert!(!changed(focused(1), editor(2, ""), false));
+            assert!(!changed(editor(1, "same"), editor(1, "same"), true));
+            assert!(!changed(editor(1, "old note"), focused(1), true));
         }
 
         #[test]
