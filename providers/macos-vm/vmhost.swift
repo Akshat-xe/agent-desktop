@@ -405,9 +405,10 @@ struct InstallCommand {
     }
 
     static func prepare(_ bundle: Bundle) throws {
+        let bookkeeping: Set<String> = ["install.log", "install.pid", "share"]
         if FileManager.default.fileExists(atPath: bundle.root.path) {
-            let contents = try? FileManager.default.contentsOfDirectory(atPath: bundle.root.path)
-            guard contents?.isEmpty ?? false else {
+            let contents = (try? FileManager.default.contentsOfDirectory(atPath: bundle.root.path)) ?? []
+            guard contents.allSatisfy(bookkeeping.contains) else {
                 throw VMError(message: "The bundle directory \(bundle.root.path) is not empty.",
                               suggestion: "Remove it or choose an empty directory, then run `agent-desktop sandbox create` again.")
             }
@@ -419,6 +420,7 @@ struct InstallCommand {
                               suggestion: "Check that the parent directory is writable, then run `agent-desktop sandbox create` again.")
             }
         }
+        guard !FileManager.default.fileExists(atPath: bundle.share.path) else { return }
         do {
             try FileManager.default.createDirectory(at: bundle.share, withIntermediateDirectories: false)
         } catch {
@@ -472,6 +474,21 @@ enum MainLoop {
     static func pump(until finished: () -> Bool) {
         while !finished() {
             RunLoop.main.run(mode: .default, before: Date(timeIntervalSinceNow: 0.05))
+        }
+    }
+}
+
+enum ApplicationLoop {
+    static func run() {
+        NSApplication.shared.run()
+    }
+
+    static func stop() {
+        NSApplication.shared.stop(nil)
+        let wake = NSEvent.otherEvent(with: .applicationDefined, location: .zero, modifierFlags: [], timestamp: 0,
+                                      windowNumber: 0, context: nil, subtype: 0, data1: 0, data2: 0)
+        if let wake {
+            NSApplication.shared.postEvent(wake, atStart: false)
         }
     }
 }
@@ -555,6 +572,9 @@ struct RunCommand {
         let window = showWindow ? SandboxWindow.make(bundle: bundle, machine: box.machine) : nil
         let finish: (Result<Void, Error>) -> Void = { result in
             guard outcome.finish(result) else { return }
+            if showWindow {
+                ApplicationLoop.stop()
+            }
             window?.close()
         }
         let delegate = VMHostDelegate(finish)
@@ -594,7 +614,11 @@ struct RunCommand {
             }
         }
 
-        MainLoop.pump(until: { outcome.value() != nil })
+        if showWindow {
+            ApplicationLoop.run()
+        } else {
+            MainLoop.pump(until: { outcome.value() != nil })
+        }
         termination.cancel()
         window?.close()
 

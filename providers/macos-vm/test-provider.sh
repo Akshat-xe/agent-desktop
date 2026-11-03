@@ -30,10 +30,11 @@ FAKE_GUEST_SHA1=2222222222222222222222222222222222222222
 FAKE_SSH_PERMISSIONS='{"ok":true,"data":{"accessibility":{"state":"granted"}}}'
 FAKE_SSH_EXEC_OUTPUT='{"ok":true,"command":"guest"}'
 FAKE_PS_COMM=/opt/agent-desktop/build/vmhost
+FAKE_PS_BUNDLE=$AD_SANDBOX_DIR/vm
 export AD_SANDBOX_NAME AD_SANDBOX_DIR AD_PROVIDER_DIR AD_BINARY VMHOST
 export FAKE_LOG FAKE_UNAME_M FAKE_SWIFTC_FOUND
 export FAKE_MACOS_VERSION FAKE_HV_SUPPORT FAKE_SWIFTC_OK
-export FAKE_GUEST_SHA1
+export FAKE_GUEST_SHA1 FAKE_PS_BUNDLE FAKE_PS_COMMAND
 export FAKE_SSH_PERMISSIONS
 export FAKE_SSH_EXEC_OUTPUT FAKE_PS_COMM
 
@@ -158,7 +159,7 @@ FAKE
 cat > "$tmp/bin/ps" <<'FAKE'
 #!/bin/sh
 case " $* " in
-  *command=*) printf '%s\n' "${FAKE_PS_COMMAND:-/usr/bin/sleep}" ;;
+  *" command="*) printf '%s\n' "${FAKE_PS_COMMAND:-/opt/agent-desktop/build/vmhost run $FAKE_PS_BUNDLE}" ;;
   *) printf '%s\n' "${FAKE_PS_COMM:-/opt/agent-desktop/build/vmhost}" ;;
 esac
 FAKE
@@ -294,6 +295,7 @@ sleep 30 &
 source_pid=$!
 printf '%s\n' "$source_pid" > "$source_dir/vm/vmhost.pid"
 FAKE_PS_COMM=/opt/agent-desktop/build/vmhost
+FAKE_PS_COMMAND="/opt/agent-desktop/build/vmhost run $source_dir/vm"
 rm -rf "$AD_SANDBOX_DIR"
 mkdir -p "$AD_SANDBOX_DIR"
 status=0
@@ -302,6 +304,7 @@ run_provider_with AD_SET_FROM source create demo > "$tmp/out" 2> "$tmp/err" || s
 kill "$source_pid" 2>/dev/null || true
 wait "$source_pid" 2>/dev/null || true
 source_pid=
+FAKE_PS_COMMAND=
 
 user_ipsw=$tmp/user.ipsw
 printf 'user image\n' > "$user_ipsw"
@@ -326,6 +329,22 @@ kill -0 "$foreign_pid" 2>/dev/null || fail 'stop signalled a pid whose command w
 kill "$foreign_pid" 2>/dev/null || true
 wait "$foreign_pid" 2>/dev/null || true
 foreign_pid=
+
+mkdir -p "$AD_SANDBOX_DIR/vm"
+sleep 30 &
+foreign_pid=$!
+printf '%s\n' "$foreign_pid" > "$AD_SANDBOX_DIR/vm/vmhost.pid"
+FAKE_PS_COMM=/opt/agent-desktop/build/vmhost
+FAKE_PS_COMMAND="/opt/agent-desktop/build/vmhost run $tmp/sandboxes/other/vm"
+run_ok stop demo
+assert_field "$tmp/out" state broken 'stop of a vmhost pid that runs another bundle'
+assert_field "$tmp/out" message 'Sandbox demo has a dead or foreign VM process record that was not signalled.' 'stop of a vmhost pid that runs another bundle message'
+kill -0 "$foreign_pid" 2>/dev/null || fail 'stop signalled a vmhost pid that runs another bundle'
+[ -f "$AD_SANDBOX_DIR/vm/vmhost.pid" ] || fail 'stop discarded a foreign VM process record for another bundle'
+kill "$foreign_pid" 2>/dev/null || true
+wait "$foreign_pid" 2>/dev/null || true
+foreign_pid=
+FAKE_PS_COMMAND=
 
 FAKE_PS_COMM=/opt/agent-desktop/build/vmhost
 mkdir -p "$AD_SANDBOX_DIR/vm/share"
@@ -364,6 +383,22 @@ kill "$job_pid" 2>/dev/null || true
 wait "$job_pid" 2>/dev/null || true
 job_pid=
 rm -f "$AD_SANDBOX_DIR/vm/install.pid" "$AD_SANDBOX_DIR/vm/download.size" "$AD_SANDBOX_DIR/vm/download.path"
+
+sleep 30 &
+job_pid=$!
+printf '%s\n' "$job_pid" > "$AD_SANDBOX_DIR/vm/install.pid"
+status=0
+run_provider_with FAKE_PS_COMMAND "$here/provider.sh __install_job download" rm demo > "$tmp/out" 2> "$tmp/err" || status=$?
+[ "$status" = 1 ] || fail "rm while installing exited $status"
+assert_field "$tmp/out" code ACTION_FAILED 'rm while installing'
+assert_field "$tmp/out" message 'Sandbox demo is still installing, so it was not removed.' 'rm while installing message'
+assert_field "$tmp/out" suggestion 'Run `agent-desktop sandbox status demo` and remove it after the install finishes or fails.' 'rm while installing suggestion'
+kill -0 "$job_pid" 2>/dev/null || fail 'rm killed the install job'
+[ -d "$AD_SANDBOX_DIR/vm" ] || fail 'rm removed the bundle while the install job was running'
+kill "$job_pid" 2>/dev/null || true
+wait "$job_pid" 2>/dev/null || true
+job_pid=
+rm -f "$AD_SANDBOX_DIR/vm/install.pid"
 
 sleep 30 &
 vm_pid=$!

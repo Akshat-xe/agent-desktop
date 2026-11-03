@@ -166,7 +166,12 @@ vm_process_state() {
   case $state_pid in *[1-9]*) ;; *) printf 'stale\n'; return 0 ;; esac
   if ! kill -0 "$state_pid" 2>/dev/null; then printf 'dead\n'; return 0; fi
   state_comm=$(ps -o comm= -p "$state_pid" 2>/dev/null | tr -d '\r' || true)
-  case $state_comm in *vmhost) printf 'live\n' ;; *) printf 'stale\n' ;; esac
+  case $state_comm in *vmhost) ;; *) printf 'stale\n'; return 0 ;; esac
+  state_command=$(ps -ww -o command= -p "$state_pid" 2>/dev/null | tr -d '\r' | sed -e 's/[[:space:]]*$//' || true)
+  case $state_command in
+    *" run $VM_DIR"|*" run $VM_DIR --window") printf 'live\n' ;;
+    *) printf 'stale\n' ;;
+  esac
 }
 
 job_is_running() {
@@ -732,6 +737,10 @@ do_rm() {
   name=${1:-}
   if ! valid_name "$name"; then
     emit_fail INVALID_ARGS "The rm verb needs a valid sandbox name." "Run agent-desktop sandbox rm <name>."
+    return 1
+  fi
+  if job_is_running; then
+    emit_fail ACTION_FAILED "Sandbox $name is still installing, so it was not removed." "Run \`agent-desktop sandbox status $name\` and remove it after the install finishes or fails."
     return 1
   fi
   vm_state=$(vm_process_state "$VM_DIR/vmhost.pid")
