@@ -28,7 +28,7 @@ Bun, Yarn and pnpm can install the same package. It includes native binaries and
 For direct execution without a JavaScript launcher, download the matching native archive from
 [GitHub Releases](https://github.com/vercel-labs/agent-desktop/releases) and keep its helper beside the executable.
 
-Official Homebrew and Scoop packages are being submitted; they are not yet available in the default catalogs.
+On macOS and Linux, Homebrew also works: `brew install agent-desktop`. There is no official Scoop package yet.
 The repository no longer maintains a custom Homebrew tap or Scoop bucket.
 
 - **macOS** needs Accessibility permission: `agent-desktop permissions --guide`.

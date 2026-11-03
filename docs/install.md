@@ -12,15 +12,23 @@ For a direct native executable without a JavaScript launcher, download the archi
 from [GitHub Releases](https://github.com/vercel-labs/agent-desktop/releases). Extract the executable and its platform
 helper together into a directory on PATH. Upgrade by replacing both with files from the same release.
 
-## Homebrew and Scoop
+## Homebrew
 
-Official packages are being submitted to `Homebrew/homebrew-core` and `ScoopInstaller/Main`. They are not yet
-available through the default catalogs. This repository no longer maintains a custom tap or bucket; existing
-custom installations remain pinned to their installed version.
+On macOS and Linux, install from Homebrew's default catalog:
 
-Once accepted, Homebrew builds from the tagged source and manages its own bottles. Scoop installs the Windows
-release archive and checks GitHub releases for updates. Catalog updates and approvals are managed by those
-projects, separately from our npm and GitHub release workflow.
+```bash
+brew install agent-desktop
+agent-desktop version
+```
+
+The formula lives in `Homebrew/homebrew-core`. It builds from the tagged source, installs the platform helper beside
+the CLI, and Homebrew manages its own bottles. Homebrew's automation picks up new release tags, so a new version can
+reach Homebrew after npm and GitHub Releases. Upgrade with `brew upgrade agent-desktop`.
+
+## Scoop and older installations
+
+There is no official Scoop package yet. This repository no longer maintains a custom Homebrew tap or Scoop bucket;
+existing custom installations remain pinned to their installed version.
 
 If an older installation shadows the command, uninstall it through its original package manager. Check resolution
 with `command -v agent-desktop` on macOS/Linux or `Get-Command agent-desktop` on Windows.
