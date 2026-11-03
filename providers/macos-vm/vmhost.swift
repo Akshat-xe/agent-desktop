@@ -313,7 +313,7 @@ final class ProgressLog: @unchecked Sendable {
         lock.withLock {
             guard percent > lastPercent else { return }
             lastPercent = percent
-            try? handle.write(contentsOf: Data("\(percent)\n".utf8))
+            try? handle.write(contentsOf: Data("\(percent)%\n".utf8))
         }
     }
 }
@@ -345,6 +345,7 @@ struct InstallCommand {
         Output.succeed(["ok": true, "status": "installed"])
     }
 
+    @MainActor
     static func perform(_ imageURL: URL, _ bundle: Bundle) async throws {
         let image: VZMacOSRestoreImage
         do {
