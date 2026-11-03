@@ -106,13 +106,19 @@ pub trait SystemOps: Send + Sync {
         Vec::new()
     }
 
+    /// A kind this platform lacks is a wrong argument; an adapter that roots no
+    /// surface at all cannot snapshot, which is a platform limit.
     fn check_surface_support(&self, requested: crate::SnapshotSurface) -> Result<(), AdapterError> {
         let supported = self.supported_surfaces();
         if supported.contains(&requested) {
             return Ok(());
         }
         Err(AdapterError::new(
-            crate::ErrorCode::InvalidArgs,
+            if supported.is_empty() {
+                crate::ErrorCode::PlatformNotSupported
+            } else {
+                crate::ErrorCode::InvalidArgs
+            },
             format!("Snapshot surface '{}' is not available on this platform", requested.as_str()),
         )
         .with_details(serde_json::json!({

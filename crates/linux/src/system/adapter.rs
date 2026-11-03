@@ -213,7 +213,11 @@ impl SystemOps for LinuxAdapter {
             return Ok(());
         }
         Err(AdapterError::new(
-            ErrorCode::InvalidArgs,
+            if supported.is_empty() {
+                ErrorCode::PlatformNotSupported
+            } else {
+                ErrorCode::InvalidArgs
+            },
             format!("Snapshot surface '{}' is not available on this platform", requested.as_str()),
         )
         .with_details(serde_json::json!({
