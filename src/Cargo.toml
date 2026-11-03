@@ -48,6 +48,10 @@ name = "cli_process"
 path = "tests/cli_process.rs"
 
 [[test]]
+name = "mcp_process"
+path = "tests/mcp_process.rs"
+
+[[test]]
 name = "command_host_absent"
 path = "tests/command_host_absent.rs"
 
