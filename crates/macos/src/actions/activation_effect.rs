@@ -13,9 +13,8 @@ mod imp {
     /// unsupported code to the action that navigates it, and moves its
     /// selection rather than the focus. Selection is therefore read as well,
     /// on every element, because an attribute an element does not publish reads
-    /// as absent and the rule simply never fires for it. A press can also keep
-    /// focus where it is and replace what the focused editor shows, so that
-    /// editor's value is read too.
+    /// as absent and the rule simply never fires for it. The focused editor's
+    /// value is read because a press can replace what that editor shows.
     #[derive(Default)]
     pub(crate) struct FocusState {
         focused_element: Option<AXElement>,
@@ -123,6 +122,12 @@ mod imp {
             .and_then(|state| state.focused_element.as_ref())
             .is_some_and(|focused| focus_reached(focused, element, deadline));
         observed_change(before, &after, target_focused)
+            || focused_content_replaced(before, &after, || {
+                let focused = after
+                    .as_ref()
+                    .and_then(|state| state.focused_element.as_ref());
+                focused.and_then(|focused| shares_window(focused, element, deadline)) == Some(true)
+            })
     }
 
     /// A control that owns an editor hands focus to the editor, not to itself:
@@ -181,7 +186,6 @@ mod imp {
         let focus_moved_to_target = target_focused
             && matches!((before, after), (Some(before), Some(after)) if before != after);
         focus_moved_to_target
-            || focused_content_replaced(before, after)
             || selection_turned_on(before, after)
             || matches!(
                 (
@@ -192,15 +196,26 @@ mod imp {
             )
     }
 
-    /// The same element keeps focus but shows different content: the press
-    /// swapped what the focused editor holds.
-    fn focused_content_replaced(before: &Option<FocusState>, after: &Option<FocusState>) -> bool {
+    /// The focused editor in the pressed element's own window now shows new content.
+    fn focused_content_replaced(
+        before: &Option<FocusState>,
+        after: &Option<FocusState>,
+        editor_in_target_window: impl FnOnce() -> bool,
+    ) -> bool {
         matches!((before, after), (Some(before), Some(after))
-            if before.focused_element.is_some()
-                && before == after
-                && before.focused_value.is_some()
-                && after.focused_value.is_some()
-                && before.focused_value != after.focused_value)
+            if before.focused_element.is_some() && before == after
+                && matches!((&before.focused_value, &after.focused_value), (Some(old), Some(new)) if old != new))
+            && editor_in_target_window()
+    }
+
+    fn shares_window(focused: &AXElement, element: &AXElement, deadline: Deadline) -> Option<bool> {
+        let window = |el| {
+            crate::tree::properties::attributes::copy_element_attr_result(el, "AXWindow", deadline)
+        };
+        Some(crate::tree::same_element(
+            &window(focused).ok()??,
+            &window(element).ok()??,
+        ))
     }
 
     /// An element that was not selected and now is has been acted on, whatever
@@ -236,15 +251,18 @@ mod imp {
 
         #[test]
         fn replaced_content_in_the_same_focused_editor_is_an_effect() {
-            let editor = |value: &str| {
+            let editor = |pid, value: &str| {
                 Some(FocusState {
                     focused_value: Some(value.into()),
-                    ..focused(1).unwrap_or_default()
+                    ..focused(pid).unwrap_or_default()
                 })
             };
-            assert!(observed_change(&editor("old note"), &editor(""), false));
-            assert!(!observed_change(&editor("same"), &editor("same"), false));
-            assert!(!observed_change(&editor("old note"), &focused(1), false));
+            let replaced = |old, new, in_window| focused_content_replaced(&old, &new, || in_window);
+            assert!(replaced(editor(1, "old note"), editor(1, ""), true));
+            assert!(!replaced(editor(1, "old note"), editor(1, ""), false));
+            assert!(!replaced(editor(1, "same"), editor(1, "same"), true));
+            assert!(!replaced(editor(1, "old note"), focused(1), true));
+            assert!(!replaced(editor(1, "old note"), editor(2, ""), true));
         }
 
         #[test]
