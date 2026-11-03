@@ -259,11 +259,11 @@ agent-desktop --headed open-system-surface --surface KIND
     <tr><th>Flag</th><th>Default</th><th>Meaning</th></tr>
   </thead>
   <tbody>
-    <tr><td><code>--surface KIND</code></td><td>required</td><td>The shell surface: <code>start-menu</code>, <code>taskbar</code>, <code>system-tray</code>, <code>system-tray-overflow</code>, or <code>action-center</code>.</td></tr>
+    <tr><td><code>--surface KIND</code></td><td>required</td><td>The shell surface: <code>start-menu</code>, <code>taskbar</code>, <code>system-tray</code>, <code>system-tray-overflow</code>, <code>action-center</code>, <code>dock</code>, or <code>menu-bar-extras</code>. <code>dock</code> and <code>menu-bar-extras</code> are the macOS kinds.</td></tr>
   </tbody>
 </table>
 
-`data` is `surface` and `window`, with the same fields as a [`list-windows`](/desktop/commands/app-window#list-windows) entry. This shape comes from the command's unit test:
+`data` is `surface` and, on Windows and Linux, `window`, with the same fields as a [`list-windows`](/desktop/commands/app-window#list-windows) entry. On macOS no window owns the surface, so `data` is only `{"surface": "dock"}` and `window` is left out. This shape comes from the command's unit test:
 
 ```json
 {

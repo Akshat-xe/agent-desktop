@@ -56,7 +56,7 @@ Ref actions are headless by default. Under `--headed`, `click`, `right-click`, `
     <tr><td>Clipboard</td><td><code>clipboard-get</code>, <code>clipboard-set</code> (read back: <code>delivered_verified</code>), <code>clipboard-clear</code></td><td></td><td></td></tr>
     <tr><td>Wait</td><td>All modes. <code>wait --notification</code> sees only an already-open Notification Center</td><td></td><td></td></tr>
     <tr><td>Notifications</td><td><code>list-notifications</code> while Notification Center is open</td><td>Listing while it is closed, and every dismiss and action</td><td>Headless listing with the center closed: <code>POLICY_DENIED</code></td></tr>
-    <tr><td>Shell surfaces</td><td></td><td></td><td><code>open-system-surface</code>: <code>dock</code> and <code>menu-bar-extras</code>, returned at once, headless, because they are always on screen</td></tr>
+    <tr><td>Shell surfaces</td><td><code>open-system-surface</code> for <code>dock</code> and <code>menu-bar-extras</code>, returned at once because they are always on screen</td><td></td><td><code>start-menu</code>, <code>taskbar</code>, <code>system-tray</code>, <code>system-tray-overflow</code>, <code>action-center</code>: <code>INVALID_ARGS</code></td></tr>
     <tr><td>System</td><td><code>status</code>, <code>permissions</code>, <code>version</code>, <code>batch</code>, <code>skills</code>, <code>session</code>, <code>cursor-overlay</code>, <code>trace</code></td><td></td><td></td></tr>
   </tbody>
 </table>

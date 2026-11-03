@@ -150,7 +150,7 @@ agent-desktop list-surfaces --app gtk3-widget-factory
 
 ## Open an OS shell surface
 
-`open-system-surface` raises a shell surface and returns the window it presents, in the `w-<id>` form that `list-windows` uses:
+`open-system-surface` raises a shell surface. On Windows and Linux it returns the window it presents, in the `w-<id>` form that `list-windows` uses. On macOS it returns only `{"surface": "dock"}`, because no window owns these surfaces:
 
 ```bash
 agent-desktop --headed open-system-surface --surface action-center

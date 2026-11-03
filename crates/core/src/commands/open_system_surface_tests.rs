@@ -41,8 +41,8 @@ impl SystemOps for SurfaceAdapter {
     }
 }
 
-/// An adapter that keeps the trait default for the open seam - the macOS
-/// shape today - but still grants the lease, so the `not_supported` the
+/// An adapter that keeps the trait default for the open seam, as an adapter
+/// without the seam does, but still grants the lease, so the `not_supported` the
 /// command surfaces is provably the open seam's own answer and not the
 /// lease acquisition failing.
 struct LeaseOnlyAdapter {
