@@ -361,6 +361,7 @@ mod tests {
             ErrorCode::InvalidArgs,
             ErrorCode::NotificationNotFound,
             ErrorCode::SnapshotNotFound,
+            ErrorCode::SandboxNotFound,
             ErrorCode::PolicyDenied,
             ErrorCode::AppUnresponsive,
             ErrorCode::Internal,

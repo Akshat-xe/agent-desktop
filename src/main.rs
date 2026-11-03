@@ -26,6 +26,7 @@ use agent_desktop_core::{
 };
 use clap::{CommandFactory, Parser};
 use cli::{Cli, Commands};
+use cli_args::sandbox::SandboxActionCli;
 use cli_args::skills::SkillsAction;
 use std::io::{BufWriter, Write};
 use std::process::ExitCode;
@@ -131,6 +132,11 @@ fn run() -> ExitCode {
     };
 
     let cmd_name = cmd.name();
+    if let Commands::Sandbox(args) = &cmd
+        && let SandboxActionCli::Exec(exec) = &args.action
+    {
+        return dispatch::sandbox::run_exec(exec, cmd_name, &build_adapter());
+    }
     #[cfg(target_os = "macos")]
     if !cmd.needs_caller_process() {
         return match command_host::forward(&cli, &cmd) {

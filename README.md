@@ -107,7 +107,7 @@ Every command prints one envelope with `ok` and either `data` or `error`. An err
 
 ## Commands
 
-It ships 60 command names, 56 operational commands. The other four (`key-down`, `key-up`, `mouse-down`, `mouse-up`) refuse to run until a daemon can release a held key or button.
+It ships 62 command names, 58 operational commands. The other four (`key-down`, `key-up`, `mouse-down`, `mouse-up`) refuse to run until a daemon can release a held key or button.
 
 | Group | Commands |
 |---|---|
@@ -119,6 +119,7 @@ It ships 60 command names, 56 operational commands. The other four (`key-down`, 
 | Clipboard | `clipboard-get`, `clipboard-set`, `clipboard-clear` |
 | Wait | `wait` |
 | Sessions | `session`, `trace`, `cursor-overlay` |
+| Sandboxes | `install`, `sandbox` |
 | System | `status`, `permissions`, `version`, `batch`, `skills` |
 
 ## Platform support

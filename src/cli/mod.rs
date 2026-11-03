@@ -15,11 +15,13 @@ use crate::cli_args::{
     batch::BatchArgs,
     cursor_overlay::CursorOverlayArgs,
     drag::DragCliArgs,
+    install::InstallArgs,
     mouse_wheel::MouseWheelArgs,
     notifications::{
         DismissAllNotificationsCliArgs, DismissNotificationCliArgs, ListNotificationsCliArgs,
         NotificationActionCliArgs,
     },
+    sandbox::SandboxArgs,
     session::SessionArgs,
     skills::SkillsArgs,
     system::{
@@ -166,6 +168,12 @@ pub(crate) enum Commands {
     CursorOverlay(CursorOverlayArgs),
     #[command(about = "Read merged session trace timelines")]
     Trace(TraceArgs),
+    #[command(about = "Report or install what a sandbox provider needs on this host")]
+    Install(InstallArgs),
+    #[command(
+        about = "Create, run, and remove local sandboxes (create, start, stop, status, list, rm, exec)"
+    )]
+    Sandbox(SandboxArgs),
 }
 
 #[derive(Clone, Copy)]
@@ -248,6 +256,8 @@ impl Commands {
             Self::Session(_) => CommandMetadata::new("session", false),
             Self::CursorOverlay(_) => CommandMetadata::new("cursor-overlay", false),
             Self::Trace(_) => CommandMetadata::new("trace", false),
+            Self::Install(_) => CommandMetadata::new("install", false),
+            Self::Sandbox(_) => CommandMetadata::new("sandbox", false),
         }
     }
 
@@ -260,10 +270,12 @@ impl Commands {
     }
 
     #[cfg(target_os = "macos")]
-    /// Permission guidance needs the caller; session management crosses host namespaces.
+    /// Commands that must run in the caller process, never the accessibility-grant holder.
     pub(crate) fn needs_caller_process(&self) -> bool {
-        matches!(self, Self::Session(_) | Self::Batch(_))
-            || matches!(self, Self::Permissions(args) if args.guide)
+        matches!(
+            self,
+            Self::Session(_) | Self::Batch(_) | Self::Install(_) | Self::Sandbox(_)
+        ) || matches!(self, Self::Permissions(args) if args.guide)
     }
 
     pub(crate) fn is_mutating(&self) -> bool {
@@ -308,6 +320,7 @@ impl Commands {
             | Self::NotificationAction(_)
             | Self::ClipboardSet(_)
             | Self::ClipboardClear
+            | Self::Install(_)
             | Self::Batch(_) => true,
             Self::Screenshot(args) => args.output_path.is_some(),
             Self::ClipboardGet(args) => args.out.is_some(),
@@ -316,6 +329,11 @@ impl Commands {
                 !matches!(&args.action, crate::cli_args::session::SessionAction::List)
             }
             Self::CursorOverlay(_) => true,
+            Self::Sandbox(args) => !matches!(
+                &args.action,
+                crate::cli_args::sandbox::SandboxActionCli::List
+                    | crate::cli_args::sandbox::SandboxActionCli::Status(_)
+            ),
             Self::Trace(args) => {
                 matches!(&args.action, crate::cli_args::trace::TraceAction::Export(_))
             }
