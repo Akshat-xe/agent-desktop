@@ -80,7 +80,7 @@ fn run() -> ExitCode {
         agent_desktop_windows::WindowsPrivateFile,
     ));
 
-    let matches = match Cli::command().subcommand(mcp::command()).try_get_matches() {
+    let matches = match root_command().try_get_matches() {
         Ok(matches) => matches,
         Err(e) => return report_parse_failure(e),
     };
@@ -97,7 +97,7 @@ fn run() -> ExitCode {
     let cmd = match cli.command.take() {
         Some(c) => c,
         None => {
-            return match Cli::command().subcommand(mcp::command()).print_help() {
+            return match root_command().print_help() {
                 Ok(()) => ExitCode::SUCCESS,
                 Err(write_err) => report_output_failure(write_err),
             };
@@ -106,6 +106,11 @@ fn run() -> ExitCode {
 
     let cmd_name = cmd.name();
     finish(cmd_name, execute(cli, cmd))
+}
+
+/// The parsed command tree: every `Commands` variant plus `mcp`, which serves them.
+fn root_command() -> clap::Command {
+    Cli::command().subcommand(mcp::command())
 }
 
 fn report_parse_failure(e: clap::Error) -> ExitCode {

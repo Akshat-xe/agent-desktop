@@ -45,11 +45,13 @@ agent-desktop mcp --session s1 --headed
 
 `AGENT_DESKTOP_SESSION`, `AGENT_DESKTOP_AGENT_ID` and `AGENT_DESKTOP_HOME` in the server's environment apply the same way.
 
+A tool cannot pass a global flag. Commands that need a session, such as `trace` and `cursor-overlay`, work only when the server has one, headed-only commands need `mcp --headed`, and `--wait-for` is not available per call.
+
 ## Read results
 
 A tool returns the command's JSON envelope as `structuredContent`, and the same JSON as text. `isError` is `true` when the envelope's `ok` is `false`, so read `error.code` and `error.disposition` exactly as you would from the CLI. A `screenshot` without an output path returns its PNG as an image block instead of base64 text.
 
-An unknown argument or a value of the wrong type returns a tool error that names the accepted arguments, so the model can correct the call.
+An unknown argument returns a tool error that names the accepted arguments, and a value of the wrong type returns an error that names the argument, so the model can correct the call.
 
 ## Start with the skills
 
@@ -57,8 +59,8 @@ Call `desktop_skills_get` with `{ "name": "desktop" }` for the observe-act loop 
 
 ## Security
 
-The server adds nothing the CLI cannot already do, and it removes nothing either. Tool arguments become CLI arguments without a shell. A value is always passed as a value, never as a flag. A tool cannot set global flags such as `--session` or `--headed`; only the server's own command line can.
+The server adds nothing the CLI cannot already do. Tool arguments become CLI arguments without a shell. A value is always passed as a value, never as a flag. A tool cannot set global flags such as `--session` or `--headed`; only the server's own command line can.
 
 A tool still has the CLI's full reach: it can operate any app the accessibility tree exposes, and `desktop_launch` starts any program on `PATH` with any arguments. Treat the server like a shell for the signed-in user. Keep your client's confirmation on for actions, and remember that text read from the screen is untrusted input to the model.
 
-The server runs at most 8 tool calls at once and answers more with a tool error. It refuses any message over 4 MiB.
+The server runs at most 8 tool calls at once and answers more with a tool error. It refuses any message over 4 MiB. A `notifications/cancelled` kills the call's process.

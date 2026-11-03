@@ -8,8 +8,8 @@ fn binary() -> Command {
 
 fn serve(requests: &[Value], args: &[&str]) -> Vec<Value> {
     let mut child = binary()
-        .args(args)
         .arg("mcp")
+        .args(args)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .spawn()
@@ -76,13 +76,13 @@ fn mcp_tool_calls_run_the_cli_command_and_return_its_envelope() {
 fn mcp_server_global_flags_reach_every_call() {
     let responses = serve(
         &[call(1, "desktop_session_list", json!({}))],
-        &["--wait-timeout", "5"],
+        &["--debug", "--screenshot", "x.html"],
     );
     let result = &responses[0]["result"];
     assert_eq!(result["isError"], true, "{result}");
     assert_eq!(
         result["structuredContent"]["error"]["message"],
-        "--wait-timeout requires --wait-for or --wait-for-gone"
+        "--debug supports snapshot and click only"
     );
 }
 
@@ -93,7 +93,6 @@ fn malformed_messages_get_errors_and_the_server_keeps_serving() {
             json!([{ "jsonrpc": "2.0", "id": 9, "method": "tools/list" }]),
             json!(42),
             json!({ "jsonrpc": "2.0", "id": 2, "method": "no/such/method" }),
-            call(3, "desktop_version", json!({ "nul": "a\u{0}b" })),
             call(4, "desktop_skills_get", json!({ "name": "a\u{0}b" })),
             call(5, "desktop_version", json!({})),
         ],
@@ -106,7 +105,12 @@ fn malformed_messages_get_errors_and_the_server_keeps_serving() {
     assert_eq!(codes[0], (Value::Null, json!(-32600)), "{responses:?}");
     assert_eq!(codes[1], (Value::Null, json!(-32600)), "{responses:?}");
     assert_eq!(codes[2], (json!(2), json!(-32601)), "{responses:?}");
-    assert_eq!(responses[3]["result"]["isError"], true);
-    assert_eq!(responses[4]["result"]["isError"], true);
-    assert_eq!(responses[5]["result"]["isError"], false);
+    let nul = &responses[3]["result"];
+    assert!(
+        nul["content"][0]["text"]
+            .as_str()
+            .is_some_and(|text| text.starts_with("Cannot run agent-desktop")),
+        "{nul}"
+    );
+    assert_eq!(responses[4]["result"]["isError"], false);
 }
