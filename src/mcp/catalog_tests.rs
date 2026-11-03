@@ -119,3 +119,52 @@ fn unknown_arguments_and_wrong_types_are_reported_not_passed_through() {
             .contains("Unknown argument 'headed'")
     );
 }
+
+fn tool_at(path: &[&str]) -> Tool {
+    tools()
+        .into_iter()
+        .find(|tool| tool.path == path)
+        .expect("tool exists")
+}
+
+#[test]
+fn flag_shaped_values_stay_values_and_never_become_flags() {
+    let hostile = "--headed --trace=/tmp/owned -- --session=x";
+    let mut arguments = Map::new();
+    arguments.insert("app".into(), Value::from(hostile));
+    let cli = parse(&tool_at(&["snapshot"]), &arguments).expect("parses");
+    assert!(!cli.interaction.headed && cli.trace.is_none() && cli.identity.session.is_none());
+    let Some(crate::cli::Commands::Snapshot(snapshot)) = cli.command else {
+        panic!("snapshot");
+    };
+    assert_eq!(snapshot.scope.app.as_deref(), Some(hostile));
+
+    let mut arguments = Map::new();
+    arguments.insert("ref_id".into(), Value::from("@s8f3k2p9:e1"));
+    arguments.insert("text".into(), Value::from(hostile));
+    let cli = parse(&tool_at(&["type"]), &arguments).expect("parses");
+    assert!(!cli.interaction.headed && cli.trace.is_none() && cli.identity.session.is_none());
+    let Some(crate::cli::Commands::Type(typed)) = cli.command else {
+        panic!("type");
+    };
+    assert_eq!(typed.text, hostile);
+}
+
+#[test]
+fn global_flags_cannot_be_set_per_call() {
+    let tool = tool_at(&["snapshot"]);
+    for global in [
+        "headed",
+        "session",
+        "agent_id",
+        "trace",
+        "trace_strict",
+        "wait_for",
+        "debug",
+    ] {
+        let mut arguments = Map::new();
+        arguments.insert(global.into(), Value::from("x"));
+        let error = tool.argv(&arguments).expect_err(global);
+        assert!(error.contains("Unknown argument"), "{global}: {error}");
+    }
+}

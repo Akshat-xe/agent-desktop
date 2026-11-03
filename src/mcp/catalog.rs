@@ -8,6 +8,7 @@ use crate::cli::Cli;
 
 const TOOL_PREFIX: &str = "desktop";
 const CLAP_HELP_SUBCOMMAND: &str = "help";
+const MAX_COUNT: u64 = 16;
 
 /// One leaf CLI command exposed as an MCP tool.
 pub(crate) struct Tool {
@@ -148,7 +149,10 @@ fn push_option(argv: &mut Vec<String>, arg: &Arg, key: &str, value: &Value) -> R
         ArgAction::Count => {
             let count = value
                 .as_u64()
-                .ok_or_else(|| format!("Argument '{key}' must be a non-negative integer"))?;
+                .filter(|count| *count <= MAX_COUNT)
+                .ok_or_else(|| {
+                    format!("Argument '{key}' must be an integer from 0 to {MAX_COUNT}")
+                })?;
             argv.extend((0..count).map(|_| flag.clone()));
         }
         _ => {
@@ -181,7 +185,7 @@ fn scalars(key: &str, value: &Value) -> Result<Vec<String>, String> {
 fn property(arg: &Arg) -> Value {
     let mut schema = match arg.get_action() {
         ArgAction::SetTrue | ArgAction::SetFalse => json!({ "type": "boolean" }),
-        ArgAction::Count => json!({ "type": "integer", "minimum": 0 }),
+        ArgAction::Count => json!({ "type": "integer", "minimum": 0, "maximum": MAX_COUNT }),
         _ => value_schema(arg),
     };
     if let Some(help) = arg.get_long_help().or_else(|| arg.get_help()) {

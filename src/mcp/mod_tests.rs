@@ -83,3 +83,20 @@ fn inline_screenshots_become_image_content() {
     let failed = call::envelope_result(json!({ "ok": false, "command": "click" }));
     assert_eq!(failed["isError"], true);
 }
+
+#[test]
+fn oversized_messages_are_refused_and_the_next_message_still_reads() {
+    let mut input = Vec::new();
+    input.extend(std::iter::repeat_n(b'x', MAX_MESSAGE_BYTES + 10));
+    input.extend(b"\n\n{\"id\":1}\n");
+    let mut reader = std::io::Cursor::new(input);
+    let Some(Err(error)) = read_message(&mut reader) else {
+        panic!("an oversized message must be refused");
+    };
+    assert_eq!(error.code, -32600);
+    let Some(Ok(next)) = read_message(&mut reader) else {
+        panic!("the following message must still be read");
+    };
+    assert_eq!(next, b"{\"id\":1}\n");
+    assert!(read_message(&mut reader).is_none());
+}

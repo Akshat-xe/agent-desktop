@@ -54,3 +54,11 @@ An unknown argument or a value of the wrong type returns a tool error that names
 ## Start with the skills
 
 Call `desktop_skills_get` with `{ "name": "desktop" }` for the observe-act loop and `{ "name": "platform" }` for what differs on your OS. The server's instructions point clients there too.
+
+## Security
+
+The server adds nothing the CLI cannot already do, and it removes nothing either. Tool arguments become CLI arguments without a shell. A value is always passed as a value, never as a flag. A tool cannot set global flags such as `--session` or `--headed`; only the server's own command line can.
+
+A tool still has the CLI's full reach: it can operate any app the accessibility tree exposes, and `desktop_launch` starts any program on `PATH` with any arguments. Treat the server like a shell for the signed-in user. Keep your client's confirmation on for actions, and remember that text read from the screen is untrusted input to the model.
+
+The server runs at most 8 tool calls at once and answers more with a tool error. It refuses any message over 4 MiB.

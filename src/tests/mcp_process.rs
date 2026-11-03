@@ -85,3 +85,28 @@ fn mcp_server_global_flags_reach_every_call() {
         "--wait-timeout requires --wait-for or --wait-for-gone"
     );
 }
+
+#[test]
+fn malformed_messages_get_errors_and_the_server_keeps_serving() {
+    let responses = serve(
+        &[
+            json!([{ "jsonrpc": "2.0", "id": 9, "method": "tools/list" }]),
+            json!(42),
+            json!({ "jsonrpc": "2.0", "id": 2, "method": "no/such/method" }),
+            call(3, "desktop_version", json!({ "nul": "a\u{0}b" })),
+            call(4, "desktop_skills_get", json!({ "name": "a\u{0}b" })),
+            call(5, "desktop_version", json!({})),
+        ],
+        &[],
+    );
+    let codes = responses
+        .iter()
+        .map(|response| (response["id"].clone(), response["error"]["code"].clone()))
+        .collect::<Vec<_>>();
+    assert_eq!(codes[0], (Value::Null, json!(-32600)), "{responses:?}");
+    assert_eq!(codes[1], (Value::Null, json!(-32600)), "{responses:?}");
+    assert_eq!(codes[2], (json!(2), json!(-32601)), "{responses:?}");
+    assert_eq!(responses[3]["result"]["isError"], true);
+    assert_eq!(responses[4]["result"]["isError"], true);
+    assert_eq!(responses[5]["result"]["isError"], false);
+}
