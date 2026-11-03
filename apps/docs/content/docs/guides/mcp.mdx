@@ -63,4 +63,4 @@ The server adds nothing the CLI cannot already do. Tool arguments become CLI arg
 
 A tool still has the CLI's full reach: it can operate any app the accessibility tree exposes, and `desktop_launch` starts any program on `PATH` with any arguments. Treat the server like a shell for the signed-in user. Keep your client's confirmation on for actions, and remember that text read from the screen is untrusted input to the model.
 
-The server runs at most 8 tool calls at once and answers more with a tool error. It refuses any message over 4 MiB. A `notifications/cancelled` stops the call: it never starts, or its process is killed, and the call gets no response.
+The server runs at most 8 tool calls at once and answers more with a tool error. It refuses any message over 4 MiB. A `notifications/cancelled` stops the call and it gets no response. A call that has not started never starts. A running call gets `SIGTERM` first, so it releases any key or button it holds, and is killed if it is still running 3 seconds later; on Windows it is killed at once.
