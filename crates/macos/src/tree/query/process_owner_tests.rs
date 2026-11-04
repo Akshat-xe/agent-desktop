@@ -23,6 +23,9 @@ fn process_owner_surfaces_require_saved_process_identity_before_tree_read() {
             .expect_err("process-owner observation without saved identity must fail closed");
 
         assert_eq!(error.code, ErrorCode::StaleRef);
-        assert_eq!(error.message, "Application has no process instance identity");
+        assert_eq!(
+            error.message,
+            "Application has no process instance identity"
+        );
     }
 }

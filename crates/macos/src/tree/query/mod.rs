@@ -55,8 +55,10 @@ pub(crate) fn observe_tree(
         request.surface,
         SnapshotSurface::Window | SnapshotSurface::MenuBarExtras
     ) && matches!(root, ObservationRoot::Window(window) if window.is_process_owner());
-    if (matches!(request.surface, SnapshotSurface::Menu | SnapshotSurface::Menubar)
-        && !matches!(root, ObservationRoot::Element { .. }))
+    if (matches!(
+        request.surface,
+        SnapshotSurface::Menu | SnapshotSurface::Menubar
+    ) && !matches!(root, ObservationRoot::Element { .. }))
         || process_owner_surface
     {
         let (pid, instance) = match root {
