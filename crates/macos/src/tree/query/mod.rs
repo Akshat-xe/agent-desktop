@@ -242,6 +242,9 @@ fn resolve_window_surface(
                 },
             )?
         }
+        SnapshotSurface::Window | SnapshotSurface::Dock if window.is_process_owner() => {
+            crate::tree::properties::element::element_for_pid(pid)
+        }
         SnapshotSurface::Window => {
             crate::system::window::window_resolve::window_element_for_info_with_deadline(
                 window, deadline,
@@ -259,6 +262,10 @@ fn resolve_window_surface(
             SnapshotSurface::Menubar,
             "No menu bar found",
         )?,
+        SnapshotSurface::MenuBarExtras => {
+            crate::tree::shell_surface::extras_menu_bar(pid, deadline)?
+                .ok_or_else(|| AdapterError::element_not_found("No menu bar extras found"))?
+        }
         _ => return Err(AdapterError::not_supported("snapshot surface")),
     };
     crate::tree::locator_deadline::remaining(deadline)?;
@@ -329,6 +336,7 @@ mod tests {
                 value: None,
                 description: None,
                 native_id: None,
+                unique_at_capture: false,
             },
             geometry: RefGeometry {
                 bounds_space: None,
@@ -345,6 +353,7 @@ mod tests {
                 source_window_title: None,
                 source_window_bounds_hash: None,
                 source_surface: Default::default(),
+                renderer_accessibility_forced: false,
             },
             scope: RefScope {
                 root_ref: None,

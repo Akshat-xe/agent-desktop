@@ -2,14 +2,27 @@ use serde_json::json;
 
 use crate::{AdapterError, AppError, ErrorCode, PlatformAdapter, ProcessIdentity, WindowInfo};
 
+/// Focuses the window a ref came from and returns whether it did. A ref
+/// captured through a process owner has no window to raise, so it returns
+/// `false`; any other ref without a window id is refused.
 pub(crate) fn focus_entry_window(
     entry: &crate::RefEntry,
     adapter: &dyn PlatformAdapter,
     context: &crate::CommandContext,
     lease: &crate::InteractionLease,
-) -> Result<WindowInfo, AppError> {
+) -> Result<bool, AppError> {
+    entry.process.identity().ok_or_else(|| {
+        AdapterError::new(
+            ErrorCode::ActionNotSupported,
+            "Headed input requires target process-instance identity",
+        )
+        .with_details(json!({ "physical_delivery_started": false }))
+    })?;
+    if entry.source.is_process_owned() {
+        return Ok(false);
+    }
     let expected = adapter.resolve_ref_focus_window(entry, lease.deadline())?;
-    focus_exact_window(&expected, adapter, context, lease)
+    focus_exact_window(&expected, adapter, context, lease).map(|_| true)
 }
 
 pub fn saved_ref_focus_window(entry: &crate::RefEntry) -> Result<WindowInfo, AdapterError> {
@@ -24,7 +37,7 @@ pub fn saved_ref_focus_window(entry: &crate::RefEntry) -> Result<WindowInfo, Ada
         entry.source.source_window_id.as_deref(),
         "Headed input requires an exact source window id",
     )?;
-    let expected = WindowInfo {
+    Ok(WindowInfo {
         id: window_id.to_string(),
         title: entry.source.source_window_title.clone().unwrap_or_default(),
         app: entry.source.source_app.clone().unwrap_or_default(),
@@ -32,8 +45,7 @@ pub fn saved_ref_focus_window(entry: &crate::RefEntry) -> Result<WindowInfo, Ada
         process_instance: Some(process.instance),
         bounds: None,
         state: crate::WindowState::default(),
-    };
-    Ok(expected)
+    })
 }
 
 pub(crate) fn focus_process_window(

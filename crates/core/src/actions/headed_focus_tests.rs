@@ -69,7 +69,7 @@ fn recovered_ref_window_is_strictly_verified_before_focus_without_rewriting_sour
                 ["ref_window", "strict_window"]
             );
         } else {
-            assert_eq!(result.unwrap().id, "exact-live-owner");
+            assert!(result.unwrap());
             assert_eq!(
                 *adapter.events.lock().unwrap(),
                 ["ref_window", "strict_window", "focus"]

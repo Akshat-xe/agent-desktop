@@ -1,6 +1,7 @@
 use super::*;
-use crate::ObservationRoot;
+use crate::WindowFilter;
 use crate::adapter::{ActionOps, InputOps, ObservationOps, SystemOps};
+use crate::locator::live_locator::{ObservationRequest, ObservationRoot};
 
 struct SurfaceAdapter {
     windows: Vec<WindowInfo>,

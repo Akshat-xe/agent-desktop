@@ -26,6 +26,9 @@ pub(crate) fn surface_root(
         (ObservationRoot::Application { .. }, _) => {
             Err(AdapterError::not_supported("application observation root"))
         }
+        (ObservationRoot::Window(window), _) if window.is_process_owner() => {
+            Err(AdapterError::app_has_no_window(&window.app))
+        }
         (ObservationRoot::Window(window), SnapshotSurface::Window) => {
             let handle = parse_window_id(&window.id)?;
             root_from_hwnd(handle, deadline)

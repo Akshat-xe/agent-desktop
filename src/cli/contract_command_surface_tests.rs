@@ -22,6 +22,8 @@ const NON_COMMAND_MODULES: &[&str] = &[
     "find_live_test_support",
     "selector_observation",
     "surface_scope",
+    "type_text_interval",
+    "type_text_interval_verify",
     "stale_retry_test_support",
     "wait_element",
     "wait_latest_ref_cache",

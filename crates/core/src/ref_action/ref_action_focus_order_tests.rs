@@ -123,6 +123,21 @@ impl ObservationOps for FocusAdapter {
             },
         )
     }
+    fn observe_tree(
+        &self,
+        root: crate::ObservationRoot<'_>,
+        _request: &crate::ObservationRequest,
+    ) -> Result<crate::ObservedTree, AdapterError> {
+        let role = if self.application_menu {
+            "menuitem"
+        } else {
+            "button"
+        };
+        crate::adapter::saved_ref_tree(root, role, Some("Run"))
+    }
+
+    crate::adapter::saved_ref_scope!(@inventory);
+    crate::adapter::saved_ref_anchor!();
 }
 
 impl ActionOps for FocusAdapter {
@@ -223,7 +238,8 @@ fn execute_action_within(
     let _clock = crate::wait::deadline::VirtualClock::freeze();
     let mut entry: RefEntry = serde_json::from_value(serde_json::json!({
         "pid": 1, "process_instance": "test-instance", "role": "button", "name": "Run",
-        "source_window_id": "w-test", "source_surface": "window", "path": [0],
+        "source_window_id": "w-1", "source_surface": "window", "path": [0],
+        "unique_at_capture": true,
         "bounds": bounds(), "bounds_hash": bounds().bounds_hash(), "available_actions": ["Click"], "states": []
     })).unwrap();
     if adapter.application_menu {

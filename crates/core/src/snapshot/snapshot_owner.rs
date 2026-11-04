@@ -17,7 +17,8 @@ impl SnapshotOwner {
     pub fn window(&self) -> Option<&WindowInfo> {
         match self {
             Self::Application(_) => None,
-            Self::Window(window) => Some(window),
+            Self::Window(window) if !window.is_process_owner() => Some(window),
+            Self::Window(_) => None,
         }
     }
 
@@ -39,7 +40,7 @@ impl SnapshotOwner {
                 app: Some(&app.name),
                 process_instance: app.process_instance.as_deref(),
                 window_id: None,
-                window_title: None,
+                window_title: Some(""),
                 window_bounds_hash: None,
                 surface,
             },
@@ -47,8 +48,12 @@ impl SnapshotOwner {
                 pid: window.pid,
                 app: Some(&window.app),
                 process_instance: window.process_instance.as_deref(),
-                window_id: Some(&window.id),
-                window_title: Some(&window.title),
+                window_id: (!window.is_process_owner()).then_some(window.id.as_str()),
+                window_title: Some(if window.is_process_owner() {
+                    ""
+                } else {
+                    &window.title
+                }),
                 window_bounds_hash: window.bounds.as_ref().and_then(crate::Rect::bounds_hash),
                 surface,
             },

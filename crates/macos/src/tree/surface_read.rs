@@ -139,7 +139,7 @@ fn finish<T>(
     result.map_err(|error| map_error(attribute, error))
 }
 
-pub(super) fn map_error(attribute: &str, error: i32) -> AdapterError {
+pub(crate) fn map_error(attribute: &str, error: i32) -> AdapterError {
     use accessibility_sys::{
         kAXErrorAPIDisabled, kAXErrorCannotComplete, kAXErrorInvalidUIElement,
     };
@@ -153,7 +153,6 @@ pub(super) fn map_error(attribute: &str, error: i32) -> AdapterError {
     } else {
         ErrorCode::ActionFailed
     };
-    let retryable = matches!(code, ErrorCode::Timeout | ErrorCode::AppUnresponsive);
     AdapterError::new(
         code,
         format!("Accessibility surface read failed for {attribute}"),
@@ -163,7 +162,7 @@ pub(super) fn map_error(attribute: &str, error: i32) -> AdapterError {
         "ax_error": error,
         "kind": "surface_read",
         "complete": false,
-        "retryable": retryable,
+        "retryable": error == kAXErrorCannotComplete,
     }))
     .with_suggestion("Retry after the application finishes updating its accessibility surfaces")
 }
@@ -196,7 +195,7 @@ mod tests {
         let stale = map_error("AXRole", kAXErrorInvalidUIElement);
         let details = stale.details.unwrap();
         assert_eq!(details["complete"], false);
-        assert_eq!(details["retryable"], true);
+        assert_eq!(details["retryable"], false);
         assert_eq!(details["ax_error"], kAXErrorInvalidUIElement);
     }
 
@@ -226,6 +225,20 @@ mod tests {
             .code,
             ErrorCode::Timeout
         );
+    }
+
+    #[test]
+    fn a_busy_read_is_retryable_while_a_terminal_one_is_not() {
+        assert!(map_error("AXRole", kAXErrorCannotComplete).is_transient_incomplete_read());
+        assert!(!map_error("AXRole", kAXErrorAPIDisabled).is_transient_incomplete_read());
+        assert!(!map_error("AXRole", kAXErrorInvalidUIElement).is_transient_incomplete_read());
+    }
+
+    #[test]
+    fn expired_deadline_fails_without_native_reads() {
+        let error = ensure_before_deadline(Instant::now()).expect_err("expired deadline");
+
+        assert_eq!(error.code, ErrorCode::Timeout);
     }
 
     #[test]
