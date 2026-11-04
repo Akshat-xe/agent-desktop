@@ -43,7 +43,10 @@ pub(crate) struct TypeArgs {
     )]
     #[serde(default)]
     pub timeout_ms: Option<u64>,
-    #[arg(long, help = "Read up to 10,000 bytes of UTF-8 text from a pipe or file")]
+    #[arg(
+        long,
+        help = "Read up to 10,000 bytes of UTF-8 text from a pipe or file"
+    )]
     #[serde(skip)]
     pub stdin: bool,
     #[arg(
