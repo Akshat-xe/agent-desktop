@@ -46,7 +46,8 @@ pub fn build(
     window_id: Option<&str>,
     deadline: crate::Deadline,
 ) -> Result<SnapshotResult, AppError> {
-    let owners = surface_target::resolve_owners(adapter, app_name, window_id, opts.surface, deadline)?;
+    let owners =
+        surface_target::resolve_owners(adapter, app_name, window_id, opts.surface, deadline)?;
     build_for_owners(adapter, opts, owners, deadline)
 }
 

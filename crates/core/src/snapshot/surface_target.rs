@@ -235,9 +235,11 @@ pub(crate) fn first_surface_owner<T>(
             result => return result.map(|observed| (owner, observed)),
         }
     }
-    Err(AdapterError::new(crate::ErrorCode::WindowNotFound, "No owner to observe")
-        .unsent()
-        .into())
+    Err(
+        AdapterError::new(crate::ErrorCode::WindowNotFound, "No owner to observe")
+            .unsent()
+            .into(),
+    )
 }
 
 pub(crate) fn resolve_ref_owner(

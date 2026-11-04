@@ -1,5 +1,6 @@
 use crate::{
-    AdapterError, AppError, AppInfo, Deadline, IdentityMatch, PlatformAdapter, RefEntry, WindowInfo,
+    AdapterError, AppError, AppInfo, Deadline, IdentityMatch, PlatformAdapter, RefEntry,
+    WindowInfo,
     adapter::{NativeHandle, TreeOptions},
     locator::live_locator::{
         ObservationRequest, ObservationRoot, ObservedTree, materialize_ref_entry,
@@ -7,7 +8,9 @@ use crate::{
     refs::ref_full_predicate::FullPredicate,
     refs::ref_identity::element_token,
     refs::ref_live_predicate::LivePredicate,
-    refs::resolve_errors::{absent, ambiguous_live_match, identity_not_unique, identity_unknown_error},
+    refs::resolve_errors::{
+        absent, ambiguous_live_match, identity_not_unique, identity_unknown_error,
+    },
 };
 
 /// The depth a whole-window observation reaches: the limit a snapshot walk
@@ -282,13 +285,9 @@ fn observe_window(
     } else {
         ObservationRoot::Window(window)
     };
-    let mut observed = crate::tree::renderer_accessibility::observe_tree(
-        adapter,
-        root,
-        request,
-        lease,
-    )
-    .map_err(adapter_error)?;
+    let mut observed =
+        crate::tree::renderer_accessibility::observe_tree(adapter, root, request, lease)
+            .map_err(adapter_error)?;
     if let crate::locator::live_locator::ObservationSource::Window {
         renderer_accessibility_forced,
         ..
