@@ -138,7 +138,9 @@ fn sandbox_exec_keeps_nested_arguments_after_the_delimiter() {
         Value::Array(nested_args.iter().cloned().map(Value::String).collect()),
     );
 
-    let argv = tool.argv(&arguments).expect("sandbox exec arguments build argv");
+    let argv = tool
+        .argv(&arguments)
+        .expect("sandbox exec arguments build argv");
     assert_eq!(
         argv,
         [
