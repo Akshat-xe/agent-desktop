@@ -51,10 +51,13 @@ pub(crate) fn observe_tree(
 ) -> Result<ObservedTree, AdapterError> {
     let request = (*request).validate()?;
     let deadline = crate::tree::locator_deadline::from_operation(request.deadline)?;
-    if matches!(
+    let process_owner_surface = matches!(
         request.surface,
-        SnapshotSurface::Menu | SnapshotSurface::Menubar
-    ) && !matches!(root, ObservationRoot::Element { .. })
+        SnapshotSurface::Window | SnapshotSurface::MenuBarExtras
+    ) && matches!(root, ObservationRoot::Window(window) if window.is_process_owner());
+    if (matches!(request.surface, SnapshotSurface::Menu | SnapshotSurface::Menubar)
+        && !matches!(root, ObservationRoot::Element { .. }))
+        || process_owner_surface
     {
         let (pid, instance) = match root {
             ObservationRoot::Application { app, .. } => (app.pid, app.process_instance.as_deref()),
@@ -64,7 +67,7 @@ pub(crate) fn observe_tree(
             }
         };
         let instance = instance.ok_or_else(|| {
-            AdapterError::stale_ref_because("Menu application has no process instance identity")
+            AdapterError::stale_ref_because("Application has no process instance identity")
         })?;
         let identity = crate::system::process::process_identity::require_core(
             &agent_desktop_core::ProcessIdentity::new(pid, instance),
@@ -385,3 +388,7 @@ mod tests {
         assert_eq!(error.details.unwrap()["kind"], "locator_root_invalid");
     }
 }
+
+#[cfg(test)]
+#[path = "process_owner_tests.rs"]
+mod process_owner_tests;

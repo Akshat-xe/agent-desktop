@@ -253,11 +253,18 @@ pub(crate) fn resolve_ref_owner(
             "Ref has no process-instance identity for post-action observation",
         )
     })?;
-    if adapter.is_application_surface(entry.source.source_surface) {
+    let application_surface = adapter.is_application_surface(entry.source.source_surface);
+    if application_surface || entry.source.is_process_owned() {
         return Ok(match adapter.process_state(process, deadline)? {
-            ProcessState::Running => RefOwnerObservation::Present(SnapshotOwner::Application(
-                application_from_ref(entry)?,
-            )),
+            ProcessState::Running => {
+                let app = application_from_ref(entry)?;
+                let owner = if application_surface {
+                    SnapshotOwner::Application(app)
+                } else {
+                    SnapshotOwner::Window(crate::WindowInfo::for_process(&app))
+                };
+                RefOwnerObservation::Present(owner)
+            }
             state @ (ProcessState::Exited { .. } | ProcessState::Crashed { .. }) => {
                 RefOwnerObservation::Absent(Some(state))
             }
@@ -326,7 +333,9 @@ pub(crate) fn ref_observation_surface(
     adapter: &dyn PlatformAdapter,
     entry: &crate::RefEntry,
 ) -> SnapshotSurface {
-    if adapter.is_application_surface(entry.source.source_surface) {
+    if adapter.is_application_surface(entry.source.source_surface)
+        || entry.source.is_process_owned()
+    {
         entry.source.source_surface
     } else {
         SnapshotSurface::Window

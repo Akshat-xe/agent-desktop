@@ -55,15 +55,29 @@ impl ObservationOps for ProbeAdapter {
     ) -> Result<ObservedTree, AdapterError> {
         let pid = match root {
             ObservationRoot::Application { app, .. } => {
+                assert!(matches!(
+                    request.surface,
+                    crate::SnapshotSurface::Menu | crate::SnapshotSurface::Menubar
+                ));
                 assert_eq!(app.pid, crate::ProcessId::new(1));
                 assert_eq!(app.process_instance.as_deref(), Some("test-instance"));
                 app.pid
             }
             ObservationRoot::Window(window) => {
-                if request.surface != crate::SnapshotSurface::Window {
+                assert_eq!(window.pid, crate::ProcessId::new(1));
+                assert_eq!(window.process_instance.as_deref(), Some("test-instance"));
+                let supported = if window.is_process_owner() {
+                    matches!(
+                        request.surface,
+                        crate::SnapshotSurface::Window | crate::SnapshotSurface::MenuBarExtras
+                    )
+                } else {
+                    request.surface == crate::SnapshotSurface::Window
+                };
+                if !supported {
                     return Err(AdapterError::new(
                         ErrorCode::ElementNotFound,
-                        "No open child surface",
+                        "Unsupported observation surface for window owner",
                     ));
                 }
                 window.pid
@@ -282,18 +296,6 @@ fn windowless_menubar_waits_read_application_for_presence_and_absence() {
                     && *surface == crate::SnapshotSurface::Menubar)
         );
     }
-}
-
-#[test]
-fn successful_menu_materialization_rechecks_original_process_liveness() {
-    let adapter = ProbeAdapter {
-        exits_after_observation: true,
-        ..windowless_adapter()
-    };
-    let error = delivered_wait(&adapter, &menu_entry(), false).unwrap_err();
-    assert_eq!(error.code(), "TIMEOUT");
-    assert_eq!(adapter.observed.lock().unwrap().len(), 1);
-    assert!(adapter.process_checks.load(Ordering::SeqCst) >= 2);
 }
 
 #[test]

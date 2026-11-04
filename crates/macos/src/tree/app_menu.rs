@@ -28,7 +28,7 @@ fn require_generation(
         Ok(())
     } else {
         Err(AdapterError::stale_ref_because(
-            "Menu application changed process instance during observation",
+            "Application process instance changed during observation",
         ))
     }
 }

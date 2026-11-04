@@ -106,6 +106,44 @@ fn application_owner_requires_saved_label_and_nonempty_generation() {
     assert_eq!(adapter.inventory_queries.load(Ordering::SeqCst), 0);
 }
 
+#[test]
+fn process_owned_wait_uses_process_window_and_refuses_unmarked_missing_window() {
+    let _home = crate::refs::refs_test_support::HomeGuard::new();
+    for surface in [
+        crate::SnapshotSurface::Window,
+        crate::SnapshotSurface::MenuBarExtras,
+    ] {
+        let adapter = windowless_adapter();
+        let mut entry = menu_entry();
+        entry.source.source_surface = surface;
+        entry.source.source_window_title = Some(String::new());
+
+        let result = delivered_wait(&adapter, &entry, false).unwrap();
+        assert_eq!(result["app"], "TargetApp");
+        let observed = adapter.observed.lock().unwrap();
+        assert!(!observed.is_empty());
+        assert!(observed.iter().all(|(pid, observed_surface)| {
+            *pid == crate::ProcessId::new(1) && *observed_surface == surface
+        }));
+    }
+
+    for surface in [
+        crate::SnapshotSurface::Window,
+        crate::SnapshotSurface::MenuBarExtras,
+    ] {
+        let adapter = windowless_adapter();
+        let mut malformed = menu_entry();
+        malformed.source.source_surface = surface;
+        assert_eq!(
+            delivered_wait(&adapter, &malformed, false)
+                .unwrap_err()
+                .code(),
+            "ACTION_NOT_SUPPORTED"
+        );
+        assert!(adapter.observed.lock().unwrap().is_empty());
+    }
+}
+
 struct StrictReadAdapter {
     deadline: Deadline,
     code: ErrorCode,
@@ -272,4 +310,16 @@ fn incomplete_zero_match_reads_never_prove_presence_or_absence() {
         observe(&wait_for_ready(true), &entry(), &adapter)["outcome"],
         "expected_state_observed"
     );
+}
+
+#[test]
+fn successful_menu_materialization_rechecks_original_process_liveness() {
+    let adapter = ProbeAdapter {
+        exits_after_observation: true,
+        ..windowless_adapter()
+    };
+    let error = delivered_wait(&adapter, &menu_entry(), false).unwrap_err();
+    assert_eq!(error.code(), "TIMEOUT");
+    assert_eq!(adapter.observed.lock().unwrap().len(), 1);
+    assert!(adapter.process_checks.load(Ordering::SeqCst) >= 2);
 }
