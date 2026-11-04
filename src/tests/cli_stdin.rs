@@ -19,7 +19,7 @@ fn run_cli(args: &[&str], input: &[u8]) -> Output {
 }
 
 #[test]
-fn each_stdin_command_rejects_invalid_utf8_before_host_forwarding() {
+fn each_stdin_command_rejects_invalid_utf8_before_dispatch() {
     let input = b"private-marker\xff";
     for args in [
         vec!["type", "@s8f3k2p9:e1", "--stdin"],

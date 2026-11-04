@@ -147,7 +147,7 @@ fn flag_shaped_values_stay_values_and_never_become_flags() {
     let Some(crate::cli::Commands::Type(typed)) = cli.command else {
         panic!("type");
     };
-    assert_eq!(typed.text, hostile);
+    assert_eq!(typed.text.as_deref(), Some(hostile));
 }
 
 #[test]
