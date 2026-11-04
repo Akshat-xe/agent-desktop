@@ -35,6 +35,10 @@ impl ObservationOps for MacOSAdapter {
         crate::tree::resolve::resolve_element_with_deadline(entry, deadline)
     }
 
+    fn retains_element_tokens(&self) -> bool {
+        crate::tree::resolve::retained::tokens_available()
+    }
+
     fn resolve_locator_anchor(
         &self,
         entry: &RefEntry,
@@ -78,6 +82,17 @@ impl ObservationOps for MacOSAdapter {
         crate::system::app::app_inventory::list_apps_scoped_until(
             name,
             bundle_id,
+            crate::tree::locator_deadline::from_operation(deadline)?,
+        )
+    }
+
+    fn resolve_shell_surface(
+        &self,
+        surface: agent_desktop_core::SnapshotSurface,
+        deadline: Deadline,
+    ) -> Result<WindowInfo, AdapterError> {
+        crate::tree::shell_surface::resolve_surface(
+            surface,
             crate::tree::locator_deadline::from_operation(deadline)?,
         )
     }
@@ -167,6 +182,34 @@ impl ObservationOps for MacOSAdapter {
         }
         #[cfg(not(target_os = "macos"))]
         Err(AdapterError::not_supported("get_live_actions"))
+    }
+
+    fn get_insertion_caret(
+        &self,
+        handle: &NativeHandle,
+        deadline: Deadline,
+    ) -> Result<Option<agent_desktop_core::Rect>, AdapterError> {
+        Ok(crate::tree::properties::text_insertion::insertion_caret(
+            ax_element(handle)?,
+            deadline,
+        ))
+    }
+
+    fn get_focused_insertion_caret(
+        &self,
+        process: Option<agent_desktop_core::ProcessId>,
+        deadline: Deadline,
+    ) -> Result<Option<agent_desktop_core::Rect>, AdapterError> {
+        let pid = process
+            .map(|process| i32::try_from(process.get()))
+            .transpose()
+            .map_err(|_| {
+                AdapterError::new(
+                    agent_desktop_core::ErrorCode::InvalidArgs,
+                    "Process id is out of range",
+                )
+            })?;
+        crate::tree::properties::text_insertion::focused_insertion_caret(pid, deadline)
     }
 
     fn get_live_element(
