@@ -13,7 +13,7 @@ mod system;
 mod trace;
 
 #[cfg(test)]
-pub(crate) mod test_support;
+mod test_support;
 
 #[cfg(test)]
 mod cursor_overlay_lifecycle_tests;
