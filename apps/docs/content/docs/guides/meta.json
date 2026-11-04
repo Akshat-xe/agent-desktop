@@ -8,6 +8,7 @@
     "headed-mode",
     "traces",
     "docker-container",
-    "vercel-sandbox"
+    "vercel-sandbox",
+    "mcp"
   ]
 }
