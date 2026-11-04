@@ -168,3 +168,21 @@ fn global_flags_cannot_be_set_per_call() {
         assert!(error.contains("Unknown argument"), "{global}: {error}");
     }
 }
+
+#[test]
+fn stdin_input_is_not_exposed_to_mcp_calls() {
+    for path in [["type"], ["set-value"], ["clipboard-set"]] {
+        let tool = tool_at(&path);
+        assert!(
+            tool.definition()["inputSchema"]["properties"]
+                .get("stdin")
+                .is_none()
+        );
+        let arguments = Map::from_iter([("stdin".into(), Value::Bool(true))]);
+        assert!(
+            tool.argv(&arguments)
+                .unwrap_err()
+                .contains("Unknown argument 'stdin'")
+        );
+    }
+}
