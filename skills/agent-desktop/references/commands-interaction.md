@@ -44,7 +44,7 @@ Exit codes: `0` success, `1` structured error, `2` argument error. The `error` o
 | `PERM_DENIED` | A required OS permission is missing | Read the platform skill |
 | `ELEMENT_NOT_FOUND` | Ref cannot be resolved in the live UI | Snapshot again |
 | `STALE_REF` | Ref no longer matches the live UI | Snapshot again, use the new ref |
-| `AMBIGUOUS_TARGET` | Several live elements match the old identity | Narrow with `find`, then use the new ref |
+| `AMBIGUOUS_TARGET` | Several live elements match the ref's identity, or it was not proven unique at capture | Act on a control unique in the window; identical twins need `--headed mouse-click --xy` (see `commands-observation.md`) |
 | `SNAPSHOT_NOT_FOUND` | Snapshot id missing or expired | Snapshot again |
 | `APP_NOT_FOUND` | App not running | `launch` it |
 | `WINDOW_NOT_FOUND` | No matching window | Check the name, use `list-windows` |
@@ -54,7 +54,7 @@ Exit codes: `0` success, `1` structured error, `2` argument error. The `error` o
 | `APP_UNRESPONSIVE` | A liveness probe also failed after an uncertain mutation | Take a fresh snapshot. Wait for recovery before you retry |
 | `TIMEOUT` | Wait or actionability condition not met | Read `error.details.kind` |
 | `INVALID_ARGS` | Bad arguments, or a protected system process was targeted for close | Check syntax |
-| `PLATFORM_NOT_SUPPORTED` | The adapter lacks this method or surface | Use another approach |
+| `PLATFORM_NOT_SUPPORTED` | The adapter lacks this method | Use another approach |
 | `NOTIFICATION_NOT_FOUND` | Notification index or fingerprint no longer matches | List again |
 | `INTERNAL` | Unexpected OS failure | Read `message`. Retry once only if `disposition.retry` is `safe` |
 
@@ -95,6 +95,7 @@ agent-desktop right-click @s8f3k2p9:e5
 
 ```bash
 agent-desktop type @s8f3k2p9:e2 "hello@example.com"
+agent-desktop type @s8f3k2p9:e2 "hello world" --interval-ms 60
 agent-desktop set-value @s8f3k2p9:e2 "new value"
 printf '%s' 'hello' | agent-desktop set-value @s8f3k2p9:e2 --stdin
 agent-desktop clear @s8f3k2p9:e2
@@ -103,6 +104,7 @@ agent-desktop focus @s8f3k2p9:e2
 
 - `type` inserts text and checks the result when value and selection are readable. A readable mismatch returns `ACTION_FAILED`, and an unreadable result succeeds as `delivered_unverified`. Text sent as keystrokes reaches the field through the app's event queue, so the check re-reads the field while it changes, inside the `--timeout-ms` budget. If it settles on other text, or never settles, the result is `delivered_unverified` with `verification_reason: postcondition_mismatch`. Headed typing that focuses an inactive field can change the selection, and the result then stays unverified. Read the field with `get` before you write again.
 - The default `--timeout-ms` of `type` is 5000 plus 30 ms per character of the text. An explicit `--timeout-ms` wins.
+- `type --interval-ms N` (1 to 2000) types one keystroke every N ms inside one command; `--timeout-ms` then applies to each keystroke, and `0` makes each keystroke try once. A keystroke keeps combining marks, emoji sequences and CR LF together. The first keystroke is a full ref action (headed, it also focuses the window), and the rest go to the same element, taking the interaction lease one keystroke at a time. A headed keystroke is posted only while the target's process and focused element are unchanged; if focus moves, the burst stops with an error. The result adds `keystrokes` and `interval_ms`, and `post_state` is the field after the last keystroke. It stays `delivered_verified` only when that read shows the whole text; otherwise it is `delivered_unverified` with `verification_reason` `postcondition_mismatch`, `insufficient_evidence` (typed part way through the field) or `final_read_failed` (no `post_state`). `--wait-for` waits once, after the last keystroke. A failure part way through adds `details.typed_keystrokes` and `details.keystrokes` and is `delivered_unverified`: read the field before you type again.
 - `set-value` writes the value directly through the semantic value path. It is faster than `type`, but it may not fire every UI callback. Use it for text fields, text areas and sliders.
 - Use `--stdin` with `type` or `set-value` to read text from a pipe or redirected file. Terminal input is rejected. Provide either `--stdin` or a command-line value.
 - The action timeout starts after the input ends; it doesn't limit this wait. Empty input and all line breaks are kept, including a final newline. Use `printf '%s'` to avoid adding one. Input must be valid UTF-8 without NUL bytes (`\0`). The limits are 10,000 bytes for `type` and 128 KiB for `set-value`.
