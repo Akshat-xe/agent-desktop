@@ -1,10 +1,17 @@
 use super::*;
 use std::os::unix::ffi::OsStrExt;
 
+/// The executable path as the kernel lays it out: NUL-terminated, then NUL-padded to 8 bytes.
+fn padded_path(executable: &str) -> Vec<u8> {
+    let mut path = executable.as_bytes().to_vec();
+    path.push(0);
+    path.resize(path.len().next_multiple_of(8), 0);
+    path
+}
+
 fn procargs(executable: &str, arguments: &[&str]) -> Vec<u8> {
     let mut buffer = (arguments.len() as i32).to_ne_bytes().to_vec();
-    buffer.extend_from_slice(executable.as_bytes());
-    buffer.extend_from_slice(b"\0\0\0");
+    buffer.extend_from_slice(&padded_path(executable));
     for argument in arguments {
         buffer.extend_from_slice(argument.as_bytes());
         buffer.push(0);
@@ -45,11 +52,60 @@ fn malformed_argument_blocks_have_no_command() {
         assert_eq!(first_argument(&buffer), None);
     }
     let mut unterminated = 1_i32.to_ne_bytes().to_vec();
-    unterminated.extend_from_slice(b"/bin/zsh\0\0-zsh");
+    unterminated.extend_from_slice(&padded_path("/bin/zsh"));
+    unterminated.extend_from_slice(b"-zsh");
     assert_eq!(first_argument(&unterminated), None);
     let mut padding_only = 1_i32.to_ne_bytes().to_vec();
     padding_only.extend_from_slice(b"/bin/zsh\0\0\0");
     assert_eq!(first_argument(&padding_only), None);
+    let mut dirty_padding = procargs("/bin/zsh", &["-zsh"]);
+    dirty_padding[4 + "/bin/zsh".len() + 1] = b'x';
+    assert_eq!(first_argument(&dirty_padding), None);
+}
+
+#[test]
+fn an_empty_first_argument_is_not_read_as_the_next_one() {
+    let buffer = procargs(
+        "/bin/sleep",
+        &["", "/Applications/Fake.app/Contents/MacOS/Fake"],
+    );
+    assert_eq!(first_argument(&buffer), None);
+}
+
+#[test]
+fn a_path_that_ends_on_the_boundary_has_no_padding() {
+    let buffer = procargs("/bin/ab", &["-ab"]);
+    assert_eq!(&buffer[4..12], b"/bin/ab\0");
+    assert_eq!(first_argument(&buffer), Some(&b"-ab"[..]));
+}
+
+#[test]
+fn a_live_process_with_an_empty_first_argument_has_no_command() {
+    use std::os::unix::process::CommandExt;
+    let mut child = std::process::Command::new("/bin/sleep")
+        .arg0("")
+        .arg("30")
+        .spawn()
+        .unwrap();
+    let pid = libc::pid_t::try_from(child.id()).unwrap();
+    let mut buffer = argument_buffer().unwrap();
+    let mut read = None;
+    for _ in 0..100 {
+        read = read_arguments(pid, &mut buffer).map(<[u8]>::to_vec);
+        if read
+            .as_deref()
+            .and_then(arguments)
+            .is_some_and(|(count, _)| count == 2)
+        {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    let _ = child.kill();
+    let _ = child.wait();
+    let read = read.unwrap();
+    assert_eq!(arguments(&read).map(|(count, _)| count), Some(2));
+    assert_eq!(first_argument(&read), None);
 }
 
 #[test]

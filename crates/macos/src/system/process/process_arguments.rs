@@ -87,19 +87,33 @@ pub(crate) fn read_arguments(pid: libc::pid_t, buffer: &mut [u8]) -> Option<&[u8
     (read == 0 && size <= buffer.len()).then_some(&buffer[..size])
 }
 
-/// The first argument of a `KERN_PROCARGS2` buffer: a native-endian argument count, the
-/// NUL-terminated executable path, NUL padding, then the arguments.
-pub(crate) fn first_argument(procargs: &[u8]) -> Option<&[u8]> {
-    let (count, rest) = procargs.split_first_chunk::<4>()?;
-    if i32::from_ne_bytes(*count) <= 0 {
+/// Alignment of the first argument from the start of the executable path for 64-bit processes:
+/// `exec_extract_strings` in XNU `bsd/kern/kern_exec.c` pads the path with NULs to it.
+const EXEC_PATH_ALIGNMENT: usize = 8;
+
+/// The argument count and the bytes from `argv[0]` onward of a `KERN_PROCARGS2` buffer: a
+/// native-endian argument count, the NUL-terminated executable path, NUL padding to
+/// `EXEC_PATH_ALIGNMENT`, then the arguments. The padding has a fixed length, so an empty
+/// `argv[0]` is not mistaken for more padding.
+pub(crate) fn arguments(procargs: &[u8]) -> Option<(usize, &[u8])> {
+    let (count, strings) = procargs.split_first_chunk::<4>()?;
+    let count = usize::try_from(i32::from_ne_bytes(*count))
+        .ok()
+        .filter(|count| *count > 0)?;
+    let path_end = strings.iter().position(|byte| *byte == 0)?;
+    let start = (path_end + 1).next_multiple_of(EXEC_PATH_ALIGNMENT);
+    let padding = strings.get(path_end + 1..start)?;
+    if padding.iter().any(|byte| *byte != 0) {
         return None;
     }
-    let path_end = rest.iter().position(|byte| *byte == 0)?;
-    let rest = &rest[path_end + 1..];
-    let start = rest.iter().position(|byte| *byte != 0)?;
-    let rest = &rest[start..];
-    let end = rest.iter().position(|byte| *byte == 0)?;
-    Some(&rest[..end])
+    Some((count, &strings[start..]))
+}
+
+/// The non-empty first argument of a `KERN_PROCARGS2` buffer.
+pub(crate) fn first_argument(procargs: &[u8]) -> Option<&[u8]> {
+    let (_, arguments) = arguments(procargs)?;
+    let end = arguments.iter().position(|byte| *byte == 0)?;
+    Some(&arguments[..end]).filter(|command| !command.is_empty())
 }
 
 fn require_pids(pids: Option<Vec<libc::pid_t>>) -> Result<Vec<libc::pid_t>, AdapterError> {

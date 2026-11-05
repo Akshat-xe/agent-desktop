@@ -2,7 +2,9 @@
 
 use std::mem::{MaybeUninit, size_of};
 
-use super::process_arguments::{PROC_UID_ONLY, argument_buffer, list_pids, read_arguments};
+use super::process_arguments::{
+    PROC_UID_ONLY, argument_buffer, arguments, list_pids, read_arguments,
+};
 
 const HOST_MARKER: &[u8] = b"AGENT_DESKTOP_INTERNAL_COMMAND_HOST=1";
 const CS_OPS_IDENTITY: u32 = 11;
@@ -46,21 +48,9 @@ pub fn stop_legacy_command_hosts() {
 /// Whether a `KERN_PROCARGS2` buffer carries the host marker in its environment,
 /// skipping the executable path and arguments that precede it.
 pub(crate) fn environment_has_marker(procargs: &[u8]) -> bool {
-    let Some((count, rest)) = procargs.split_first_chunk::<4>() else {
+    let Some((arguments, mut rest)) = arguments(procargs) else {
         return false;
     };
-    let arguments = i32::from_ne_bytes(*count);
-    if arguments <= 0 {
-        return false;
-    }
-    let Some(path_end) = rest.iter().position(|byte| *byte == 0) else {
-        return false;
-    };
-    let rest = &rest[path_end + 1..];
-    let Some(arguments_start) = rest.iter().position(|byte| *byte != 0) else {
-        return false;
-    };
-    let mut rest = &rest[arguments_start..];
     for _ in 0..arguments {
         let Some(end) = rest.iter().position(|byte| *byte == 0) else {
             return false;
