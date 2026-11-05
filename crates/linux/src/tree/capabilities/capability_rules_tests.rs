@@ -222,7 +222,10 @@ fn text_selection_keeps_document_refs_without_making_static_text_ref_able() {
             panic!("expected known capabilities");
         };
         let selectable = matches!(role, 60 | 61 | 79 | 82 | 92 | 93 | 94 | 95 | 96);
-        assert_eq!(actions.iter().any(|action| action == "SelectText"), selectable);
+        assert_eq!(
+            actions.iter().any(|action| action == "SelectText"),
+            selectable
+        );
         assert_eq!(
             is_ref_able_role_actions(base_role(role).as_str(), &actions),
             selectable
