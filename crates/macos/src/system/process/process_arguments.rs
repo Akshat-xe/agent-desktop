@@ -7,8 +7,8 @@ use std::time::Instant;
 pub(crate) const PROC_ALL_PIDS: u32 = 1;
 pub(crate) const PROC_UID_ONLY: u32 = 4;
 
-/// Calls `visit` with the pid and launch command (`argv[0]`, the value `ps -o comm` prints) of
-/// every process whose arguments are readable. Processes that exit during the walk, zombies and
+/// Calls `visit` with the pid and launch command (`argv[0]`) of every process whose arguments
+/// are readable and whose `argv[0]` is not empty. Processes that exit during the walk, zombies and
 /// processes of other users have no readable arguments and are skipped.
 pub(crate) fn visit_commands_until(
     deadline: Instant,
