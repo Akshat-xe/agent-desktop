@@ -1,5 +1,6 @@
 use super::*;
 use agent_desktop_core::refs::ref_alloc::is_ref_able_role_actions;
+use uiautomation::types::ControlType;
 
 use crate::tree::properties::property_outcome::PropertyValue;
 
@@ -9,6 +10,10 @@ fn known_flag(value: bool) -> PropertyOutcome {
 
 fn known_text(value: &str) -> PropertyOutcome {
     PropertyOutcome::Known(PropertyValue::Text(value.to_string()))
+}
+
+fn known_control_type(control_type: ControlType) -> PropertyOutcome {
+    PropertyOutcome::Known(PropertyValue::Number(control_type as i32))
 }
 
 /// A read set with every affordance-bearing pattern reporting `false` or
@@ -132,6 +137,10 @@ fn every_emitted_action_is_a_member_of_core_capability_vocabulary() {
         (TreeProperty::ExpandCollapseAvailable, known_flag(true)),
         (TreeProperty::SelectionItemAvailable, known_flag(true)),
         (TreeProperty::TextAvailable, known_flag(true)),
+        (
+            TreeProperty::ControlType,
+            known_control_type(ControlType::Edit),
+        ),
         (TreeProperty::ValueAvailable, known_flag(true)),
         (TreeProperty::ValueIsReadOnly, known_flag(false)),
         (TreeProperty::RangeValueAvailable, known_flag(true)),
@@ -200,6 +209,12 @@ fn every_emitted_action_is_a_member_of_core_capability_vocabulary() {
         let mut reads = inert_reads();
         reads.retain(|(candidate, _)| *candidate != property);
         reads.push((property, known_flag(true)));
+        if property == TreeProperty::TextAvailable {
+            reads.push((
+                TreeProperty::ControlType,
+                known_control_type(ControlType::Edit),
+            ));
+        }
         let isolated = resolve_actions(&ElementProperties::from_reads(reads));
         for action in expected {
             assert!(
@@ -237,25 +252,35 @@ fn writable_value_availability_produces_set_value() {
 }
 
 #[test]
-fn text_pattern_availability_produces_select_text_only_when_not_secure() {
-    let mut reads = inert_reads();
-    reads.retain(|(property, _)| *property != TreeProperty::TextAvailable);
-    reads.push((TreeProperty::TextAvailable, known_flag(true)));
-    let properties = ElementProperties::from_reads(reads);
+fn text_pattern_availability_produces_select_text_only_for_edit_and_document_controls() {
+    let cases = [
+        (known_control_type(ControlType::Edit), false, true),
+        (known_control_type(ControlType::Document), false, true),
+        (known_control_type(ControlType::Text), false, false),
+        (known_control_type(ControlType::Button), false, false),
+        (PropertyOutcome::Unknown, false, false),
+        (PropertyOutcome::Absent, false, false),
+        (known_control_type(ControlType::Edit), true, false),
+    ];
 
-    assert!(
-        known_actions(&resolve_actions(&properties)).contains(&capability::SELECT_TEXT.to_string())
-    );
+    for (control_type, secure, expected) in cases {
+        let properties = ElementProperties::from_reads(vec![
+            (TreeProperty::TextAvailable, known_flag(true)),
+            (TreeProperty::ControlType, control_type),
+            (TreeProperty::IsPassword, known_flag(secure)),
+            (TreeProperty::ValueIsReadOnly, known_flag(true)),
+        ]);
+        let actions = resolve_actions(&properties);
 
-    let mut secure_reads = inert_reads();
-    secure_reads.retain(|(property, _)| *property != TreeProperty::TextAvailable);
-    secure_reads.push((TreeProperty::TextAvailable, known_flag(true)));
-    secure_reads.push((TreeProperty::IsPassword, known_flag(true)));
-    let secure = ElementProperties::from_reads(secure_reads);
-
-    assert!(
-        !known_actions(&resolve_actions(&secure)).contains(&capability::SELECT_TEXT.to_string())
-    );
+        assert_eq!(
+            known_actions(&actions).contains(&capability::SELECT_TEXT.to_string()),
+            expected
+        );
+        assert_eq!(
+            is_ref_able_role_actions("statictext", known_actions(&actions)),
+            expected
+        );
+    }
 }
 
 #[test]

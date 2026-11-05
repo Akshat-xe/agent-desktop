@@ -11,8 +11,8 @@ fn focus_snapshot(element: AXElement) -> FocusSnapshot {
         frontmost_pid: 406,
         frontmost_launch_time: Some(1.0),
         application: element.clone(),
-        window: element.clone(),
-        focused: element,
+        window: Some(element.clone()),
+        focused: Some(element),
     }
 }
 
@@ -78,4 +78,54 @@ fn not_delivered_setter_error_keeps_prewrite_disposition_without_focus_reread() 
     assert_eq!(error.message, "Selection is unsupported");
     assert_eq!(error.disposition, DeliverySemantics::not_delivered());
     assert!(error.details.is_none());
+}
+
+#[test]
+fn focus_read_timeout_is_not_absence() {
+    let system = AXElement(unsafe { AXUIElementCreateSystemWide() });
+    let error = super::read_element(
+        &system,
+        "AXFocusedWindow",
+        agent_desktop_core::Deadline::after(0).unwrap(),
+    )
+    .err()
+    .unwrap();
+    assert_eq!(error.code, ErrorCode::Timeout);
+    assert_eq!(error.disposition, DeliverySemantics::not_delivered());
+    assert_eq!(
+        error.details.unwrap()["ax_error"],
+        accessibility_sys::kAXErrorCannotComplete
+    );
+}
+
+#[test]
+fn optional_focus_transitions_preserve_preflight_and_postwrite_semantics() {
+    let element = AXElement(unsafe { AXUIElementCreateSystemWide() });
+    for window in [false, true] {
+        for focused in [false, true] {
+            let mut before = focus_snapshot(element.clone());
+            before.window = window.then(|| element.clone());
+            before.focused = focused.then(|| element.clone());
+            assert!(before.matches(&before));
+            let unchanged = super::focus_details(&before, Some(&before));
+            assert_eq!(unchanged["focus_changed"], false);
+            assert_eq!(unchanged["activated"], false);
+            for (next_window, next_focused) in [(!window, focused), (window, !focused)] {
+                let mut after = focus_snapshot(element.clone());
+                after.window = next_window.then(|| element.clone());
+                after.focused = next_focused.then(|| element.clone());
+                assert!(!before.matches(&after));
+                let preflight = super::preflight_focus_error(&before, &after);
+                let postwrite = super::focus_changed_error(&before, &after);
+                assert_eq!(preflight.disposition, DeliverySemantics::not_delivered());
+                assert_eq!(postwrite.disposition, DeliverySemantics::uncertain());
+                for error in [preflight, postwrite] {
+                    let details = error.details.unwrap();
+                    assert_eq!(details["focus_changed"], focused != next_focused);
+                    assert_eq!(details["activated"], window != next_window);
+                    assert_eq!(details["focus_observation"], "complete");
+                }
+            }
+        }
+    }
 }

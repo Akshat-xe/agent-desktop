@@ -6,8 +6,8 @@ pub(super) struct FocusSnapshot {
     frontmost_pid: i32,
     frontmost_launch_time: Option<f64>,
     application: AXElement,
-    window: AXElement,
-    focused: AXElement,
+    window: Option<AXElement>,
+    focused: Option<AXElement>,
 }
 
 /// Reads on-screen windows to initialize this process's WindowServer connection without activating a window.
@@ -24,18 +24,18 @@ impl FocusSnapshot {
     pub(super) fn matches(&self, other: &Self) -> bool {
         same_frontmost(self, other)
             && crate::tree::same_element(&self.application, &other.application)
-            && crate::tree::same_element(&self.window, &other.window)
-            && crate::tree::same_element(&self.focused, &other.focused)
+            && same_optional_element(&self.window, &other.window)
+            && same_optional_element(&self.focused, &other.focused)
     }
 
     fn focus_changed(&self, other: &Self) -> bool {
-        !crate::tree::same_element(&self.focused, &other.focused)
+        !same_optional_element(&self.focused, &other.focused)
     }
 
     fn activated(&self, other: &Self) -> bool {
         !same_frontmost(self, other)
             || !crate::tree::same_element(&self.application, &other.application)
-            || !crate::tree::same_element(&self.window, &other.window)
+            || !same_optional_element(&self.window, &other.window)
     }
 }
 
@@ -48,8 +48,8 @@ pub(super) fn read_global_focus(deadline: Deadline) -> Result<FocusSnapshot, Ada
     let frontmost_before = read_frontmost(deadline)?;
     let system = AXElement(unsafe { AXUIElementCreateSystemWide() });
     let application = crate::tree::element_for_pid(frontmost_before.pid);
-    let window = required_element(&application, "AXFocusedWindow", deadline)?;
-    let focused = required_element(&system, "AXFocusedUIElement", deadline)?;
+    let window = read_element(&application, "AXFocusedWindow", deadline)?;
+    let focused = read_element(&system, "AXFocusedUIElement", deadline)?;
     let frontmost_after = read_frontmost(deadline)?;
     if !same_owner(&frontmost_before, &frontmost_after) {
         return Err(unknown_focus(
@@ -73,6 +73,14 @@ fn read_frontmost(
         .frontmost()
         .cloned()
         .ok_or_else(|| unknown_focus("NSWorkspace frontmost application is unknown"))
+}
+
+fn same_optional_element(before: &Option<AXElement>, after: &Option<AXElement>) -> bool {
+    match (before, after) {
+        (Some(before), Some(after)) => crate::tree::same_element(before, after),
+        (None, None) => true,
+        _ => false,
+    }
 }
 
 fn same_frontmost(before: &FocusSnapshot, after: &FocusSnapshot) -> bool {
@@ -100,19 +108,18 @@ fn unknown_focus(message: &str) -> AdapterError {
         .with_disposition(DeliverySemantics::not_delivered())
 }
 
-fn required_element(
+fn read_element(
     element: &AXElement,
     attribute: &str,
     deadline: Deadline,
-) -> Result<AXElement, AdapterError> {
+) -> Result<Option<AXElement>, AdapterError> {
     crate::tree::properties::attributes::copy_element_attr_result(element, attribute, deadline)
         .map_err(|error| {
             crate::system::focus::map_ax_read_error(
                 error,
                 &format!("read {attribute} while capturing global focus"),
             )
-        })?
-        .ok_or_else(|| unknown_focus("Global application, window, or focus is unknown"))
+        })
 }
 
 pub(super) fn preflight_focus_error(before: &FocusSnapshot, after: &FocusSnapshot) -> AdapterError {

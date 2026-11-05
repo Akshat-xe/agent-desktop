@@ -102,7 +102,7 @@ fn policy_rows_preserve_rule_tokens() {
             &[EDITABLE_TEXT, TEXT_INTERFACE],
             &[],
             0,
-            &["SelectText"],
+            &[],
         ),
         (SLIDER, &enabled, &[VALUE], &[], 0, &["SetValue"]),
         (DIAL, &enabled, &[VALUE], &[], 0, &["SetValue"]),
@@ -208,6 +208,35 @@ fn policy_rows_preserve_rule_tokens() {
         rule_tokens_for(CHECK_MENU_ITEM, &[], &[], &["toggle", "ShowMenu"], 0),
         ["Click", "Click", "Click"]
     );
+}
+
+#[test]
+fn text_selection_keeps_document_refs_without_making_static_text_ref_able() {
+    use agent_desktop_core::refs::ref_alloc::is_ref_able_role_actions;
+
+    use crate::tree::base_role;
+
+    for role in [29, 73, 81, 83, 85, 116, 60, 61, 79, 82, 92, 93, 94, 95, 96] {
+        let mut raw = node(role, &[SENSITIVE, READ_ONLY], &[TEXT_INTERFACE], &[], 0);
+        let LocatorField::Known(actions) = capabilities(&raw) else {
+            panic!("expected known capabilities");
+        };
+        let selectable = matches!(role, 60 | 61 | 79 | 82 | 92 | 93 | 94 | 95 | 96);
+        assert_eq!(actions.iter().any(|action| action == "SelectText"), selectable);
+        assert_eq!(
+            is_ref_able_role_actions(base_role(role).as_str(), &actions),
+            selectable
+        );
+        raw.traits.interfaces = Field::Failed("unavailable".to_owned());
+        assert_eq!(
+            capabilities(&raw),
+            if selectable {
+                LocatorField::Unknown
+            } else {
+                LocatorField::Known(Vec::new())
+            }
+        );
+    }
 }
 
 #[test]
