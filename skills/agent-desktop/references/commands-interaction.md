@@ -13,6 +13,7 @@ Which gestures have a headless path:
 | Command | Headless |
 |---------|----------|
 | `click`, `set-value`, `clear`, `select`, `check`, `uncheck`, `toggle`, `expand`, `collapse`, `scroll`, `scroll-to` | Yes, where the element advertises a semantic action (not `scroll` on Linux) |
+| `select-text` | Yes, when the provider exposes readable text and a native selection setter |
 | `type`, `right-click`, `focus` | OS-dependent. Read the platform skill for which need `--headed` |
 | `double-click`, `triple-click`, `hover`, `drag`, `mouse-*` | No. They need `--headed` |
 
@@ -109,6 +110,17 @@ agent-desktop focus @s8f3k2p9:e2
 - `clear` empties the element. `focus` sets keyboard focus without clicking.
 
 For a shared editor, such as a spreadsheet cell, the edit is a sequence: activate the cell, snapshot, target the editor, write, then commit. Run the whole sequence from one writer. The interaction lease serializes single actions, not your sequence.
+
+## Select text
+
+```bash
+agent-desktop select-text @s8f3k2p9:e2 --match "quarterly" --nth 2
+agent-desktop select-text @s8f3k2p9:e2 --range 72..120
+```
+
+`--match` selects an exact, case-sensitive string. If it occurs more than once, pass its one-based `--nth`; otherwise the command returns `AMBIGUOUS_TARGET`. Overlapping matches count. `--range START..END` counts zero-based Unicode scalar values, not bytes or UTF-16 code units, and excludes the end. An empty range places a caret.
+
+The command uses the native accessibility selection API and is headless by default. It reads the full field and the selection back, then checks that the selection stays stable for 100 ms. Secure fields, incomplete text reads, and text larger than 65,536 UTF-8 bytes are refused. A provider that cannot set and verify a text selection fails closed. Headless mode refuses when the active app or focused element cannot be checked before delivery, and the command reports an error if those values change. Before and after checks cannot rule out every brief focus change between observations. `--headed` follows the existing focus policy; selection still uses the semantic setter.
 
 ## Selection, toggle, expand
 

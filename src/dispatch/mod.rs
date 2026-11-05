@@ -80,6 +80,7 @@ fn dispatch_command(
         Commands::Clear(args) => interaction::clear(args, adapter, context),
         Commands::Focus(args) => interaction::focus(args, adapter, context),
         Commands::Select(args) => interaction::select(args, adapter, context),
+        Commands::SelectText(args) => interaction::select_text(args, adapter, context),
         Commands::Toggle(args) => interaction::toggle(args, adapter, context),
         Commands::Check(args) => interaction::check(args, adapter, context),
         Commands::Uncheck(args) => interaction::uncheck(args, adapter, context),

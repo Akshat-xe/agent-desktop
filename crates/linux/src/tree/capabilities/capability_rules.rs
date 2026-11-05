@@ -175,6 +175,7 @@ pub(crate) fn rule_tokens(facts: &Facts) -> Vec<&'static str> {
         && facts.bits.has(EDITABLE)
         && !facts.bits.has(READ_ONLY)
         && facts.advertises(EDITABLE_TEXT);
+    let selectable_text = facts.role != PASSWORD_TEXT && facts.advertises(TEXT_INTERFACE);
     let stateful = facts.bits.has(EXPANDABLE) || facts.bits.has(EXPANDED);
     let clickable = facts.has_any_name(&DISCLOSURE_CLICKS);
     let both = (stateful && (clickable || facts.has_name(TOGGLE_EXPAND))) || menu_button(facts);
@@ -183,6 +184,7 @@ pub(crate) fn rule_tokens(facts: &Facts) -> Vec<&'static str> {
     let pressable = facts.role == PUSH_BUTTON || carries_checked(facts.role);
     let rules = [
         (editable_text, capability::SET_VALUE),
+        (selectable_text, capability::SELECT_TEXT),
         (
             editable_text && facts.advertises(TEXT_INTERFACE),
             capability::TYPE_TEXT,

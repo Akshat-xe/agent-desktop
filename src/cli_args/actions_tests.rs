@@ -2,6 +2,47 @@ use super::*;
 use crate::cli_args::drag::DragCliArgs;
 use clap::CommandFactory;
 
+#[test]
+fn select_text_cli_and_batch_enforce_the_same_selection_rules() {
+    use agent_desktop_core::TextSelection;
+    let args =
+        SelectTextArgs::try_parse_from(["select-text", "@s:e1", "--match", "ana", "--nth", "2"])
+            .unwrap();
+    assert_eq!(
+        args.selection().unwrap(),
+        TextSelection::Match {
+            text: "ana".into(),
+            nth: Some(2)
+        }
+    );
+    let args: SelectTextArgs =
+        serde_json::from_value(serde_json::json!({"ref_id":"@s:e1","range":"2..5"})).unwrap();
+    assert_eq!(
+        args.selection().unwrap(),
+        TextSelection::Range { start: 2, end: 5 }
+    );
+    assert_eq!(args.timeout_ms, 5000);
+
+    for args in [
+        vec!["select-text", "@s:e1"],
+        vec!["select-text", "@s:e1", "--match", "x", "--range", "0..1"],
+        vec!["select-text", "@s:e1", "--range", "0..1", "--nth", "2"],
+    ] {
+        assert!(SelectTextArgs::try_parse_from(args).is_err());
+    }
+    for args in [
+        serde_json::json!({"ref_id":"@s:e1","match":"","nth":1}),
+        serde_json::json!({"ref_id":"@s:e1","match":"x","nth":0}),
+        serde_json::json!({"ref_id":"@s:e1","range":"3..2"}),
+        serde_json::json!({"ref_id":"@s:e1","range":"2..3..4"}),
+        serde_json::json!({"ref_id":"@s:e1","match":"x","range":"0..1"}),
+        serde_json::json!({"ref_id":"@s:e1","range":"0..1","nth":1}),
+    ] {
+        let args: SelectTextArgs = serde_json::from_value(args).unwrap();
+        assert!(args.selection().is_err());
+    }
+}
+
 /// F2 regression: `TypeArgs`, `SetValueArgs`, `SelectArgs`, `ScrollArgs`,
 /// `HoverArgs`, and `DragCliArgs` previously had no `--timeout-ms` field at
 /// all, so the auto-wait budget these commands' CLI docs promise was

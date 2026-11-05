@@ -20,6 +20,7 @@ fn inert_reads() -> Vec<(TreeProperty, PropertyOutcome)> {
         (TreeProperty::ToggleAvailable, known_flag(false)),
         (TreeProperty::ExpandCollapseAvailable, known_flag(false)),
         (TreeProperty::SelectionItemAvailable, known_flag(false)),
+        (TreeProperty::TextAvailable, known_flag(false)),
         (TreeProperty::ValueAvailable, known_flag(false)),
         (TreeProperty::RangeValueAvailable, known_flag(false)),
         (TreeProperty::ScrollAvailable, known_flag(false)),
@@ -112,6 +113,7 @@ fn every_emitted_action_is_a_member_of_core_capability_vocabulary() {
         capability::EXPAND,
         capability::COLLAPSE,
         capability::SELECT,
+        capability::SELECT_TEXT,
         capability::TOGGLE,
         capability::SCROLL,
         capability::SCROLL_TO,
@@ -129,6 +131,7 @@ fn every_emitted_action_is_a_member_of_core_capability_vocabulary() {
         (TreeProperty::ToggleAvailable, known_flag(true)),
         (TreeProperty::ExpandCollapseAvailable, known_flag(true)),
         (TreeProperty::SelectionItemAvailable, known_flag(true)),
+        (TreeProperty::TextAvailable, known_flag(true)),
         (TreeProperty::ValueAvailable, known_flag(true)),
         (TreeProperty::ValueIsReadOnly, known_flag(false)),
         (TreeProperty::RangeValueAvailable, known_flag(true)),
@@ -156,6 +159,7 @@ fn every_emitted_action_is_a_member_of_core_capability_vocabulary() {
             capability::EXPAND.to_string(),
             capability::COLLAPSE.to_string(),
             capability::SELECT.to_string(),
+            capability::SELECT_TEXT.to_string(),
             capability::SET_VALUE.to_string(),
             capability::SCROLL.to_string(),
             capability::SCROLL_TO.to_string(),
@@ -183,13 +187,14 @@ fn every_emitted_action_is_a_member_of_core_capability_vocabulary() {
         );
     }
 
-    let isolated_cases: [(TreeProperty, &[&str]); 3] = [
+    let isolated_cases: [(TreeProperty, &[&str]); 4] = [
         (TreeProperty::ToggleAvailable, &[capability::TOGGLE]),
         (
             TreeProperty::ExpandCollapseAvailable,
             &[capability::EXPAND, capability::COLLAPSE],
         ),
         (TreeProperty::SelectionItemAvailable, &[capability::SELECT]),
+        (TreeProperty::TextAvailable, &[capability::SELECT_TEXT]),
     ];
     for (property, expected) in isolated_cases {
         let mut reads = inert_reads();
@@ -229,6 +234,28 @@ fn writable_value_availability_produces_set_value() {
     let actions = resolve_actions(&properties);
 
     assert!(known_actions(&actions).contains(&capability::SET_VALUE.to_string()));
+}
+
+#[test]
+fn text_pattern_availability_produces_select_text_only_when_not_secure() {
+    let mut reads = inert_reads();
+    reads.retain(|(property, _)| *property != TreeProperty::TextAvailable);
+    reads.push((TreeProperty::TextAvailable, known_flag(true)));
+    let properties = ElementProperties::from_reads(reads);
+
+    assert!(
+        known_actions(&resolve_actions(&properties)).contains(&capability::SELECT_TEXT.to_string())
+    );
+
+    let mut secure_reads = inert_reads();
+    secure_reads.retain(|(property, _)| *property != TreeProperty::TextAvailable);
+    secure_reads.push((TreeProperty::TextAvailable, known_flag(true)));
+    secure_reads.push((TreeProperty::IsPassword, known_flag(true)));
+    let secure = ElementProperties::from_reads(secure_reads);
+
+    assert!(
+        !known_actions(&resolve_actions(&secure)).contains(&capability::SELECT_TEXT.to_string())
+    );
 }
 
 #[test]

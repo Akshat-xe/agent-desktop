@@ -5,7 +5,8 @@ use agent_desktop_core::{
         collapse as collapse_command, double_click as double_click_command,
         expand as expand_command, focus as focus_command, helpers,
         right_click as right_click_command, scroll as scroll_command,
-        scroll_to as scroll_to_command, select as select_command, set_value as set_value_command,
+        scroll_to as scroll_to_command, select as select_command,
+        select_text as select_text_command, set_value as set_value_command,
         toggle as toggle_command, triple_click as triple_click_command,
         type_text as type_text_command, uncheck as uncheck_command,
     },
@@ -15,7 +16,7 @@ use serde_json::Value;
 
 use crate::cli_args::{
     RefArgs,
-    actions::{ScrollArgs, SelectArgs, SetValueArgs, TypeArgs},
+    actions::{ScrollArgs, SelectArgs, SelectTextArgs, SetValueArgs, TypeArgs},
 };
 use crate::dispatch::parse::parse_direction;
 
@@ -153,6 +154,23 @@ pub(super) fn select(
         select_command::SelectArgs {
             ref_id: args.ref_id,
             value: args.value,
+            timeout_ms: helpers::normalize_action_timeout_ms(args.timeout_ms),
+        },
+        adapter,
+        context,
+    )
+}
+
+pub(super) fn select_text(
+    args: SelectTextArgs,
+    adapter: &dyn PlatformAdapter,
+    context: &CommandContext,
+) -> Result<Value, AppError> {
+    let selection = args.selection()?;
+    select_text_command::execute(
+        select_text_command::SelectTextArgs {
+            ref_id: args.ref_id,
+            selection,
             timeout_ms: helpers::normalize_action_timeout_ms(args.timeout_ms),
         },
         adapter,

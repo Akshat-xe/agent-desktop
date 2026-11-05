@@ -1,12 +1,12 @@
 ---
 title: Interaction commands
 navTitle: Interaction
-description: Reference for click, double-click, triple-click, right-click, type, set-value, clear, focus, select, toggle, check, uncheck, expand, and collapse.
+description: Reference for click, double-click, triple-click, right-click, type, set-value, clear, focus, select, select-text, toggle, check, uncheck, expand, and collapse.
 ---
 
 Every command here acts on one element. Pass the qualified ref from [`snapshot`](/desktop/commands/observation#snapshot) or [`find`](/desktop/commands/observation#find), such as `@s8f3k2p9:e1`; a bare `@e1` is rejected with `INVALID_ARGS`.
 
-By default these commands run headless: semantic accessibility calls that do not take focus, move the cursor, synthesize keys, or use the clipboard. If no semantic path exists, the action fails closed. The global `--headed` flag permits physical input and focus changes; see [Headed mode](/desktop/guides/headed-mode). The examples on this page are real output from GNOME Calculator and GTK Widget Factory on Linux.
+By default these commands run headless: semantic accessibility calls that do not take focus, move the cursor, synthesize keys, or use the clipboard. If no semantic path exists, the action fails closed. The global `--headed` flag permits physical input and focus changes; see [Headed mode](/desktop/guides/headed-mode). The click result example is real output from GNOME Calculator; the `select-text` result shows the documented field shape.
 
 ## Result shape
 
@@ -239,6 +239,35 @@ Moving focus can change the foreground, so headless it returns `POLICY_DENIED` o
 ```
 
 On Linux, a GTK4 app rejects the call with cause `grab_focus_rejected`; use [`focus-window`](/desktop/commands/app-window#focus-window) for its window.
+
+## select-text
+
+Selects a literal match or a zero-based Unicode scalar range in a text field through its accessibility provider. The command is headless by default and does not drag the pointer or synthesize keyboard input.
+
+```bash
+agent-desktop select-text @s8f3k2p9:e2 --match "quarterly" --nth 2
+agent-desktop select-text @s8f3k2p9:e2 --range 72..120
+```
+
+`--match` is case-sensitive. If it appears more than once, pass the one-based `--nth`; without it, the command returns `AMBIGUOUS_TARGET`. Matches may overlap. `--range START..END` counts zero-based Unicode scalar values, not bytes or UTF-16 code units, and excludes `END`; equal offsets place a caret. The default timeout is 5000 ms.
+
+A verified result includes `data.details` with the selection range and focus checks. The range numbers below illustrate the fields:
+
+```json
+{
+  "verification_scope": "text_selection",
+  "range": { "start": 72, "end": 120, "unit": "unicode_scalar" },
+  "selection_count": 1,
+  "focus_changed": false,
+  "activated": false
+}
+```
+
+Success requires an exact selection readback, the selected text and full field to match, and the selection to remain stable for 100 ms. A secure field, incomplete text read, or text larger than 65,536 UTF-8 bytes is refused. The provider must expose readable text and a native selection setter; unsupported controls fail closed. Headless mode refuses when it cannot establish focus and activation state before the write, and the command fails if the state differs afterward. Endpoint checks cannot rule out every brief focus change between reads. `--headed` uses the existing opt-in focus policy; the selection itself remains semantic.
+
+On macOS, verification checks the primary selected range and selected text. It also checks the complete selection list when the provider exposes it; otherwise, `selection_count` is omitted.
+
+Platform behavior can differ by application and accessibility provider. See [macOS](/desktop/platforms/macos), [Windows](/desktop/platforms/windows), and [Linux](/desktop/platforms/linux).
 
 ## select
 

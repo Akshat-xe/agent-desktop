@@ -63,6 +63,49 @@ fn parses_ref_command_into_cli_enum() {
 }
 
 #[test]
+fn select_text_batch_validates_the_selector_before_dispatch() {
+    let valid = parse_command(item(
+        "select-text",
+        serde_json::json!({"ref_id":"@s8f3k2p9:e1", "match":"ana", "nth":2}),
+    ))
+    .unwrap();
+    assert!(crate::command_policy::preflight(&valid, &PermissionReport::default()).is_ok());
+    let invalid = parse_command(item(
+        "select-text",
+        serde_json::json!({"ref_id":"@s8f3k2p9:e1", "range":"5..2"}),
+    ))
+    .unwrap();
+    assert_eq!(
+        crate::command_policy::preflight(&invalid, &PermissionReport::default())
+            .unwrap_err()
+            .code(),
+        "INVALID_ARGS"
+    );
+}
+
+#[test]
+fn batch_preparation_rejects_conflicting_select_text_arguments() {
+    for selector in [
+        serde_json::json!({"match":"a", "range":"0..1"}),
+        serde_json::json!({"range":"0..1", "nth":1}),
+        serde_json::json!({"match":"a", "nth":0}),
+    ] {
+        let mut selector = selector;
+        selector["ref_id"] = serde_json::json!("@s8f3k2p9:e1");
+        let commands = serde_json::json!([{"command":"select-text", "args":selector}]);
+        let error = match preparation::prepare(
+            &commands.to_string(),
+            &PermissionReport::default(),
+            &CommandContext::default(),
+        ) {
+            Ok(_) => panic!("invalid selection must fail preparation"),
+            Err(error) => error,
+        };
+        assert_eq!(error.code(), "INVALID_ARGS");
+    }
+}
+
+#[test]
 fn rejects_the_removed_snapshot_field_on_ref_commands() {
     for key in ["snapshot", "snapshot_id"] {
         let err = parse_command(item(

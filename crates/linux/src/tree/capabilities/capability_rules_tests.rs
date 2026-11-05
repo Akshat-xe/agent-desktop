@@ -67,17 +67,17 @@ fn policy_rows_preserve_rule_tokens() {
             &[EDITABLE_TEXT, TEXT_INTERFACE],
             &[],
             0,
-            &["SetValue", "TypeText"],
+            &["SetValue", "SelectText", "TypeText"],
         ),
         (ENTRY, &editable, &[EDITABLE_TEXT], &[], 0, &["SetValue"]),
-        (ENTRY, &editable, &[TEXT_INTERFACE], &[], 0, &[]),
+        (ENTRY, &editable, &[TEXT_INTERFACE], &[], 0, &["SelectText"]),
         (
             ENTRY,
             &enabled,
             &[EDITABLE_TEXT, TEXT_INTERFACE],
             &[],
             0,
-            &[],
+            &["SelectText"],
         ),
         (
             PASSWORD_TEXT,
@@ -93,7 +93,7 @@ fn policy_rows_preserve_rule_tokens() {
             &[EDITABLE_TEXT, TEXT_INTERFACE],
             &[],
             0,
-            &[],
+            &["SelectText"],
         ),
         (TEXT, &editable, &[EDITABLE_TEXT], &[], 0, &["SetValue"]),
         (
@@ -102,7 +102,7 @@ fn policy_rows_preserve_rule_tokens() {
             &[EDITABLE_TEXT, TEXT_INTERFACE],
             &[],
             0,
-            &[],
+            &["SelectText"],
         ),
         (SLIDER, &enabled, &[VALUE], &[], 0, &["SetValue"]),
         (DIAL, &enabled, &[VALUE], &[], 0, &["SetValue"]),
@@ -229,7 +229,7 @@ fn a_node_that_can_take_focus_and_has_a_component_takes_set_focus_on_any_role() 
             &[],
             0
         ),
-        ["SetValue", "TypeText", "SetFocus"]
+        ["SetValue", "SelectText", "TypeText", "SetFocus"]
     );
 }
 

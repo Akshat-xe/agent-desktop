@@ -13,11 +13,12 @@ use super::properties::property_outcome::PropertyOutcome;
 /// would let a tree where every other pattern read failed still report
 /// `Known`, which is the same failure shape the rule below forbids for every
 /// other property: an action implied by a read that did not actually succeed.
-const AFFORDANCE_AVAILABILITY: [TreeProperty; 8] = [
+const AFFORDANCE_AVAILABILITY: [TreeProperty; 9] = [
     TreeProperty::InvokeAvailable,
     TreeProperty::ToggleAvailable,
     TreeProperty::ExpandCollapseAvailable,
     TreeProperty::SelectionItemAvailable,
+    TreeProperty::TextAvailable,
     TreeProperty::ValueAvailable,
     TreeProperty::RangeValueAvailable,
     TreeProperty::ScrollAvailable,
@@ -28,8 +29,9 @@ const AFFORDANCE_AVAILABILITY: [TreeProperty; 8] = [
 ///
 /// An action is emitted only for a pattern whose availability implies a
 /// specific affordance - `Invoke`, `Toggle`, `ExpandCollapse`,
-/// `SelectionItem`, `Value` (gated on not read-only), `RangeValue`, `Scroll`,
-/// `ScrollItem`. `LegacyIAccessible` availability is not one of those: A2-2
+/// `SelectionItem`, `Text` (gated on not secure), `Value` (gated on not
+/// read-only), `RangeValue`, `Scroll`, `ScrollItem`. `LegacyIAccessible`
+/// availability is not one of those: A2-2
 /// measured it `true` on 141 of 141 elements, so treating it as an affordance
 /// would ref-allocate every element in every tree. It contributes exactly one
 /// action, `Click`, and only when `LegacyDefaultAction` itself reads as a
@@ -41,7 +43,7 @@ const AFFORDANCE_AVAILABILITY: [TreeProperty; 8] = [
 ///
 /// `Known(vec)` is returned once the read set succeeded, including when the
 /// vector is empty - that is the legitimate answer for an inert element.
-/// `Unknown` is returned only when every one of the eight affordance
+/// `Unknown` is returned only when every one of the nine affordance
 /// availability properties, `LegacyDefaultAction` and `IsKeyboardFocusable`
 /// read `Unknown`: nothing was learned about this element's affordances, so
 /// there is nothing to report `Known` about. A single failed property among
@@ -67,6 +69,9 @@ pub fn resolve_actions(properties: &ElementProperties) -> LocatorField<Vec<Strin
     }
     if properties.is_true(TreeProperty::SelectionItemAvailable) {
         push_unique(&mut actions, capability::SELECT);
+    }
+    if properties.is_true(TreeProperty::TextAvailable) && !properties.is_secure() {
+        push_unique(&mut actions, capability::SELECT_TEXT);
     }
     if properties.is_true(TreeProperty::ValueAvailable)
         && properties.gated_flag(TreeProperty::ValueIsReadOnly) == Some(false)
