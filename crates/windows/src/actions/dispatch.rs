@@ -140,9 +140,7 @@ mod imp {
                 let steps = select_steps(element, value, deadline)?;
                 Ok(ActionResult::from_execution(&request.action, steps))
             }
-            Action::SelectText(selection) => {
-                select_text_action(element, &request.action, selection, deadline)
-            }
+            Action::SelectText(selection) => select_text_action(element, selection, deadline),
             Action::Scroll(direction, amount) => {
                 let steps = scroll_steps(element, direction, *amount, deadline)?;
                 Ok(ActionResult::from_execution(&request.action, steps))

@@ -92,15 +92,11 @@ are not exposed over the ABI. A bare `@eN` ref returns
   retained element token and no capture proof, so it cannot be re-identified.
   Use `ad_execute_by_ref` instead.
 
-  `SelectText` defaults to headless and uses the provider's semantic text
-  selection API. It does not synthesize pointer or keyboard input.
-
-  For `select-text`, set `AdAction.kind` to `AD_ACTION_KIND_SELECT_TEXT` and
-  pass a JSON-encoded `TextSelection` in the existing `AdAction.text` pointer.
-  The JSON uses `{"kind":"match","text":"quarterly","nth":2}` or
-  `{"kind":"range","start":7,"end":19}`. Offsets are Unicode scalars and
-  offsets count Unicode scalar values, and the range end is exclusive. The
-  `AdAction` layout is unchanged.
+  The `SelectText` FFI action uses native accessibility and remains headless.
+  Set `AdAction.kind` to `AD_ACTION_KIND_SELECT_TEXT` and pass JSON in the
+  existing `AdAction.text` pointer: `{"kind":"match","text":"quarterly","nth":2}`
+  or `{"kind":"range","start":7,"end":19}`. Match `nth` is one-based;
+  range offsets are Unicode scalars with an exclusive end. The `AdAction` layout is unchanged.
 
 - **Generation-safe direct APIs.** Every direct targeting function takes
   process-generation evidence: `AdExactRefEntry`, `AdExactWindowInfo`,

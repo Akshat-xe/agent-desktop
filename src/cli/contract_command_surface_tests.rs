@@ -67,7 +67,6 @@ const SHARED_REF_ACTION_TESTS: &[&str] = &[
     "scroll",
     "scroll-to",
     "select",
-    "select-text",
     "set-value",
     "toggle",
     "triple-click",
@@ -157,7 +156,7 @@ fn macos_capability_count_includes_restored_notifications() {
     let commands = cli_command_names();
     assert_eq!(
         commands.len(),
-        61,
+        60,
         "the published CLI command count changed; update capability documentation"
     );
 }

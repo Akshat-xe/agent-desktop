@@ -214,10 +214,7 @@ fn checked_state<S: TextSource>(source: &mut S) -> Result<Option<TextState>, Ada
     let Some(characters) = source.character_count()? else {
         return Ok(None);
     };
-    let Some(caret) = source.caret()? else {
-        return Ok(None);
-    };
-    let Some(mut selections) = source.selections()? else {
+    let Some((caret, mut selections)) = caret_and_selection(source)? else {
         return Ok(None);
     };
     if caret > characters {

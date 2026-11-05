@@ -147,27 +147,9 @@ pub(super) fn after_write_error(
     if !details.is_object() {
         details = serde_json::json!({ "cause": details });
     }
-    if let Some(object) = details.as_object_mut() {
-        object.insert(
-            "verification_scope".into(),
-            serde_json::json!("text_selection"),
-        );
-        object.insert(
-            "focus_changed".into(),
-            serde_json::json!(after.map(|state| before.focus_changed(state))),
-        );
-        object.insert(
-            "activated".into(),
-            serde_json::json!(after.map(|state| before.activated(state))),
-        );
-        object.insert(
-            "focus_observation".into(),
-            serde_json::json!(if after.is_some() {
-                "complete"
-            } else {
-                "unknown"
-            }),
-        );
+    let focus = focus_details(before, after);
+    if let (Some(object), Some(focus)) = (details.as_object_mut(), focus.as_object()) {
+        object.extend(focus.clone());
     }
     crate::actions::DeliveryTracker::uncertain(error.with_details(details))
 }

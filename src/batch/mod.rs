@@ -55,7 +55,6 @@ pub(crate) fn parse_command(item: BatchCommand) -> Result<Commands, AppError> {
         "clear" => decode(command, item.args).map(Commands::Clear),
         "focus" => decode(command, item.args).map(Commands::Focus),
         "select" => decode(command, item.args).map(Commands::Select),
-        "select-text" => decode(command, item.args).map(Commands::SelectText),
         "toggle" => decode(command, item.args).map(Commands::Toggle),
         "check" => decode(command, item.args).map(Commands::Check),
         "uncheck" => decode(command, item.args).map(Commands::Uncheck),
@@ -325,3 +324,7 @@ fn parse_trace(args: Value) -> Result<TraceArgs, AppError> {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+#[path = "select_tests.rs"]
+mod select_tests;

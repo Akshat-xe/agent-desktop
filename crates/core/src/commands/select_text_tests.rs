@@ -106,9 +106,10 @@ fn headless_selection_dispatches_offscreen_without_geometry() {
     let adapter = SelectionAdapter::new(true);
     let selection = TextSelection::Range { start: 2, end: 5 };
     let result = execute(
-        SelectTextArgs {
+        SelectArgs {
             ref_id: format!("@{snapshot}:e1"),
-            selection: selection.clone(),
+            value: None,
+            selection: Some(selection.clone()),
             timeout_ms: None,
         },
         &adapter,
@@ -125,20 +126,33 @@ fn headless_selection_dispatches_offscreen_without_geometry() {
 #[test]
 fn invalid_selection_fails_before_ref_resolution() {
     let adapter = SelectionAdapter::new(true);
-    let error = execute(
-        SelectTextArgs {
-            ref_id: "@invalid:e1".into(),
-            selection: TextSelection::Match {
+    for (value, selection) in [
+        (
+            None,
+            Some(TextSelection::Match {
                 text: "".into(),
                 nth: None,
+            }),
+        ),
+        (None, None),
+        (
+            Some("choice".into()),
+            Some(TextSelection::Range { start: 0, end: 1 }),
+        ),
+    ] {
+        let error = execute(
+            SelectArgs {
+                ref_id: "@invalid:e1".into(),
+                value,
+                selection,
+                timeout_ms: None,
             },
-            timeout_ms: None,
-        },
-        &adapter,
-        &CommandContext::default(),
-    )
-    .unwrap_err();
-    assert_eq!(error.code(), "INVALID_ARGS");
+            &adapter,
+            &CommandContext::default(),
+        )
+        .unwrap_err();
+        assert_eq!(error.code(), "INVALID_ARGS");
+    }
     assert!(adapter.requests.lock().unwrap().is_empty());
 }
 
@@ -148,9 +162,10 @@ fn stale_ref_never_reaches_the_selection_setter() {
     let snapshot = save_one_ref_snapshot("textfield", "SelectText");
     let adapter = SelectionAdapter::new(true);
     let error = execute(
-        SelectTextArgs {
+        SelectArgs {
             ref_id: format!("@{snapshot}:e2"),
-            selection: TextSelection::Range { start: 0, end: 1 },
+            value: None,
+            selection: Some(TextSelection::Range { start: 0, end: 1 }),
             timeout_ms: None,
         },
         &adapter,
@@ -167,9 +182,10 @@ fn unverified_selection_is_an_error_with_unsafe_retry() {
     let snapshot = save_one_ref_snapshot("textfield", "SelectText");
     let adapter = SelectionAdapter::new(false);
     let error = execute(
-        SelectTextArgs {
+        SelectArgs {
             ref_id: format!("@{snapshot}:e1"),
-            selection: TextSelection::Range { start: 0, end: 2 },
+            value: None,
+            selection: Some(TextSelection::Range { start: 0, end: 2 }),
             timeout_ms: Some(500),
         },
         &adapter,

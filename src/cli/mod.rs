@@ -10,7 +10,7 @@ use crate::cli_args::{
     FindArgs, GetArgs, IsArgs, ListSurfacesArgs, RefArgs, ScreenshotArgs, SnapshotArgs,
     actions::{
         HoverArgs, KeyComboArgs, MouseClickArgs, MouseMoveArgs, MousePointArgs, PressArgs,
-        ScrollArgs, SelectArgs, SelectTextArgs, SetValueArgs, TypeArgs,
+        ScrollArgs, SelectArgs, SetValueArgs, TypeArgs,
     },
     batch::BatchArgs,
     cursor_overlay::CursorOverlayArgs,
@@ -62,13 +62,11 @@ pub(crate) enum Commands {
     Clear(RefArgs),
     #[command(about = "Set keyboard focus on element")]
     Focus(RefArgs),
-    #[command(about = "Select an option in a list or dropdown")]
-    Select(SelectArgs),
     #[command(
-        about = "Select text in a field through accessibility",
-        long_about = "Select a literal match or Unicode scalar range through accessibility. Provide --match or --range; --nth requires --match."
+        about = "Select an option or a text range through accessibility",
+        long_about = "Select an option with VALUE, or text with --match or --range. --nth chooses a one-based match occurrence."
     )]
-    SelectText(SelectTextArgs),
+    Select(SelectArgs),
     #[command(about = "Toggle a checkbox or switch")]
     Toggle(RefArgs),
     #[command(about = "Set checkbox or switch to checked state (idempotent)")]
@@ -205,7 +203,6 @@ impl Commands {
             Self::Clear(_) => CommandMetadata::new("clear", true),
             Self::Focus(_) => CommandMetadata::new("focus", true),
             Self::Select(_) => CommandMetadata::new("select", true),
-            Self::SelectText(_) => CommandMetadata::new("select-text", true),
             Self::Toggle(_) => CommandMetadata::new("toggle", true),
             Self::Check(_) => CommandMetadata::new("check", true),
             Self::Uncheck(_) => CommandMetadata::new("uncheck", true),
@@ -276,7 +273,6 @@ impl Commands {
             | Self::Clear(_)
             | Self::Focus(_)
             | Self::Select(_)
-            | Self::SelectText(_)
             | Self::Toggle(_)
             | Self::Check(_)
             | Self::Uncheck(_)

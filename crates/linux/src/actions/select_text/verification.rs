@@ -2,8 +2,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use agent_desktop_core::{
-    Action, ActionResult, ActionStep, AdapterError, DeliverySemantics, ErrorCode,
-    ResolvedTextSelection, StepMechanism, TextSelection,
+    ActionResult, AdapterError, DeliverySemantics, ErrorCode, ResolvedTextSelection,
 };
 use serde_json::{Value, json};
 
@@ -15,33 +14,22 @@ const SETTLE: Duration = Duration::from_millis(100);
 const POLL: Duration = Duration::from_millis(10);
 
 pub(super) struct VerificationContext<'a, 'target> {
-    target: &'a Target<'target>,
-    before: &'a TextState,
-    selection: &'a ResolvedTextSelection,
-    before_focus: Option<&'a GlobalFocus>,
+    pub(super) target: &'a Target<'target>,
+    pub(super) before: &'a TextState,
+    pub(super) selection: &'a ResolvedTextSelection,
+    pub(super) before_focus: Option<&'a GlobalFocus>,
 }
 
 impl<'a, 'target> VerificationContext<'a, 'target> {
-    pub(super) fn new(
-        target: &'a Target<'target>,
-        before: &'a TextState,
-        selection: &'a ResolvedTextSelection,
-        before_focus: Option<&'a GlobalFocus>,
-    ) -> Self {
-        Self {
-            target,
-            before,
-            selection,
-            before_focus,
-        }
-    }
-
     pub(super) fn preflight_satisfied(&self) -> bool {
         exact_selection(self.before, self.before, self.selection)
     }
 
     pub(super) fn satisfied_without_delivery(&self) -> ActionResult {
-        ActionResult::satisfied_without_delivery("select-text").with_details(self.details())
+        ActionResult::satisfied_without_delivery("select-text").with_details(
+            self.selection
+                .verification_details(Some(self.selection_count())),
+        )
     }
 
     fn current_focus(&self) -> Option<GlobalFocus> {
@@ -56,16 +44,12 @@ impl<'a, 'target> VerificationContext<'a, 'target> {
         state: Option<&TextState>,
         after_focus: Option<&GlobalFocus>,
     ) -> AdapterError {
-        let error = AdapterError::new(ErrorCode::ActionFailed, message)
-            .with_suggestion("Read the field before retrying; selection delivery was not verified")
-            .with_details(json!({
-                "verification_scope": "text_selection",
-                "range": {"start": self.selection.range.start, "end": self.selection.range.end, "unit": "unicode_scalar"},
-                "selection_count": state.map(|state| state.selections.len()),
-                "document_changed": state.map(|state| state.text != self.before.text),
-            }))
-            .with_disposition(DeliverySemantics::uncertain());
-        with_focus_evidence(error, self.before_focus, after_focus)
+        self.annotate(
+            AdapterError::new(ErrorCode::ActionFailed, message)
+                .with_disposition(DeliverySemantics::uncertain()),
+            state,
+            after_focus,
+        )
     }
 
     fn annotate(
@@ -73,7 +57,6 @@ impl<'a, 'target> VerificationContext<'a, 'target> {
         error: AdapterError,
         state: Option<&TextState>,
         after_focus: Option<&GlobalFocus>,
-        disposition: DeliverySemantics,
     ) -> AdapterError {
         let mut details = error.details.clone().unwrap_or_else(|| json!({}));
         if let Value::Object(values) = &mut details {
@@ -93,33 +76,17 @@ impl<'a, 'target> VerificationContext<'a, 'target> {
         }
         let error = error
             .with_details(details)
-            .with_suggestion("Read the field before retrying; selection delivery was not verified")
-            .with_disposition(disposition);
+            .with_suggestion("Read the field before retrying; selection delivery was not verified");
         with_focus_evidence(error, self.before_focus, after_focus)
     }
 
-    pub(super) fn annotate_after_delivery(
+    pub(super) fn annotate_error(
         &self,
         error: AdapterError,
         state: Option<&TextState>,
     ) -> AdapterError {
         let after_focus = self.current_focus();
-        self.annotate(
-            error,
-            state,
-            after_focus.as_ref(),
-            DeliverySemantics::uncertain(),
-        )
-    }
-
-    pub(super) fn annotate_without_delivery(
-        &self,
-        error: AdapterError,
-        state: Option<&TextState>,
-    ) -> AdapterError {
-        let disposition = error.disposition;
-        let after_focus = self.current_focus();
-        self.annotate(error, state, after_focus.as_ref(), disposition)
+        self.annotate(error, state, after_focus.as_ref())
     }
 
     fn failure_at_current_focus(
@@ -129,14 +96,6 @@ impl<'a, 'target> VerificationContext<'a, 'target> {
     ) -> AdapterError {
         let after_focus = self.current_focus();
         self.failure(message, state, after_focus.as_ref())
-    }
-
-    fn annotate_at_current_focus(
-        &self,
-        error: AdapterError,
-        state: Option<&TextState>,
-    ) -> AdapterError {
-        self.annotate_after_delivery(error, state)
     }
 
     pub(super) fn wait_without_delivery(&self) -> Result<(), AdapterError> {
@@ -155,7 +114,12 @@ impl<'a, 'target> VerificationContext<'a, 'target> {
         let mut stable_since = None;
         loop {
             let state = read_text_state(self.target.bus, self.target.element, self.target.deadline)
-                .map_err(|error| self.annotate_at_current_focus(error, None))?;
+                .map_err(|error| {
+                    self.annotate_error(
+                        error.with_disposition(DeliverySemantics::uncertain()),
+                        None,
+                    )
+                })?;
             let Some(state) = state else {
                 return Err(self.failure_at_current_focus(
                     "The provider's text selection could not be read back",
@@ -174,23 +138,21 @@ impl<'a, 'target> VerificationContext<'a, 'target> {
                 stable_since,
                 now,
             )
-            .map_err(|cause| {
+            .map_err(|_| {
                 self.failure_at_current_focus(
-                    if cause == "selection_cleared" {
-                        "The provider cleared the requested selection during verification"
-                    } else {
-                        "Text selection changed the document"
-                    },
+                    "The provider cleared the requested selection during verification",
                     Some(&state),
                 )
             })?;
             if stable_since.is_some_and(|since| now.duration_since(since) >= SETTLE) {
                 break;
             }
-            self.target
-                .deadline
-                .ensure_remaining()
-                .map_err(|error| self.annotate_at_current_focus(error, Some(&state)))?;
+            self.target.deadline.ensure_remaining().map_err(|error| {
+                self.annotate_error(
+                    error.with_disposition(DeliverySemantics::uncertain()),
+                    Some(&state),
+                )
+            })?;
             thread::sleep(POLL.min(self.target.deadline.remaining()));
         }
         let settled_focus = self.current_focus();
@@ -205,27 +167,12 @@ impl<'a, 'target> VerificationContext<'a, 'target> {
     }
 
     pub(super) fn success(&self, method: &'static str) -> ActionResult {
-        let step = ActionStep::succeeded(method)
-            .with_mechanism(StepMechanism::SemanticApi)
-            .with_verified(true);
-        ActionResult::from_execution(
-            &Action::SelectText(TextSelection::Range {
-                start: self.selection.range.start,
-                end: self.selection.range.end,
-            }),
-            vec![step],
-        )
-        .with_details(self.details())
+        self.selection
+            .verified_result(method, Some(self.selection_count()))
     }
 
-    fn details(&self) -> Value {
-        json!({
-            "verification_scope": "text_selection",
-            "range": {"start": self.selection.range.start, "end": self.selection.range.end, "unit": "unicode_scalar"},
-            "selection_count": if self.selection.range.is_empty() { 0 } else { 1 },
-            "focus_changed": false,
-            "activated": false,
-        })
+    fn selection_count(&self) -> usize {
+        usize::from(!self.selection.range.is_empty())
     }
 }
 
@@ -266,25 +213,18 @@ fn exact_selection(
             .eq(selection.text.chars())
 }
 
-fn focus_details(
-    before: Option<&GlobalFocus>,
-    after: Option<&GlobalFocus>,
-) -> (Option<bool>, Option<bool>) {
-    match (before, after) {
-        (Some(before), Some(after)) => {
-            let (focus_changed, activated) = after.effects_from(before);
-            (Some(focus_changed), Some(activated))
-        }
-        _ => (None, None),
-    }
-}
-
 fn with_focus_evidence(
     error: AdapterError,
     before: Option<&GlobalFocus>,
     after: Option<&GlobalFocus>,
 ) -> AdapterError {
-    let (focus_changed, activated) = focus_details(before, after);
+    let (focus_changed, activated) = match (before, after) {
+        (Some(before), Some(after)) => {
+            let (focus_changed, activated) = after.effects_from(before);
+            (Some(focus_changed), Some(activated))
+        }
+        _ => (None, None),
+    };
     let mut details = error.details.clone().unwrap_or_else(|| json!({}));
     if !details.is_object() {
         details = json!({"provider_details": details});

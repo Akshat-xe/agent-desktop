@@ -45,7 +45,6 @@ pub(crate) fn policy_for(cmd: &Commands) -> PermissionNeed {
         | Commands::SetValue(_)
         | Commands::Clear(_)
         | Commands::Select(_)
-        | Commands::SelectText(_)
         | Commands::Toggle(_)
         | Commands::Check(_)
         | Commands::Uncheck(_)
@@ -174,8 +173,7 @@ fn validate_args(cmd: &Commands) -> Result<(), AppError> {
         }
         Commands::Type(args) => validate_ref_id(&args.ref_id)?,
         Commands::SetValue(args) => validate_ref_id(&args.ref_id)?,
-        Commands::Select(args) => validate_ref_id(&args.ref_id)?,
-        Commands::SelectText(args) => {
+        Commands::Select(args) => {
             validate_ref_id(&args.ref_id)?;
             args.selection()?;
         }

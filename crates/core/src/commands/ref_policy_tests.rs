@@ -31,7 +31,6 @@ const POLICY_TESTED_COMMANDS: &[&str] = &[
     "scroll",
     "scroll_to",
     "select",
-    "select_text",
     "set_value",
     "toggle",
     "triple_click",
@@ -231,7 +230,8 @@ fn default_ref_commands_use_least_permissive_supported_policy() {
     select::execute(
         select::SelectArgs {
             ref_id: format!("@{}:e1", snapshot_id.clone()),
-            value: "choice".into(),
+            value: Some("choice".into()),
+            selection: None,
             timeout_ms: None,
         },
         &adapter,
@@ -320,7 +320,8 @@ fn headed_context_reaches_every_ref_action_without_policy_downgrade() {
     select::execute(
         select::SelectArgs {
             ref_id: format!("@{}:e1", snapshot_id.clone()),
-            value: "choice".into(),
+            value: Some("choice".into()),
+            selection: None,
             timeout_ms: None,
         },
         &adapter,

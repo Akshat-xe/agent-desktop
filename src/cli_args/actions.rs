@@ -92,29 +92,16 @@ pub(crate) struct SelectArgs {
         help = "Qualified ref from snapshot (@<snapshot_id>:eN)"
     )]
     pub ref_id: String,
-    #[arg(value_name = "VALUE", help = "Option to select")]
-    pub value: String,
     #[arg(
-        long = "timeout-ms",
-        default_value_t = 5000,
-        help = "Maximum ref-resolution and transient-actionability wait in milliseconds; terminal failures return immediately"
+        value_name = "VALUE",
+        required_unless_present_any = ["match", "range"],
+        conflicts_with_all = ["match", "range", "nth"],
+        help = "Option to select"
     )]
-    #[serde(default = "default_ref_timeout_ms")]
-    pub timeout_ms: u64,
-}
-
-#[derive(Parser, Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub(crate) struct SelectTextArgs {
-    #[arg(
-        value_name = "REF",
-        help = "Qualified ref from snapshot (@<snapshot_id>:eN)"
-    )]
-    pub ref_id: String,
+    pub value: Option<String>,
     #[arg(
         id = "match",
         long = "match",
-        required_unless_present = "range",
         conflicts_with = "range",
         allow_hyphen_values = true,
         help = "Literal, case-sensitive text to select"
@@ -130,7 +117,6 @@ pub(crate) struct SelectTextArgs {
     pub nth: Option<usize>,
     #[arg(
         long,
-        required_unless_present = "match",
         conflicts_with = "match",
         help = "Zero-based Unicode scalar range START..END, end exclusive"
     )]
@@ -138,24 +124,25 @@ pub(crate) struct SelectTextArgs {
     #[arg(
         long = "timeout-ms",
         default_value_t = 5000,
-        help = "Maximum wait in milliseconds; 0 disables the wait"
+        help = "Maximum ref-resolution and transient-actionability wait in milliseconds; terminal failures return immediately"
     )]
     #[serde(default = "default_ref_timeout_ms")]
     pub timeout_ms: u64,
 }
 
-impl SelectTextArgs {
+impl SelectArgs {
     pub(crate) fn selection(
         &self,
-    ) -> Result<agent_desktop_core::TextSelection, agent_desktop_core::AppError> {
+    ) -> Result<Option<agent_desktop_core::TextSelection>, agent_desktop_core::AppError> {
         use agent_desktop_core::{AppError, TextSelection};
 
-        let selection = match (&self.match_text, &self.range, self.nth) {
-            (Some(text), None, nth) => TextSelection::Match {
+        let selection = match (&self.value, &self.match_text, &self.range, self.nth) {
+            (Some(_), None, None, None) => return Ok(None),
+            (None, Some(text), None, nth) => TextSelection::Match {
                 text: text.clone(),
                 nth,
             },
-            (None, Some(range), None) => {
+            (None, None, Some(range), None) => {
                 let (start, end) = range
                     .split_once("..")
                     .ok_or_else(|| AppError::invalid_input("Range must be START..END"))?;
@@ -169,12 +156,12 @@ impl SelectTextArgs {
             }
             _ => {
                 return Err(AppError::invalid_input(
-                    "Specify --match or --range; --nth requires --match",
+                    "Specify VALUE, --match or --range; --nth requires --match",
                 ));
             }
         };
         selection.validate()?;
-        Ok(selection)
+        Ok(Some(selection))
     }
 }
 

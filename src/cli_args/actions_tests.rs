@@ -6,29 +6,31 @@ use clap::CommandFactory;
 fn select_text_cli_and_batch_enforce_the_same_selection_rules() {
     use agent_desktop_core::TextSelection;
     let args =
-        SelectTextArgs::try_parse_from(["select-text", "@s:e1", "--match", "ana", "--nth", "2"])
-            .unwrap();
+        SelectArgs::try_parse_from(["select", "@s:e1", "--match", "ana", "--nth", "2"]).unwrap();
     assert_eq!(
         args.selection().unwrap(),
-        TextSelection::Match {
+        Some(TextSelection::Match {
             text: "ana".into(),
             nth: Some(2)
-        }
+        })
     );
-    let args: SelectTextArgs =
+    let args: SelectArgs =
         serde_json::from_value(serde_json::json!({"ref_id":"@s:e1","range":"2..5"})).unwrap();
     assert_eq!(
         args.selection().unwrap(),
-        TextSelection::Range { start: 2, end: 5 }
+        Some(TextSelection::Range { start: 2, end: 5 })
     );
     assert_eq!(args.timeout_ms, 5000);
 
     for args in [
-        vec!["select-text", "@s:e1"],
-        vec!["select-text", "@s:e1", "--match", "x", "--range", "0..1"],
-        vec!["select-text", "@s:e1", "--range", "0..1", "--nth", "2"],
+        vec!["select", "@s:e1"],
+        vec!["select", "@s:e1", "--match", "x", "--range", "0..1"],
+        vec!["select", "@s:e1", "--range", "0..1", "--nth", "2"],
+        vec!["select", "@s:e1", "choice", "--match", "x"],
+        vec!["select", "@s:e1", "choice", "--range", "0..1"],
+        vec!["select", "@s:e1", "choice", "--nth", "2"],
     ] {
-        assert!(SelectTextArgs::try_parse_from(args).is_err());
+        assert!(SelectArgs::try_parse_from(args).is_err());
     }
     for args in [
         serde_json::json!({"ref_id":"@s:e1","match":"","nth":1}),
@@ -37,8 +39,12 @@ fn select_text_cli_and_batch_enforce_the_same_selection_rules() {
         serde_json::json!({"ref_id":"@s:e1","range":"2..3..4"}),
         serde_json::json!({"ref_id":"@s:e1","match":"x","range":"0..1"}),
         serde_json::json!({"ref_id":"@s:e1","range":"0..1","nth":1}),
+        serde_json::json!({"ref_id":"@s:e1","value":"choice","match":"x"}),
+        serde_json::json!({"ref_id":"@s:e1","value":"choice","range":"0..1"}),
+        serde_json::json!({"ref_id":"@s:e1","value":"choice","nth":1}),
+        serde_json::json!({"ref_id":"@s:e1"}),
     ] {
-        let args: SelectTextArgs = serde_json::from_value(args).unwrap();
+        let args: SelectArgs = serde_json::from_value(args).unwrap();
         assert!(args.selection().is_err());
     }
 }
@@ -87,6 +93,8 @@ fn set_value_args_batch_json_omitted_timeout_defaults_to_5000() {
 fn select_args_cli_omitted_timeout_defaults_to_5000() {
     let args = SelectArgs::try_parse_from(["select", "@e1", "choice"]).unwrap();
     assert_eq!(args.timeout_ms, 5000);
+    assert_eq!(args.value.as_deref(), Some("choice"));
+    assert_eq!(args.selection().unwrap(), None);
 }
 
 #[test]
@@ -94,6 +102,8 @@ fn select_args_batch_json_omitted_timeout_defaults_to_5000() {
     let args: SelectArgs =
         serde_json::from_value(serde_json::json!({ "ref_id": "@e1", "value": "choice" })).unwrap();
     assert_eq!(args.timeout_ms, 5000);
+    assert_eq!(args.value.as_deref(), Some("choice"));
+    assert_eq!(args.selection().unwrap(), None);
 }
 
 #[test]

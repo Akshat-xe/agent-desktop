@@ -1,10 +1,8 @@
-use std::ops::Range;
-
 use agent_desktop_core::{
     ActionResult, AdapterError, DeliverySemantics, ErrorCode, ResolvedTextSelection, Role,
     TextSelection,
 };
-use serde_json::{Value, json};
+use serde_json::json;
 
 mod verification;
 
@@ -100,21 +98,6 @@ fn send<B: zbus::export::serde::Serialize + zbus::zvariant::DynamicType>(
     )
 }
 
-fn uncertain(error: AdapterError, range: &Range<usize>) -> AdapterError {
-    let mut details = error.details.clone().unwrap_or_else(|| json!({}));
-    if let Value::Object(values) = &mut details {
-        values.insert("verification_scope".to_owned(), json!("text_selection"));
-        values.insert(
-            "range".to_owned(),
-            json!({"start": range.start, "end": range.end, "unit": "unicode_scalar"}),
-        );
-    }
-    error
-        .with_details(details)
-        .with_suggestion("Read the field before retrying; selection delivery was not verified")
-        .with_disposition(DeliverySemantics::uncertain())
-}
-
 fn apply(
     target: &Target<'_>,
     before: &TextState,
@@ -144,30 +127,28 @@ fn apply(
             match send(target, "RemoveSelection", &(index,)) {
                 Ok(WriteReply::Done) => changed = true,
                 Ok(WriteReply::Absent) if changed => {
-                    return Err(uncertain(
-                        refusal(
-                            ErrorCode::ActionFailed,
-                            "The provider stopped clearing prior selections",
-                        ),
-                        &selection.range,
-                    ));
+                    return Err(AdapterError::new(
+                        ErrorCode::ActionFailed,
+                        "The provider stopped clearing prior selections",
+                    )
+                    .with_disposition(DeliverySemantics::uncertain()));
                 }
                 Ok(WriteReply::Absent) => return Ok(None),
-                Err(error) if changed => return Err(uncertain(error, &selection.range)),
+                Err(error) if changed => {
+                    return Err(error.with_disposition(DeliverySemantics::uncertain()));
+                }
                 Err(error) => return Err(error),
             }
         }
         return match send(target, "SetCaretOffset", &(start,)) {
             Ok(WriteReply::Done) => Ok(Some("Text.SetCaretOffset")),
-            Ok(WriteReply::Absent) if changed => Err(uncertain(
-                refusal(
-                    ErrorCode::ActionFailed,
-                    "The provider refused the requested caret",
-                ),
-                &selection.range,
-            )),
+            Ok(WriteReply::Absent) if changed => Err(AdapterError::new(
+                ErrorCode::ActionFailed,
+                "The provider refused the requested caret",
+            )
+            .with_disposition(DeliverySemantics::uncertain())),
             Ok(WriteReply::Absent) => Ok(None),
-            Err(error) if changed => Err(uncertain(error, &selection.range)),
+            Err(error) if changed => Err(error.with_disposition(DeliverySemantics::uncertain())),
             Err(error) => Err(error),
         };
     }
@@ -192,15 +173,13 @@ fn apply(
         match send(target, "RemoveSelection", &(index,)) {
             Ok(WriteReply::Done) => {}
             Ok(WriteReply::Absent) => {
-                return Err(uncertain(
-                    refusal(
-                        ErrorCode::ActionFailed,
-                        "The provider kept an extra text selection",
-                    ),
-                    &selection.range,
-                ));
+                return Err(AdapterError::new(
+                    ErrorCode::ActionFailed,
+                    "The provider kept an extra text selection",
+                )
+                .with_disposition(DeliverySemantics::uncertain()));
             }
-            Err(error) => return Err(uncertain(error, &selection.range)),
+            Err(error) => return Err(error.with_disposition(DeliverySemantics::uncertain())),
         }
     }
     Ok(Some(if method == "AddSelection" {
@@ -232,7 +211,12 @@ pub(crate) fn select_text(
             )
         })?;
     let selection = selector.resolve(&before.text)?;
-    let verification = VerificationContext::new(target, &before, &selection, before_focus.as_ref());
+    let verification = VerificationContext {
+        target,
+        before: &before,
+        selection: &selection,
+        before_focus: before_focus.as_ref(),
+    };
     if verification.preflight_satisfied() {
         verification.wait_without_delivery()?;
         return Ok(verification.satisfied_without_delivery());
@@ -243,16 +227,19 @@ pub(crate) fn select_text(
             let state = read_text_state(target.bus, target.element, target.deadline)
                 .ok()
                 .flatten();
-            return Err(verification.annotate_after_delivery(error, state.as_ref()));
+            return Err(verification.annotate_error(
+                error.with_disposition(DeliverySemantics::uncertain()),
+                state.as_ref(),
+            ));
         }
-        Err(error) => return Err(verification.annotate_without_delivery(error, None)),
+        Err(error) => return Err(verification.annotate_error(error, None)),
     };
     let Some(method) = method else {
         let error = refusal(
             ErrorCode::ActionNotSupported,
             "The AT-SPI provider refused text selection",
         );
-        return Err(verification.annotate_without_delivery(error, None));
+        return Err(verification.annotate_error(error, None));
     };
     verification.wait()?;
     Ok(verification.success(method))

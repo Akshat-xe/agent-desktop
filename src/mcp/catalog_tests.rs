@@ -129,7 +129,8 @@ fn tool_at(path: &[&str]) -> Tool {
 
 #[test]
 fn select_text_mcp_uses_the_same_match_name_as_batch() {
-    let tool = tool_at(&["select-text"]);
+    assert!(tools().iter().all(|tool| tool.path != ["select-text"]));
+    let tool = tool_at(&["select"]);
     let definition = tool.definition();
     let properties = definition["inputSchema"]["properties"].as_object().unwrap();
     assert!(properties.contains_key("match"));
@@ -139,15 +140,15 @@ fn select_text_mcp_uses_the_same_match_name_as_batch() {
     arguments.insert("match".into(), Value::from("quarterly"));
     arguments.insert("nth".into(), Value::from(2));
     let parsed = parse(&tool, &arguments).unwrap();
-    let Some(crate::cli::Commands::SelectText(args)) = parsed.command else {
-        panic!("select-text");
+    let Some(crate::cli::Commands::Select(args)) = parsed.command else {
+        panic!("select");
     };
     assert_eq!(
         args.selection().unwrap(),
-        agent_desktop_core::TextSelection::Match {
+        Some(agent_desktop_core::TextSelection::Match {
             text: "quarterly".into(),
             nth: Some(2),
-        }
+        })
     );
     arguments.insert("range".into(), Value::from("0..1"));
     assert_eq!(

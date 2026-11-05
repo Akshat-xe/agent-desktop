@@ -3,8 +3,8 @@ use std::time::{Duration, Instant};
 
 use accessibility_sys::{AXValueCreate, kAXValueTypeCFRange};
 use agent_desktop_core::{
-    Action, ActionResult, ActionStep, AdapterError, Deadline, DeliverySemantics, ErrorCode,
-    ResolvedTextSelection, StepMechanism, TextSelection,
+    ActionResult, AdapterError, Deadline, DeliverySemantics, ErrorCode, ResolvedTextSelection,
+    TextSelection,
 };
 use core_foundation::{
     base::{CFType, CFTypeRef, TCFType},
@@ -187,7 +187,7 @@ fn verify_selection(
         let now = Instant::now();
         match observe_selection(exact, &mut exact_since, now) {
             SelectionProgress::Stable => {
-                return Ok(verified_result(requested, selected.count));
+                return Ok(requested.verified_result(RANGE_ATTRIBUTE, selected.count));
             }
             SelectionProgress::Cleared => {
                 return Err(after_write_error(
@@ -270,38 +270,6 @@ fn post_write_error(
 
 fn is_secure_text(role: Option<&str>, subrole: Option<&str>) -> bool {
     role == Some("AXSecureTextField") || subrole == Some("AXSecureTextField")
-}
-
-fn verified_result(
-    selection: &ResolvedTextSelection,
-    selection_count: Option<usize>,
-) -> ActionResult {
-    let action = Action::SelectText(TextSelection::Range {
-        start: selection.range.start,
-        end: selection.range.end,
-    });
-    let mut details = serde_json::json!({
-        "verification_scope": "text_selection",
-        "range": {
-            "start": selection.range.start,
-            "end": selection.range.end,
-            "unit": "unicode_scalar",
-        },
-        "focus_changed": false,
-        "activated": false,
-    });
-    if let Some(count) = selection_count {
-        details["selection_count"] = serde_json::json!(count);
-    }
-    ActionResult::from_execution(
-        &action,
-        vec![
-            ActionStep::succeeded(RANGE_ATTRIBUTE)
-                .with_mechanism(StepMechanism::SemanticApi)
-                .with_verified(true),
-        ],
-    )
-    .with_details(details)
 }
 
 fn unsupported(message: &str) -> AdapterError {

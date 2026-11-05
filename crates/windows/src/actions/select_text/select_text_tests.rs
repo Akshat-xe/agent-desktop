@@ -49,7 +49,7 @@ fn utf16_prefix(
 fn byte_prefix(
     text: &'static str,
 ) -> impl FnMut(usize) -> Result<String, agent_desktop_core::AdapterError> {
-    move |count| Ok(text[..count].to_owned())
+    move |count| Ok(String::from_utf8_lossy(&text.as_bytes()[..count.min(text.len())]).into_owned())
 }
 
 fn grapheme_prefix(

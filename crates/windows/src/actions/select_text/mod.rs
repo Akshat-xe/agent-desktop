@@ -52,14 +52,12 @@ mod imp {
     use crate::actions::mutation::{classify_success, classify_write};
     use crate::tree::element::UIAElement;
     use agent_desktop_core::{
-        Action, ActionResult, ActionStep, AdapterError, Deadline, DeliverySemantics, StepMechanism,
-        TextSelection,
+        ActionResult, AdapterError, Deadline, DeliverySemantics, TextSelection,
     };
     use uiautomation::types::SupportedTextSelection;
 
     pub(crate) fn select_text_action(
         element: &UIAElement,
-        action: &Action,
         selection: &TextSelection,
         deadline: Deadline,
     ) -> Result<ActionResult, AdapterError> {
@@ -103,24 +101,7 @@ mod imp {
         verify_stability(&pattern, &expected, &document, &focus_before, deadline).map_err(
             |error| attach_focus_evidence(after_delivery(error), &focus_before, deadline),
         )?;
-        let steps = vec![
-            ActionStep::succeeded(SELECT_TEXT_LABEL)
-                .with_mechanism(StepMechanism::SemanticApi)
-                .with_verified(true),
-        ];
-        Ok(
-            ActionResult::from_execution(action, steps).with_details(serde_json::json!({
-                "verification_scope": "text_selection",
-                "range": {
-                    "start": resolved.range.start,
-                    "end": resolved.range.end,
-                    "unit": "unicode_scalar",
-                },
-                "selection_count": 1,
-                "focus_changed": false,
-                "activated": false,
-            })),
-        )
+        Ok(resolved.verified_result(SELECT_TEXT_LABEL, Some(1)))
     }
 
     fn not_delivered(error: AdapterError) -> AdapterError {
@@ -130,13 +111,12 @@ mod imp {
 
 #[cfg(not(target_os = "windows"))]
 mod imp {
-    use agent_desktop_core::{Action, ActionResult, AdapterError, Deadline, TextSelection};
+    use agent_desktop_core::{ActionResult, AdapterError, Deadline, TextSelection};
 
     use crate::tree::element::UIAElement;
 
     pub(crate) fn select_text_action(
         _element: &UIAElement,
-        _action: &Action,
         _selection: &TextSelection,
         _deadline: Deadline,
     ) -> Result<ActionResult, AdapterError> {

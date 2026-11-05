@@ -74,22 +74,6 @@ a lookup failure such as `APP_NOT_FOUND`, carry `not_delivered`. Treat `unknown`
 as not safe to retry automatically: read `error.code` and the message, and
 choose a recovery strategy only when `disposition.retry` is `safe`.
 
-## Text selection results
-
-`select-text` returns `delivered_verified` only when the adapter reads back the exact selected text and range, confirms that the full field text is unchanged, and observes the selection for 100 ms. Its `data.details` identifies the range in Unicode scalar offsets and reports focus effects and the selection count when the provider exposes it. The example range is illustrative:
-
-```json
-{
-  "verification_scope": "text_selection",
-  "range": { "start": 7, "end": 19, "unit": "unicode_scalar" },
-  "selection_count": 1,
-  "focus_changed": false,
-  "activated": false
-}
-```
-
-Headless selection refuses safely when global focus or activation cannot be established before delivery. A post-write focus change or unknown state fails after delivery, so inspect the selection before retrying. The before and after observations cannot rule out a brief focus change between reads.
-
 ## Version 2.4 migration
 
 Stateful ref actions (`set-value`, `type`, `clear`, `check`, `uncheck`, `toggle`, `expand`, and `collapse`) now reject observed postcondition contradictions after one delivery attempt. Readback failures preserve the adapter's error code and carry `details.kind: "post_action_verification"`. Missing evidence alone remains a successful `delivered_unverified` result with `details.verification_scope: "unavailable"`; neither that result nor verified element state proves application-level persistence.

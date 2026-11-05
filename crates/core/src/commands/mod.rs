@@ -60,7 +60,6 @@ mod screenshot_tests;
 pub mod scroll;
 pub mod scroll_to;
 pub mod select;
-pub mod select_text;
 pub mod session;
 pub mod set_value;
 pub mod skills;
