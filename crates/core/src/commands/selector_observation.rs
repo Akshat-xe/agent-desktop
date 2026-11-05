@@ -3,7 +3,7 @@ use crate::{
     locator::live_locator::{
         LocatorMaterialization, LocatorResolveRequest, LocatorSelection, resolve_query,
     },
-    snapshot::{ref_owner_observation::RefOwnerObservation, surface_target},
+    snapshot::{ref_owner_observation::RefOwnerObservation, surface_target, window_capture},
     system::process_state::ProcessState,
 };
 
@@ -57,7 +57,7 @@ impl SelectorObservation {
             surface: (surface != SnapshotSurface::Window).then_some(surface),
             materialization: LocatorMaterialization::None,
         };
-        match surface_target::first_surface_owner(owners, |owner| {
+        match window_capture::first_surface_owner(owners, |owner| {
             resolve_query(adapter, query, owner.observation_root(surface), &request)
         }) {
             Ok((_, resolution)) => Ok(Self::Selector {

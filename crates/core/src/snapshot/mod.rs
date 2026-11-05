@@ -57,7 +57,7 @@ pub(crate) fn build_for_owners(
     owners: Vec<SnapshotOwner>,
     deadline: crate::Deadline,
 ) -> Result<SnapshotResult, AppError> {
-    let (owner, capture) = surface_target::first_surface_owner(owners, |owner| match owner {
+    let (owner, capture) = window_capture::first_surface_owner(owners, |owner| match owner {
         SnapshotOwner::Application(app) => {
             window_capture::capture_application(adapter, opts, app, opts.surface, deadline)
         }

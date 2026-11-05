@@ -223,25 +223,6 @@ pub(crate) fn resolve_owners(
     Ok(vec![SnapshotOwner::Application(app)])
 }
 
-pub(crate) fn first_surface_owner<T>(
-    owners: Vec<SnapshotOwner>,
-    mut observe: impl FnMut(&SnapshotOwner) -> Result<T, AppError>,
-) -> Result<(SnapshotOwner, T), AppError> {
-    let mut owners = owners.into_iter().peekable();
-    while let Some(owner) = owners.next() {
-        match observe(&owner) {
-            Err(AppError::Adapter(error))
-                if error.code == crate::ErrorCode::ElementNotFound && owners.peek().is_some() => {}
-            result => return result.map(|observed| (owner, observed)),
-        }
-    }
-    Err(
-        AdapterError::new(crate::ErrorCode::WindowNotFound, "No owner to observe")
-            .unsent()
-            .into(),
-    )
-}
-
 pub(crate) fn resolve_ref_owner(
     adapter: &dyn PlatformAdapter,
     entry: &crate::RefEntry,

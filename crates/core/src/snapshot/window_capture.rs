@@ -1,5 +1,5 @@
 use crate::{
-    AppError, AppInfo, WindowInfo,
+    AppError, AppInfo, SnapshotOwner, WindowInfo,
     adapter::{PlatformAdapter, TreeOptions},
     locator::live_locator::{ObservationRequest, ObservationRoot, ObservedTree},
 };
@@ -92,6 +92,25 @@ pub(crate) fn capture_window(
         presentation_depth: None,
         identity_unproven: Some(unproven),
     })
+}
+
+pub(crate) fn first_surface_owner<T>(
+    owners: Vec<SnapshotOwner>,
+    mut observe: impl FnMut(&SnapshotOwner) -> Result<T, AppError>,
+) -> Result<(SnapshotOwner, T), AppError> {
+    let mut owners = owners.into_iter().peekable();
+    while let Some(owner) = owners.next() {
+        match observe(&owner) {
+            Err(AppError::Adapter(error))
+                if error.code == crate::ErrorCode::ElementNotFound && owners.peek().is_some() => {}
+            result => return result.map(|observed| (owner, observed)),
+        }
+    }
+    Err(
+        crate::AdapterError::new(crate::ErrorCode::WindowNotFound, "No owner to observe")
+            .unsent()
+            .into(),
+    )
 }
 
 pub(crate) fn capture_application(

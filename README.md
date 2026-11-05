@@ -74,6 +74,7 @@ Each command prints one JSON envelope. A trimmed snapshot:
   their application-owned surface and need no document window. The wait reads the whole pinned window, so overlay
   selectors share its scope. [Wait scope and results](https://agent-browser.dev/desktop/configuration#post-action-wait-flags)
   describe the selector limits.
+- `type`, `set-value`, and `clipboard-set` accept `--stdin` for piped text, keeping it out of process arguments. Run secret steps as separate commands; batch JSON text appears in process arguments.
 - **PowerShell.** Quote every ref (`'@s8f3k2p9:e8'`), because a bare `@token` is the splatting operator.
 
 The full walkthrough is in the [quick start](https://agent-browser.dev/desktop/quick-start).
